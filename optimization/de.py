@@ -42,7 +42,7 @@ def crossover(mutated, target, dims, cr):
     return trial
 
  
-def differential_evolution(objective:typing.Callable, bounds:np.ndarray, n_iter:int=200, n_pop:int=20, F=0.5, cr=0.7):
+def differential_evolution(objective:typing.Callable, bounds:np.ndarray, n_iter:int=500, n_pop:int=20, F=0.5, cr=0.7):
     # cache the initial objective function
     objective_cache = memory.cache(objective)
     
@@ -55,7 +55,7 @@ def differential_evolution(objective:typing.Callable, bounds:np.ndarray, n_iter:
     best_obj = min(obj_all)
     prev_obj = best_obj
     # run iterations of the algorithm
-    for i in range(n_iter):
+    for _ in range(n_iter):
         # iterate over all candidate solutions
         for j in range(n_pop):
             # choose three candidates, a, b and c, that are not the current one
@@ -84,5 +84,5 @@ def differential_evolution(objective:typing.Callable, bounds:np.ndarray, n_iter:
             best_vector = pop[np.argmin(obj_all)]
             prev_obj = best_obj
             # report progress at each iteration
-            logger.info('Iteration: %d f([%s]) = %.5f' % (i, np.around(best_vector, decimals=5), best_obj))
+            #logger.info('Iteration: %d f([%s]) = %.5f' % (i, np.around(best_vector, decimals=5), best_obj))
     return [best_vector, best_obj]
