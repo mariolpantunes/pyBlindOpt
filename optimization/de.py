@@ -6,12 +6,14 @@ __email__ = 'mariolpantunes@gmail.com'
 __status__ = 'Development'
 
 
-import math
 import typing
 import joblib
 import logging
 import tempfile
 import numpy as np
+
+
+from tqdm import tqdm
 
 
 logger = logging.getLogger(__name__)
@@ -42,7 +44,7 @@ def crossover(mutated, target, dims, cr):
     return trial
 
  
-def differential_evolution(objective:typing.Callable, bounds:np.ndarray, n_iter:int=500, n_pop:int=20, F=0.5, cr=0.7):
+def differential_evolution(objective:typing.Callable, bounds:np.ndarray, n_iter:int=500, n_pop:int=20, F=0.5, cr=0.7, debug=False):
     # cache the initial objective function
     objective_cache = memory.cache(objective)
     
@@ -54,8 +56,9 @@ def differential_evolution(objective:typing.Callable, bounds:np.ndarray, n_iter:
     best_vector = pop[np.argmin(obj_all)]
     best_obj = min(obj_all)
     prev_obj = best_obj
+    obj_iter = []
     # run iterations of the algorithm
-    for _ in range(n_iter):
+    for _ in tqdm(range(n_iter), disable=not debug): 
         # iterate over all candidate solutions
         for j in range(n_pop):
             # choose three candidates, a, b and c, that are not the current one
@@ -83,6 +86,9 @@ def differential_evolution(objective:typing.Callable, bounds:np.ndarray, n_iter:
         if best_obj < prev_obj:
             best_vector = pop[np.argmin(obj_all)]
             prev_obj = best_obj
-            # report progress at each iteration
-            #logger.info('Iteration: %d f([%s]) = %.5f' % (i, np.around(best_vector, decimals=5), best_obj))
-    return [best_vector, best_obj]
+        if debug:
+            obj_iter.append(best_obj)
+    if debug:
+        return [best_vector, best_obj, obj_iter]
+    else:
+        return [best_vector, best_obj]
