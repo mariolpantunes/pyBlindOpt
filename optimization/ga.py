@@ -20,11 +20,6 @@ from tqdm import tqdm
 logger = logging.getLogger(__name__)
 
 
-# Cache from joblib
-location = tempfile.gettempdir()
-memory = joblib.Memory(location, verbose=0)
-
-
 def get_random_solution(bounds:np.ndarray) -> np.ndarray:
     """
     Generates a random solutions that is within the bounds.
@@ -55,7 +50,7 @@ def selection(pop, scores, k=3):
 # genetic algorithm
 def genetic_algorithm(objective:typing.Callable, bounds:np.ndarray,
 crossover:typing.Callable, mutation:typing.Callable, selection:typing.Callable=selection,
-n_iter:int=200, n_pop:int=20, r_cross:float=0.9, r_mut:float=0.3, cache=True, debug=False) -> list:
+n_iter:int=200, n_pop:int=20, r_cross:float=0.9, r_mut:float=0.3, cached=True, debug=False) -> list:
     """
     Genetic optimization algorithm.
 
@@ -74,7 +69,10 @@ n_iter:int=200, n_pop:int=20, r_cross:float=0.9, r_mut:float=0.3, cache=True, de
         list: [solution, solution_cost]
     """
     # cache the initial objective function
-    if cache:
+    if cached:
+        # Cache from joblib
+        location = tempfile.gettempdir()
+        memory = joblib.Memory(location, verbose=0)
         objective_cache = memory.cache(objective)
     else:
         objective_cache = objective
@@ -108,4 +106,6 @@ n_iter:int=200, n_pop:int=20, r_cross:float=0.9, r_mut:float=0.3, cache=True, de
                 children.append(c)
         # replace population
         pop = children
+    if cached:
+        memory.clear(warn=False)
     return [best, best_eval]

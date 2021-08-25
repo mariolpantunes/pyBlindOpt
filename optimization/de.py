@@ -19,11 +19,6 @@ from tqdm import tqdm
 logger = logging.getLogger(__name__)
 
 
-# Cache from joblib
-location = tempfile.gettempdir()
-memory = joblib.Memory(location, verbose=0)
-
-
 # define mutation operation
 def mutation(x, F):
     return x[0] + F * (x[1] - x[2])
@@ -44,9 +39,12 @@ def crossover(mutated, target, dims, cr):
     return trial
 
  
-def differential_evolution(objective:typing.Callable, bounds:np.ndarray, n_iter:int=500, n_pop:int=20, F=0.5, cr=0.7, cache=True, debug=False):
+def differential_evolution(objective:typing.Callable, bounds:np.ndarray, n_iter:int=500, n_pop:int=20, F=0.5, cr=0.7, cached=True, debug=False):
     # cache the initial objective function
-    if cache:
+    if cached:
+        # Cache from joblib
+        location = tempfile.gettempdir()
+        memory = joblib.Memory(location, verbose=0)
         objective_cache = memory.cache(objective)
     else:
         objective_cache = objective
@@ -90,6 +88,8 @@ def differential_evolution(objective:typing.Callable, bounds:np.ndarray, n_iter:
             prev_obj = best_obj
         if debug:
             obj_iter.append(best_obj)
+    if cached:
+        memory.clear(warn=False)
     if debug:
         return [best_vector, best_obj, obj_iter]
     else:
