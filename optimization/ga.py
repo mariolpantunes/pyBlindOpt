@@ -14,6 +14,9 @@ import tempfile
 import numpy as np
 
 
+from tqdm import tqdm
+
+
 logger = logging.getLogger(__name__)
 
 
@@ -52,7 +55,7 @@ def selection(pop, scores, k=3):
 # genetic algorithm
 def genetic_algorithm(objective:typing.Callable, bounds:np.ndarray,
 crossover:typing.Callable, mutation:typing.Callable, selection:typing.Callable=selection,
-n_iter:int=200, n_pop:int=20, r_cross:float=0.9, r_mut:float=0.3) -> list:
+n_iter:int=200, n_pop:int=20, r_cross:float=0.9, r_mut:float=0.3, cache=True, debug=False) -> list:
     """
     Genetic optimization algorithm.
 
@@ -71,13 +74,16 @@ n_iter:int=200, n_pop:int=20, r_cross:float=0.9, r_mut:float=0.3) -> list:
         list: [solution, solution_cost]
     """
     # cache the initial objective function
-    objective_cache = memory.cache(objective)
+    if cache:
+        objective_cache = memory.cache(objective)
+    else:
+        objective_cache = objective
     # initial population of random bitstring
     pop = [get_random_solution(bounds) for _ in range(n_pop)]
 	# keep track of best solution
     best, best_eval = 0, objective_cache(pop[0])
 	# enumerate generations
-    for _ in range(n_iter):
+    for _ in tqdm(range(n_iter), disable=not debug):
         # evaluate all candidates in the population
         #scores = [objective_cache(c) for c in pop]
         scores = joblib.Parallel(n_jobs=-1)(joblib.delayed(objective_cache)(c) for c in pop)

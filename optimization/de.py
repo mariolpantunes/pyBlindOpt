@@ -44,10 +44,12 @@ def crossover(mutated, target, dims, cr):
     return trial
 
  
-def differential_evolution(objective:typing.Callable, bounds:np.ndarray, n_iter:int=500, n_pop:int=20, F=0.5, cr=0.7, debug=False):
+def differential_evolution(objective:typing.Callable, bounds:np.ndarray, n_iter:int=500, n_pop:int=20, F=0.5, cr=0.7, cache=True, debug=False):
     # cache the initial objective function
-    objective_cache = memory.cache(objective)
-    
+    if cache:
+        objective_cache = memory.cache(objective)
+    else:
+        objective_cache = objective
     # initialise population of candidate solutions randomly within the specified bounds
     pop = bounds[:, 0] + (np.random.rand(n_pop, len(bounds)) * (bounds[:, 1] - bounds[:, 0]))
     # evaluate initial population of candidate solutions
