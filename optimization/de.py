@@ -39,7 +39,7 @@ def crossover(mutated, target, dims, cr):
     return trial
 
  
-def differential_evolution(objective:typing.Callable, bounds:np.ndarray, n_iter:int=500, n_pop:int=20, F=0.5, cr=0.7, cached=True, debug=False):
+def differential_evolution(objective:typing.Callable, bounds:np.ndarray, n_iter:int=200, n_pop:int=20, F=0.5, cr=0.7, n_jobs=-1, cached=True, debug=False):
     # cache the initial objective function
     if cached:
         # Cache from joblib
@@ -50,16 +50,18 @@ def differential_evolution(objective:typing.Callable, bounds:np.ndarray, n_iter:
         objective_cache = objective
     # initialise population of candidate solutions randomly within the specified bounds
     pop = bounds[:, 0] + (np.random.rand(n_pop, len(bounds)) * (bounds[:, 1] - bounds[:, 0]))
+    pop = np.array([check_bounds(p, bounds) for p in pop])
     # evaluate initial population of candidate solutions
-    obj_all = [objective_cache(ind) for ind in pop]
+    obj_all = joblib.Parallel(n_jobs=n_jobs)(joblib.delayed(objective_cache)(c) for c in pop)
     # find the best performing vector of initial population
     best_vector = pop[np.argmin(obj_all)]
     best_obj = min(obj_all)
     prev_obj = best_obj
     obj_iter = []
     # run iterations of the algorithm
-    for _ in tqdm(range(n_iter), disable=not debug): 
-        # iterate over all candidate solutions
+    for _ in tqdm(range(n_iter), disable=not debug):
+        # generate offspring
+        offspring = []
         for j in range(n_pop):
             # choose three candidates, a, b and c, that are not the current one
             candidates = [candidate for candidate in range(n_pop) if candidate != j]
@@ -70,16 +72,18 @@ def differential_evolution(objective:typing.Callable, bounds:np.ndarray, n_iter:
             mutated = check_bounds(mutated, bounds)
             # perform crossover
             trial = crossover(mutated, pop[j], len(bounds), cr)
-            # compute objective function value for target vector
-            obj_target = objective_cache(pop[j])
-            # compute objective function value for trial vector
-            obj_trial = objective_cache(trial)
+            offspring.append(trial)
+        
+        obj_trial = joblib.Parallel(n_jobs=n_jobs)(joblib.delayed(objective_cache)(c) for c in offspring)
+
+        # iterate over all candidate solutions
+        for j in range(n_pop):
             # perform selection
-            if obj_trial < obj_target:
+            if obj_trial[j] < obj_all[j]:
                 # replace the target vector with the trial vector
-                pop[j] = trial
+                pop[j] = offspring[j]
                 # store the new objective function value
-                obj_all[j] = obj_trial
+                obj_all[j] = obj_trial[j]
         # find the best performing vector at each iteration
         best_obj = min(obj_all)
         # store the lowest objective function value
@@ -91,6 +95,6 @@ def differential_evolution(objective:typing.Callable, bounds:np.ndarray, n_iter:
     if cached:
         memory.clear(warn=False)
     if debug:
-        return [best_vector, best_obj, obj_iter]
+        return (best_vector, best_obj, obj_iter)
     else:
-        return [best_vector, best_obj]
+        return (best_vector, best_obj)

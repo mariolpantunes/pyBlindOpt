@@ -14,6 +14,9 @@ import tempfile
 import numpy as np
 
 
+from tqdm import tqdm
+
+
 logger = logging.getLogger(__name__)
 
 
@@ -22,21 +25,27 @@ location = tempfile.gettempdir()
 memory = joblib.Memory(location, verbose=0)
 
 
-def hillclimbing(objective:typing.Callable, bounds:np.ndarray, n_iterations:int=200, step_size:float=.01) -> list:
+def hillclimbing(objective:typing.Callable, bounds:np.ndarray, n_iter:int=200, step_size:float=.01, cached=True, debug=False) -> tuple:
     """
     Hill climbing local search algorithm.
 
     Args:
         objective (typing.Callable): objective fucntion
         bounds (np.ndarray): the bounds of valid solutions
-        n_iterations (int): the number of iterations (default 200)
+        n_iter (int): the number of iterations (default 200)
         step_size (float): the step size (default 0.01)
 
     Returns:
         list: [solution, solution_cost]
     """
     # cache the initial objective function
-    objective_cache = memory.cache(objective)
+    if cached:
+        # Cache from joblib
+        location = tempfile.gettempdir()
+        memory = joblib.Memory(location, verbose=0)
+        objective_cache = memory.cache(objective)
+    else:
+        objective_cache = objective
 
     # min and max for each bound
     bounds_max = bounds.max(axis = 1)
@@ -48,7 +57,7 @@ def hillclimbing(objective:typing.Callable, bounds:np.ndarray, n_iterations:int=
     solution_cost = objective_cache(solution)
     # run the hill climb
     
-    for _ in range(n_iterations):
+    for _ in tqdm(range(n_iter), disable=not debug):
 		# take a step
         candidate = solution + np.random.randn(len(bounds)) * step_size
         
@@ -65,4 +74,8 @@ def hillclimbing(objective:typing.Callable, bounds:np.ndarray, n_iterations:int=
             solution, solution_cost = candidate, candidte_cost
 			# report progress
             #logger.info('>%d f(%s) = %.5f', i, solution, solution_cost)
-    return [solution, solution_cost]
+    
+    if cached:
+        memory.clear(warn=False)
+
+    return (solution, solution_cost)

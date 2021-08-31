@@ -11,6 +11,9 @@ import tempfile
 import numpy as np
 
 
+from tqdm import tqdm
+
+
 logger = logging.getLogger(__name__)
 
 
@@ -19,22 +22,30 @@ location = tempfile.gettempdir()
 memory = joblib.Memory(location, verbose=0)
 
 
-def simulated_annealing(objective:typing.Callable, bounds:np.ndarray, n_iterations:int=200, step_size:float=0.01, temp:float=20.0) -> list:
+def simulated_annealing(objective:typing.Callable, bounds:np.ndarray, n_iter:int=200, step_size:float=0.01, temp:float=20.0, cached=True, debug=False) -> list:
     """
     Simulated annealing algorithm.
 
     Args:
         objective (typing.Callable): objective fucntion
         bounds (np.ndarray): the bounds of valid solutions
-        n_iterations (int): the number of iterations (default 200)
+        n_iter (int): the number of iterations (default 200)
         step_size (float): the step size (default 0.01)
         temp (float): initial temperature (default 20.0)
 
     Returns:
         list: [solution, solution_cost]
     """
+
     # cache the initial objective function
-    objective_cache = memory.cache(objective)
+    if cached:
+        # Cache from joblib
+        location = tempfile.gettempdir()
+        memory = joblib.Memory(location, verbose=0)
+        objective_cache = memory.cache(objective)
+    else:
+        objective_cache = objective
+
 	# min and max for each bound
     bounds_max = bounds.max(axis = 1)
     bounds_min = bounds.min(axis = 1)
@@ -45,7 +56,7 @@ def simulated_annealing(objective:typing.Callable, bounds:np.ndarray, n_iteratio
 	# current working solution
     curr, curr_cost = best, best_cost
 	# run the algorithm
-    for i in range(n_iterations):
+    for i in tqdm(range(n_iter), disable=not debug):
 		# take a step
         candidate = curr + np.random.randn(len(bounds)) * step_size
         # Fix out of bounds value
@@ -70,4 +81,8 @@ def simulated_annealing(objective:typing.Callable, bounds:np.ndarray, n_iteratio
         if diff < 0 or np.random.rand() < metropolis:
             # store the new current point
             curr, curr_cost = candidate, candidate_cost
-    return [best, best_eval]
+    
+    if cached:
+        memory.clear(warn=False)
+
+    return (best, best_eval)

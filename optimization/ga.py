@@ -108,4 +108,4 @@ n_iter:int=200, n_pop:int=20, r_cross:float=0.9, r_mut:float=0.3, cached=True, d
         pop = children
     if cached:
         memory.clear(warn=False)
-    return [best, best_eval]
+    return (best, best_eval)
