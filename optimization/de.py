@@ -6,6 +6,7 @@ __email__ = 'mariolpantunes@gmail.com'
 __status__ = 'Development'
 
 
+import math
 import typing
 import joblib
 import logging
@@ -38,6 +39,10 @@ def crossover(mutated, target, dims, cr):
     trial = [mutated[i] if p[i] < cr else target[i] for i in range(dims)]
     return trial
 
+
+def has_inf(l):
+    return any(math.isinf(i) for i in l)
+
  
 def differential_evolution(objective:typing.Callable, bounds:np.ndarray, n_iter:int=200, n_pop:int=20, F=0.5, cr=0.7, n_jobs=-1, cached=True, debug=False):
     # cache the initial objective function
@@ -53,6 +58,15 @@ def differential_evolution(objective:typing.Callable, bounds:np.ndarray, n_iter:
     pop = np.array([check_bounds(p, bounds) for p in pop])
     # evaluate initial population of candidate solutions
     obj_all = joblib.Parallel(n_jobs=n_jobs)(joblib.delayed(objective_cache)(c) for c in pop)
+    
+    # improve que quality of the initial solutions (avoid initial solutions with inf cost)
+    while(has_inf(obj_all)):
+        for i in range(n_pop):
+            if math.isinf(obj_all[i]):
+                pop = bounds[:, 0] + (np.random.rand(n_pop, len(bounds)) * (bounds[:, 1] - bounds[:, 0]))
+                pop = np.array([check_bounds(p, bounds) for p in pop])
+        obj_all = joblib.Parallel(n_jobs=n_jobs)(joblib.delayed(objective_cache)(c) for c in pop)
+
     # find the best performing vector of initial population
     best_vector = pop[np.argmin(obj_all)]
     best_obj = min(obj_all)
