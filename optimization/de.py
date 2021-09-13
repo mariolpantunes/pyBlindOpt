@@ -61,6 +61,7 @@ def differential_evolution(objective:typing.Callable, bounds:np.ndarray, n_iter:
     
     # improve que quality of the initial solutions (avoid initial solutions with inf cost)
     while(has_inf(obj_all)):
+        logger.debug('Initial solutions with inf. cost')
         for i in range(n_pop):
             if math.isinf(obj_all[i]):
                 pop = bounds[:, 0] + (np.random.rand(n_pop, len(bounds)) * (bounds[:, 1] - bounds[:, 0]))
