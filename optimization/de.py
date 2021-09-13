@@ -60,13 +60,27 @@ def differential_evolution(objective:typing.Callable, bounds:np.ndarray, n_iter:
     obj_all = joblib.Parallel(n_jobs=n_jobs)(joblib.delayed(objective_cache)(c) for c in pop)
     
     # improve que quality of the initial solutions (avoid initial solutions with inf cost)
-    while(has_inf(obj_all)):
+    r = 0
+    while(has_inf(obj_all) and r < 5):
         logger.debug('Initial solutions with inf. cost')
         for i in range(n_pop):
             if math.isinf(obj_all[i]):
                 pop = bounds[:, 0] + (np.random.rand(n_pop, len(bounds)) * (bounds[:, 1] - bounds[:, 0]))
                 pop = np.array([check_bounds(p, bounds) for p in pop])
         obj_all = joblib.Parallel(n_jobs=n_jobs)(joblib.delayed(objective_cache)(c) for c in pop)
+        r += 1
+    
+    # if after R repetitions it still has inf. cost, reduce population size
+    if has_inf(obj_all):
+        logger.debug(f'cost = {obj_all}')
+        valid_idx = [i for i in range(n_pop) if not math.isinf(obj_all[i])]
+        logger.debug(f'valid = {valid_idx}')
+        pop = [pop[i] for i in valid_idx]
+        obj_all = [obj_all[i] for i in valid_idx]
+    
+    #debug
+    if has_inf(obj_all):
+        logger.warning('Error...')
 
     # find the best performing vector of initial population
     best_vector = pop[np.argmin(obj_all)]
