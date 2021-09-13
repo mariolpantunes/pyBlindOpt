@@ -44,7 +44,7 @@ def has_inf(l):
     return any(math.isinf(i) for i in l)
 
  
-def differential_evolution(objective:typing.Callable, bounds:np.ndarray, n_iter:int=200, n_pop:int=20, F=0.5, cr=0.7, n_jobs=-1, cached=True, debug=False):
+def differential_evolution(objective:typing.Callable, bounds:np.ndarray, n_iter:int=200, n_pop:int=20, F=0.5, cr=0.7, rt=10, n_jobs=-1, cached=True, debug=False):
     # cache the initial objective function
     if cached:
         # Cache from joblib
@@ -61,8 +61,7 @@ def differential_evolution(objective:typing.Callable, bounds:np.ndarray, n_iter:
     
     # improve que quality of the initial solutions (avoid initial solutions with inf cost)
     r = 0
-    while(has_inf(obj_all) and r < 5):
-        logger.debug('Initial solutions with inf. cost')
+    while(has_inf(obj_all) and r < rt):
         for i in range(n_pop):
             if math.isinf(obj_all[i]):
                 pop = bounds[:, 0] + (np.random.rand(n_pop, len(bounds)) * (bounds[:, 1] - bounds[:, 0]))
@@ -70,18 +69,12 @@ def differential_evolution(objective:typing.Callable, bounds:np.ndarray, n_iter:
         obj_all = joblib.Parallel(n_jobs=n_jobs)(joblib.delayed(objective_cache)(c) for c in pop)
         r += 1
     
-    # if after R repetitions it still has inf. cost, reduce population size
+    # if after R repetitions it still has inf. cost
     if has_inf(obj_all):
-        logger.debug(f'cost = {obj_all}')
         valid_idx = [i for i in range(n_pop) if not math.isinf(obj_all[i])]
-        logger.debug(f'valid ({len(valid_idx)}) = {valid_idx}')
         pop = pop[valid_idx]
         obj_all = [obj_all[i] for i in valid_idx]
         n_pop = len(valid_idx)
-    
-    #debug
-    if has_inf(obj_all):
-        logger.warning('Error...')
 
     # find the best performing vector of initial population
     best_vector = pop[np.argmin(obj_all)]
