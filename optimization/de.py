@@ -77,6 +77,7 @@ def differential_evolution(objective:typing.Callable, bounds:np.ndarray, n_iter:
         logger.debug(f'valid ({len(valid_idx)}) = {valid_idx}')
         pop = pop[valid_idx]
         obj_all = [obj_all[i] for i in valid_idx]
+        n_pop = len(valid_idx)
     
     #debug
     if has_inf(obj_all):
