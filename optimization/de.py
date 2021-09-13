@@ -74,8 +74,8 @@ def differential_evolution(objective:typing.Callable, bounds:np.ndarray, n_iter:
     if has_inf(obj_all):
         logger.debug(f'cost = {obj_all}')
         valid_idx = [i for i in range(n_pop) if not math.isinf(obj_all[i])]
-        logger.debug(f'valid = {valid_idx}')
-        pop = [pop[i] for i in valid_idx]
+        logger.debug(f'valid ({len(valid_idx)}) = {valid_idx}')
+        pop = pop[valid_idx]
         obj_all = [obj_all[i] for i in valid_idx]
     
     #debug
