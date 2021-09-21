@@ -123,6 +123,6 @@ def differential_evolution(objective:typing.Callable, bounds:np.ndarray, n_iter:
     if cached:
         memory.clear(warn=False)
     if debug:
-        return (best_vector, best_obj, (obj_best_iter))
+        return (best_vector, best_obj, (obj_best_iter, obj_avg_iter, obj_worst_iter))
     else:
         return (best_vector, best_obj)
