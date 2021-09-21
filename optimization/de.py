@@ -11,8 +11,8 @@ import typing
 import joblib
 import logging
 import tempfile
+import statistics
 import numpy as np
-
 
 from tqdm import tqdm
 
@@ -80,7 +80,9 @@ def differential_evolution(objective:typing.Callable, bounds:np.ndarray, n_iter:
     best_vector = pop[np.argmin(obj_all)]
     best_obj = min(obj_all)
     prev_obj = best_obj
-    obj_iter = []
+    obj_avg_iter = []
+    obj_best_iter = []
+    obj_worst_iter = []
     # run iterations of the algorithm
     for _ in tqdm(range(n_iter), disable=not debug):
         # generate offspring
@@ -114,10 +116,13 @@ def differential_evolution(objective:typing.Callable, bounds:np.ndarray, n_iter:
             best_vector = pop[np.argmin(obj_all)]
             prev_obj = best_obj
         if debug:
-            obj_iter.append(best_obj)
+            # store best, wort and average cost for all candidates
+            obj_avg_iter.append(statistics.mean(obj_all))
+            obj_best_iter.append(best_obj)
+            obj_worst_iter.append(max(obj_all))
     if cached:
         memory.clear(warn=False)
     if debug:
-        return (best_vector, best_obj, obj_iter)
+        return (best_vector, best_obj, (obj_best_iter))
     else:
         return (best_vector, best_obj)
