@@ -6,7 +6,9 @@ __email__ = 'mariolpantunes@gmail.com'
 __status__ = 'Development'
 
 
+import enum
 import math
+import random
 import typing
 import joblib
 import logging
@@ -19,32 +21,75 @@ from tqdm import tqdm
 
 logger = logging.getLogger(__name__)
 
+@enum.unique
+class TargetVector(enum.Enum):
+    best = 'best'
+    rand = 'rand'
+
+    def __str__(self):
+        return self.value
+
+
+@enum.unique
+class CrossoverMethod(enum.Enum):
+    bin = 'bin'
+    exp = 'exp'
+
+    def __str__(self):
+        return self.value
+
 
 # define mutation operation
 def mutation(x, F):
-    return x[0] + F * (x[1] - x[2])
- 
- 
+    diff = np.empty(x[0].shape)
+    for i in range(1, len(x), 2):
+        diff += x[i] - x[i+1]
+    return x[0] + F * diff
+
+
 # define boundary check operation
 def check_bounds(mutated, bounds):
     mutated_bound = [np.clip(mutated[i], bounds[i, 0], bounds[i, 1]) for i in range(len(bounds))]
     return mutated_bound
- 
- 
-# define crossover operation
-def crossover(mutated, target, dims, cr):
-    # generate a uniform random value for every dimension
-    p = np.random.rand(dims)
-    # generate trial vector by binomial crossover
-    trial = [mutated[i] if p[i] < cr else target[i] for i in range(dims)]
+
+
+def idx_bin(dims, cr):
+    j = random.randrange(dims)
+    idx = [True if random.random() < cr or i == j else False for i in range(dims)]
+    return idx
+
+
+def idx_exp(dims, cr):
+    idx = []
+    j = random.randrange(dims)
+    idx.append(j)
+    j = (j + 1) % dims
+    while random.random() < cr and len(idx) < dims:
+        idx.append(j)
+        j = (j + 1)
+    rv = [True if i in idx else False for i in range(dims)]
+    return rv
+
+
+def crossover(mutated, target, dims, cr, cross_method):
+    idx = cross_method(dims, cr)
+    trial = [mutated[i] if idx[i] else target[i] for i in range(dims)]
     return trial
 
-
-def has_inf(l):
-    return any(math.isinf(i) for i in l)
-
  
-def differential_evolution(objective:typing.Callable, bounds:np.ndarray, n_iter:int=200, n_pop:int=20, F=0.5, cr=0.7, rt=10, n_jobs=-1, cached=True, debug=False):
+def differential_evolution(objective:typing.Callable, bounds:np.ndarray, variant="best/1/bin", n_iter:int=200, n_pop:int=20, F=0.5, cr=0.7, rt=10, n_jobs=-1, cached=False, debug=False):
+    try:
+        v = variant.split('/')
+        tv = TargetVector[v[0]]
+        dv = int(v[1])
+        cm = CrossoverMethod[v[2]]
+
+        nc = 2*dv if tv is TargetVector.best else 2*dv+1
+    except:
+        raise ValueError('variant must be = [rand|best]/n/[bin|exp]')
+
+    cross_method = {CrossoverMethod.bin: idx_bin, CrossoverMethod.exp: idx_exp}
+
     # cache the initial objective function
     if cached:
         # Cache from joblib
@@ -59,9 +104,9 @@ def differential_evolution(objective:typing.Callable, bounds:np.ndarray, n_iter:
     # evaluate initial population of candidate solutions
     obj_all = joblib.Parallel(n_jobs=n_jobs)(joblib.delayed(objective_cache)(c) for c in pop)
     
-    # improve que quality of the initial solutions (avoid initial solutions with inf cost)
+    # improve the quality of the initial solutions (avoid initial solutions with inf cost)
     r = 0
-    while(has_inf(obj_all) and r < rt):
+    while any(math.isinf(i) for i in obj_all) and r < rt:
         for i in range(n_pop):
             if math.isinf(obj_all[i]):
                 pop = bounds[:, 0] + (np.random.rand(n_pop, len(bounds)) * (bounds[:, 1] - bounds[:, 0]))
@@ -70,7 +115,7 @@ def differential_evolution(objective:typing.Callable, bounds:np.ndarray, n_iter:
         r += 1
     
     # if after R repetitions it still has inf. cost
-    if has_inf(obj_all):
+    if any(math.isinf(i) for i in obj_all):
         valid_idx = [i for i in range(n_pop) if not math.isinf(obj_all[i])]
         pop = pop[valid_idx]
         obj_all = [obj_all[i] for i in valid_idx]
@@ -89,14 +134,21 @@ def differential_evolution(objective:typing.Callable, bounds:np.ndarray, n_iter:
         offspring = []
         for j in range(n_pop):
             # choose three candidates, a, b and c, that are not the current one
-            candidates = [candidate for candidate in range(n_pop) if candidate != j]
-            a, b, c = pop[np.random.choice(candidates, 3, replace=False)]
+            candidates_idx = random.choices([candidate for candidate in range(n_pop) if candidate != j], k = nc)
+            diff_candidates = [pop[i] for i in candidates_idx]
+            
+            if tv is TargetVector.best:
+                candidates = [best_vector]
+                candidates.extend(diff_candidates)
+            else:
+                candidates = diff_candidates
+
             # perform mutation
-            mutated = mutation([a, b, c], F)
+            mutated = mutation(candidates, F)
             # check that lower and upper bounds are retained after mutation
             mutated = check_bounds(mutated, bounds)
             # perform crossover
-            trial = crossover(mutated, pop[j], len(bounds), cr)
+            trial = crossover(mutated, pop[j], len(bounds), cr, cross_method[cm])
             offspring.append(trial)
         
         obj_trial = joblib.Parallel(n_jobs=n_jobs)(joblib.delayed(objective_cache)(c) for c in offspring)
