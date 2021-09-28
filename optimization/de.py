@@ -77,7 +77,7 @@ def crossover(mutated, target, dims, cr, cross_method):
     return trial
 
  
-def differential_evolution(objective:typing.Callable, bounds:np.ndarray, variant="best/1/bin", n_iter:int=200, n_pop:int=20, F=0.5, cr=0.7, rt=10, n_jobs=-1, cached=False, debug=False):
+def differential_evolution(objective:typing.Callable, bounds:np.ndarray, variant='best/1/bin', n_iter:int=200, n_pop:int=20, F=0.5, cr=0.7, rt=10, n_jobs=-1, cached=False, debug=False):
     try:
         v = variant.split('/')
         tv = TargetVector[v[0]]
