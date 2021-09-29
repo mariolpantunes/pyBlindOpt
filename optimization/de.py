@@ -102,7 +102,7 @@ def differential_evolution(objective:typing.Callable, bounds:np.ndarray, variant
     pop = bounds[:, 0] + (np.random.rand(n_pop, len(bounds)) * (bounds[:, 1] - bounds[:, 0]))
     pop = np.array([check_bounds(p, bounds) for p in pop])
     # evaluate initial population of candidate solutions
-    obj_all = joblib.Parallel(n_jobs=n_jobs, prefer='threads')(joblib.delayed(objective_cache)(c) for c in pop)
+    obj_all = joblib.Parallel(n_jobs=n_jobs, backend='loky')(joblib.delayed(objective_cache)(c) for c in pop)
     
     # improve the quality of the initial solutions (avoid initial solutions with inf cost)
     r = 0
@@ -111,7 +111,7 @@ def differential_evolution(objective:typing.Callable, bounds:np.ndarray, variant
             if math.isinf(obj_all[i]):
                 pop = bounds[:, 0] + (np.random.rand(n_pop, len(bounds)) * (bounds[:, 1] - bounds[:, 0]))
                 pop = np.array([check_bounds(p, bounds) for p in pop])
-        obj_all = joblib.Parallel(n_jobs=n_jobs, prefer='threads')(joblib.delayed(objective_cache)(c) for c in pop)
+        obj_all = joblib.Parallel(n_jobs=n_jobs, backend='loky')(joblib.delayed(objective_cache)(c) for c in pop)
         r += 1
     
     # if after R repetitions it still has inf. cost
@@ -151,7 +151,7 @@ def differential_evolution(objective:typing.Callable, bounds:np.ndarray, variant
             trial = crossover(mutated, pop[j], len(bounds), cr, cross_method[cm])
             offspring.append(trial)
         
-        obj_trial = joblib.Parallel(n_jobs=n_jobs, prefer='threads')(joblib.delayed(objective_cache)(c) for c in offspring)
+        obj_trial = joblib.Parallel(n_jobs=n_jobs, backend='loky')(joblib.delayed(objective_cache)(c) for c in offspring)
 
         # iterate over all candidate solutions
         for j in range(n_pop):
