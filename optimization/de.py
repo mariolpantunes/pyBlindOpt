@@ -129,10 +129,10 @@ def differential_evolution(objective:typing.Callable, bounds:np.ndarray, variant
     obj_best_iter = []
     obj_worst_iter = []
     # run iterations of the algorithm
-    for _ in tqdm(range(n_iter), disable=not debug):
+    for _ in tqdm(range(n_iter)):
         # generate offspring
         offspring = []
-        for j in tqdm(range(n_pop), disable=not debug, leave=False):
+        for j in tqdm(range(n_pop), leave=False):
             # choose three candidates, a, b and c, that are not the current one
             candidates_idx = random.choices([candidate for candidate in range(n_pop) if candidate != j], k = nc)
             diff_candidates = [pop[i] for i in candidates_idx]
