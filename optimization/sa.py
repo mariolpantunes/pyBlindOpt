@@ -88,6 +88,6 @@ def simulated_annealing(objective:typing.Callable, bounds:np.ndarray, n_iter:int
         memory.clear(warn=False)
 
     if debug:
-        return (best, best_eval, cost_iter)
+        return (best, best_eval, np.array(cost_iter))
     else:
         return (best, best_eval)
