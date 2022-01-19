@@ -17,5 +17,5 @@ setup(
       author_email='mariolpantunes@gmail.com',
       url='https://github.com/mariolpantunes/optimization',
       packages=find_packages(),
-      install_requires=['numpy>=1.21.5', 'joblib>=1.1.0', 'tqdm>=4.62.3']
+      install_requires=['numpy>=1.22.1', 'joblib>=1.1.0', 'tqdm>=4.62.3']
 )
