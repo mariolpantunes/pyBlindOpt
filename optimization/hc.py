@@ -25,7 +25,7 @@ location = tempfile.gettempdir()
 memory = joblib.Memory(location, verbose=0)
 
 
-def hillclimbing(objective:typing.Callable, bounds:np.ndarray, n_iter:int=200, step_size:float=.01, cached=True, debug=False) -> tuple:
+def hillclimbing(objective:typing.Callable, bounds:np.ndarray, n_iter:int=200, step_size:float=.01, cached=False, debug=False) -> tuple:
     """
     Hill climbing local search algorithm.
 

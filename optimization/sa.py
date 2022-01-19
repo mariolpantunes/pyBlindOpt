@@ -22,7 +22,7 @@ location = tempfile.gettempdir()
 memory = joblib.Memory(location, verbose=0)
 
 
-def simulated_annealing(objective:typing.Callable, bounds:np.ndarray, n_iter:int=200, step_size:float=0.01, temp:float=20.0, cached=True, debug=False) -> list:
+def simulated_annealing(objective:typing.Callable, bounds:np.ndarray, n_iter:int=200, step_size:float=0.01, temp:float=20.0, cached=False, debug=False) -> list:
     """
     Simulated annealing algorithm.
 
@@ -55,6 +55,7 @@ def simulated_annealing(objective:typing.Callable, bounds:np.ndarray, n_iter:int
     best_cost = objective_cache(best)
 	# current working solution
     curr, curr_cost = best, best_cost
+    cost_iter = []
 	# run the algorithm
     for i in tqdm(range(n_iter), disable=not debug):
 		# take a step
@@ -69,6 +70,7 @@ def simulated_annealing(objective:typing.Callable, bounds:np.ndarray, n_iter:int
         if candidate_cost < best_cost:
 			# store new best point
             best, best_eval = candidate, candidate_cost
+            cost_iter.append(best_eval)
 			# report progress
             #logger.info('>%d f(%s) = %.5f' % (i, best, best_cost))
 		# difference between candidate and current point evaluation
@@ -85,4 +87,7 @@ def simulated_annealing(objective:typing.Callable, bounds:np.ndarray, n_iter:int
     if cached:
         memory.clear(warn=False)
 
-    return (best, best_eval)
+    if debug:
+        return (best, best_eval, cost_iter)
+    else:
+        return (best, best_eval)

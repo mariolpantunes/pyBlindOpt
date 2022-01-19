@@ -50,7 +50,7 @@ def selection(pop, scores, k=3):
 # genetic algorithm
 def genetic_algorithm(objective:typing.Callable, bounds:np.ndarray,
 crossover:typing.Callable, mutation:typing.Callable, selection:typing.Callable=selection,
-n_iter:int=200, n_pop:int=20, r_cross:float=0.9, r_mut:float=0.3, cached=True, debug=False) -> list:
+n_iter:int=200, n_pop:int=20, r_cross:float=0.9, r_mut:float=0.3, cached=False, debug=False) -> list:
     """
     Genetic optimization algorithm.
 
