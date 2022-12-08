@@ -17,6 +17,9 @@ import numpy as np
 from tqdm import tqdm
 
 
+import optimization.utils as utils
+
+
 logger = logging.getLogger(__name__)
 
 
@@ -49,8 +52,10 @@ def selection(pop, scores, k=3):
 
 # genetic algorithm
 def genetic_algorithm(objective:typing.Callable, bounds:np.ndarray,
-crossover:typing.Callable, mutation:typing.Callable, selection:typing.Callable=selection,
-n_iter:int=200, n_pop:int=20, r_cross:float=0.9, r_mut:float=0.3, cached=False, debug=False) -> list:
+crossover:typing.Callable, mutation:typing.Callable, population:np.ndarray=None,
+selection:typing.Callable=selection, callback:typing.Callable=None,
+n_iter:int=200, n_pop:int=20, r_cross:float=0.9, r_mut:float=0.3,
+cached=False, debug=False, verbose=False) -> list:
     """
     Genetic optimization algorithm.
 
@@ -76,14 +81,27 @@ n_iter:int=200, n_pop:int=20, r_cross:float=0.9, r_mut:float=0.3, cached=False, 
         objective_cache = memory.cache(objective)
     else:
         objective_cache = objective
-    # initial population of random bitstring
-    pop = [get_random_solution(bounds) for _ in range(n_pop)]
+    
+    # check if the initial population is given
+    if population is None:
+        # initial population of random bitstring
+        pop = [get_random_solution(bounds) for _ in range(n_pop)]
+    else:
+        # initialise population of candidate and validate the bounds
+        pop = [utils.check_bounds(p, bounds) for p in population]
+
 	# keep track of best solution
     best, best_eval = 0, objective_cache(pop[0])
-	# enumerate generations
-    for _ in tqdm(range(n_iter), disable=not debug):
+	
+    # arrays to store the debug information
+    if debug:
+        obj_avg_iter = []
+        obj_best_iter = []
+        obj_worst_iter = []
+    
+    # enumerate generations
+    for epoch in tqdm(range(n_iter), disable=not verbose):
         # evaluate all candidates in the population
-        #scores = [objective_cache(c) for c in pop]
         scores = joblib.Parallel(n_jobs=-1)(joblib.delayed(objective_cache)(c) for c in pop)
 
         # check for new best solution
@@ -91,10 +109,11 @@ n_iter:int=200, n_pop:int=20, r_cross:float=0.9, r_mut:float=0.3, cached=False, 
             if scores[i] < best_eval:
                 best, best_eval = pop[i], scores[i]
                 #logger.info('>%d, new best f(%s) = %.3f' % (gen,  pop[i], scores[i]))
+        
         # select parents
         selected = [selection(pop, scores) for _ in range(n_pop)]
         # create the next generation
-        children = list()
+        children = []
         for i in range(0, n_pop, 2):
             # get selected parents in pairs
             p1, p2 = selected[i], selected[i+1]
@@ -104,8 +123,25 @@ n_iter:int=200, n_pop:int=20, r_cross:float=0.9, r_mut:float=0.3, cached=False, 
                 mutation(c, r_mut, bounds)
                 # store for next generation
                 children.append(c)
+        
         # replace population
-        pop = children
+        pop = [utils.check_bounds(c, bounds) for c in children]
+    
+        ## Optional execute the callback code
+        if callback is not None:
+            callback(epoch, obj_all)
+
+        ## Optional store the debug information
+        if debug:
+            # store best, wort and average cost for all candidates
+            obj_avg_iter.append(statistics.mean(obj_all))
+            obj_best_iter.append(best_obj)
+            obj_worst_iter.append(max(obj_all))
+    # clean the cache
     if cached:
         memory.clear(warn=False)
-    return (best, best_eval)
+    
+    if debug:
+        return (best, best_eval, (obj_best_iter, obj_avg_iter, obj_worst_iter))
+    else:
+        return (best, best_eval)

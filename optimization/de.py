@@ -19,6 +19,9 @@ import numpy as np
 from tqdm import tqdm
 
 
+import optimization.utils as utils
+
+
 logger = logging.getLogger(__name__)
 
 @enum.unique
@@ -47,12 +50,6 @@ def mutation(x, F):
     return x[0] + F * diff
 
 
-# define boundary check operation
-def check_bounds(mutated, bounds):
-    mutated_bound = [np.clip(mutated[i], bounds[i, 0], bounds[i, 1]) for i in range(len(bounds))]
-    return mutated_bound
-
-
 def idx_bin(dims, cr):
     j = random.randrange(dims)
     idx = [True if random.random() < cr or i == j else False for i in range(dims)]
@@ -76,8 +73,10 @@ def crossover(mutated, target, dims, cr, cross_method):
     trial = [mutated[i] if idx[i] else target[i] for i in range(dims)]
     return trial
 
- 
-def differential_evolution(objective:typing.Callable, bounds:np.ndarray, variant='best/1/bin', n_iter:int=200, n_pop:int=20, F=0.5, cr=0.7, rt=10, n_jobs=-1, cached=False, debug=False):
+
+def differential_evolution(objective:typing.Callable, bounds:np.ndarray, population:np.ndarray=None, 
+callback:typing.Callable=None, variant='best/1/bin', n_iter:int=200, n_pop:int=20,
+F=0.5, cr=0.7, rt=10, n_jobs=-1, cached=False, debug=False, verbose=False):
     try:
         v = variant.split('/')
         tv = TargetVector[v[0]]
@@ -98,41 +97,51 @@ def differential_evolution(objective:typing.Callable, bounds:np.ndarray, variant
         objective_cache = memory.cache(objective)
     else:
         objective_cache = objective
-    # initialise population of candidate solutions randomly within the specified bounds
-    pop = bounds[:, 0] + (np.random.rand(n_pop, len(bounds)) * (bounds[:, 1] - bounds[:, 0]))
-    pop = np.array([check_bounds(p, bounds) for p in pop])
-    # evaluate initial population of candidate solutions
-    obj_all = joblib.Parallel(n_jobs=n_jobs, backend='loky')(joblib.delayed(objective_cache)(c) for c in pop)
     
-    # improve the quality of the initial solutions (avoid initial solutions with inf cost)
-    r = 0
-    while any(math.isinf(i) for i in obj_all) and r < rt:
-        for i in range(n_pop):
-            if math.isinf(obj_all[i]):
-                pop = bounds[:, 0] + (np.random.rand(n_pop, len(bounds)) * (bounds[:, 1] - bounds[:, 0]))
-                pop = np.array([check_bounds(p, bounds) for p in pop])
+    # check if the initial population is given
+    if population is None:
+        # initialise population of candidate solutions randomly within the specified bounds
+        pop = bounds[:, 0] + (np.random.rand(n_pop, len(bounds)) * (bounds[:, 1] - bounds[:, 0]))
+        pop = [utils.check_bounds(p, bounds) for p in pop]
+        # evaluate initial population of candidate solutions
         obj_all = joblib.Parallel(n_jobs=n_jobs, backend='loky')(joblib.delayed(objective_cache)(c) for c in pop)
-        r += 1
-    
-    # if after R repetitions it still has inf. cost
-    if any(math.isinf(i) for i in obj_all):
-        valid_idx = [i for i in range(n_pop) if not math.isinf(obj_all[i])]
-        pop = pop[valid_idx]
-        obj_all = [obj_all[i] for i in valid_idx]
-        n_pop = len(valid_idx)
+        # improve the quality of the initial solutions (avoid initial solutions with inf cost)
+        r = 0
+        while any(math.isinf(i) for i in obj_all) and r < rt:
+            for i in range(n_pop):
+                if math.isinf(obj_all[i]):
+                    pop = bounds[:, 0] + (np.random.rand(n_pop, len(bounds)) * (bounds[:, 1] - bounds[:, 0]))
+                    pop = [utils.check_bounds(p, bounds) for p in pop]
+            obj_all = joblib.Parallel(n_jobs=n_jobs, backend='loky')(joblib.delayed(objective_cache)(c) for c in pop)
+            r += 1
+        # if after R repetitions it still has inf. cost
+        if any(math.isinf(i) for i in obj_all):
+            valid_idx = [i for i in range(n_pop) if not math.isinf(obj_all[i])]
+            pop = pop[valid_idx]
+            obj_all = [obj_all[i] for i in valid_idx]
+            n_pop = len(valid_idx)
+    else:
+        # initialise population of candidate and validate the bounds
+        pop = [utils.check_bounds(p, bounds) for p in population]
+        # evaluate initial population of candidate solutions
+        obj_all = joblib.Parallel(n_jobs=n_jobs, backend='loky')(joblib.delayed(objective_cache)(c) for c in pop)
 
     # find the best performing vector of initial population
     best_vector = pop[np.argmin(obj_all)]
     best_obj = min(obj_all)
     prev_obj = best_obj
-    obj_avg_iter = []
-    obj_best_iter = []
-    obj_worst_iter = []
+    
+    # arrays to store the debug information
+    if debug:
+        obj_avg_iter = []
+        obj_best_iter = []
+        obj_worst_iter = []
+    
     # run iterations of the algorithm
-    for _ in tqdm(range(n_iter)):
+    for epoch in tqdm(range(n_iter), disable=not verbose):
         # generate offspring
         offspring = []
-        for j in tqdm(range(n_pop), leave=False):
+        for j in tqdm(range(n_pop), leave=False, disable=not verbose):
             # choose three candidates, a, b and c, that are not the current one
             candidates_idx = random.choices([candidate for candidate in range(n_pop) if candidate != j], k = nc)
             diff_candidates = [pop[i] for i in candidates_idx]
@@ -146,11 +155,11 @@ def differential_evolution(objective:typing.Callable, bounds:np.ndarray, variant
             # perform mutation
             mutated = mutation(candidates, F)
             # check that lower and upper bounds are retained after mutation
-            mutated = check_bounds(mutated, bounds)
+            #mutated = utils.check_bounds(mutated, bounds)
             # perform crossover
             trial = crossover(mutated, pop[j], len(bounds), cr, cross_method[cm])
             offspring.append(trial)
-        
+        offspring = [utils.check_bounds(trial, bounds) for trial in offspring]
         obj_trial = joblib.Parallel(n_jobs=n_jobs, backend='loky')(joblib.delayed(objective_cache)(c) for c in offspring)
 
         # iterate over all candidate solutions
@@ -167,13 +176,21 @@ def differential_evolution(objective:typing.Callable, bounds:np.ndarray, variant
         if best_obj < prev_obj:
             best_vector = pop[np.argmin(obj_all)]
             prev_obj = best_obj
+        
+        ## Optional execute the callback code
+        if callback is not None:
+            callback(epoch, obj_all)
+
+        ## Optional store the debug information
         if debug:
             # store best, wort and average cost for all candidates
             obj_avg_iter.append(statistics.mean(obj_all))
             obj_best_iter.append(best_obj)
             obj_worst_iter.append(max(obj_all))
+    # clean the cache
     if cached:
         memory.clear(warn=False)
+    
     if debug:
         return (best_vector, best_obj, (obj_best_iter, obj_avg_iter, obj_worst_iter))
     else:
