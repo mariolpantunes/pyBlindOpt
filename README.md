@@ -21,7 +21,7 @@ git+https://github.com/mariolpantunes/optimization@main#egg=optimization
 ```
 
 ## Documentation
-This library was documented using the google style docstring, it can be accessed [here](). Run the following commands to produce the documentation for this library.
+This library was documented using the google style docstring, it can be accessed [here](https://mariolpantunes.github.io/optimization/). Run the following commands to produce the documentation for this library.
 
 ```bash
 pdoc --math -d google -o docs optimization
