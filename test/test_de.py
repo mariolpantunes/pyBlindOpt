@@ -47,3 +47,10 @@ class TestDE(unittest.TestCase):
         result, objective = de.differential_evolution(f2, bounds, n_iter=10, callback=callback, verbose=False)
         desired = 10
         self.assertEqual(total, desired)
+    
+    def test_de_03(self):
+        bounds = np.asarray([(-5.0, 5.0), (-5.0, 5.0)])
+        population = [np.array([1,1]), np.array([-1,1]), np.array([2,-2]), np.array([.5,-.5]), np.array([-.5,.5])]
+        result, _ = de.differential_evolution(f2, bounds, population=population, n_iter=100, verbose=False)
+        desired = np.array([0.0, 0.0])
+        np.testing.assert_allclose(result, desired, atol=1)

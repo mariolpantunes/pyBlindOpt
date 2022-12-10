@@ -99,6 +99,8 @@ r_mut:float=0.3, n_jobs:int=-1, cached=False, debug=False, verbose=False, seed:i
     else:
         # initialise population of candidate and validate the bounds
         pop = [utils.check_bounds(p, bounds) for p in population]
+        # overwrite the n_pop with the length of the given population
+        n_pop = len(population)
 
 	# keep track of best solution
     best, best_eval = 0, objective_cache(pop[0])
@@ -109,6 +111,9 @@ r_mut:float=0.3, n_jobs:int=-1, cached=False, debug=False, verbose=False, seed:i
         obj_best_iter = []
         obj_worst_iter = []
     
+    # define the limit for the selection method (work with even size population)
+    selection_limit = n_pop - (n_pop%2)
+
     # enumerate generations
     for epoch in tqdm.tqdm(range(n_iter), disable=not verbose):
         # evaluate all candidates in the population
@@ -118,6 +123,7 @@ r_mut:float=0.3, n_jobs:int=-1, cached=False, debug=False, verbose=False, seed:i
         if callback is not None:
             callback(epoch, scores)
 
+        # TODO: optimize this code
         # check for new best solution
         for i in range(n_pop):
             if scores[i] < best_eval:
@@ -128,7 +134,7 @@ r_mut:float=0.3, n_jobs:int=-1, cached=False, debug=False, verbose=False, seed:i
         selected = [selection(pop, scores) for _ in range(n_pop)]
         # create the next generation
         children = []
-        for i in range(0, n_pop, 2):
+        for i in range(0, selection_limit, 2):
             # get selected parents in pairs
             p1, p2 = selected[i], selected[i+1]
             # crossover and mutation
@@ -137,6 +143,9 @@ r_mut:float=0.3, n_jobs:int=-1, cached=False, debug=False, verbose=False, seed:i
                 mutation(c, r_mut, bounds)
                 # store for next generation
                 children.append(c)
+        # if one element is missing copy the last selection value
+        if len(children) < n_pop:
+            children.append(selected[-1])
         
         # replace population
         pop = [utils.check_bounds(c, bounds) for c in children]

@@ -89,6 +89,7 @@ cached=False, debug=False, verbose=False, seed:int=42):
 
     # define the seed of the random generation
     np.random.seed(seed)
+    random.seed(seed)
 
     # cache the initial objective function
     if cached:
@@ -124,6 +125,8 @@ cached=False, debug=False, verbose=False, seed:int=42):
     else:
         # initialise population of candidate and validate the bounds
         pop = [utils.check_bounds(p, bounds) for p in population]
+        # overwrite the n_pop with the length of the given population
+        n_pop = len(population)
         # evaluate initial population of candidate solutions
         obj_all = joblib.Parallel(n_jobs=n_jobs, backend='loky')(joblib.delayed(objective_cache)(c) for c in pop)
 
