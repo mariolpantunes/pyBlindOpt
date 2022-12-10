@@ -257,7 +257,7 @@ about the problem being optimized and can search very large spaces of candidate 
 </span><span id="L-138"><a href="#L-138"><span class="linenos">138</span></a>
 </span><span id="L-139"><a href="#L-139"><span class="linenos">139</span></a><span class="sd">    Args:</span>
 </span><span id="L-140"><a href="#L-140"><span class="linenos">140</span></a><span class="sd">        objective (typing.Callable): objective function used to evaluate the candidate solutions (lower is better)</span>
-</span><span id="L-141"><a href="#L-141"><span class="linenos">141</span></a><span class="sd">        bounds (np.ndarray): bounds that limit the search space</span>
+</span><span id="L-141"><a href="#L-141"><span class="linenos">141</span></a><span class="sd">        bounds (list): bounds that limit the search space</span>
 </span><span id="L-142"><a href="#L-142"><span class="linenos">142</span></a><span class="sd">        population (list): optional list of candidate solutions (default None)</span>
 </span><span id="L-143"><a href="#L-143"><span class="linenos">143</span></a><span class="sd">        variant (str): string that specifies the DE variant (default best/1/bin)</span>
 </span><span id="L-144"><a href="#L-144"><span class="linenos">144</span></a><span class="sd">        callback (typing.Callable): callback function that is called at each epoch (deafult None)</span>
@@ -745,7 +745,7 @@ about the problem being optimized and can search very large spaces of candidate 
 </span><span id="differential_evolution-139"><a href="#differential_evolution-139"><span class="linenos">139</span></a>
 </span><span id="differential_evolution-140"><a href="#differential_evolution-140"><span class="linenos">140</span></a><span class="sd">    Args:</span>
 </span><span id="differential_evolution-141"><a href="#differential_evolution-141"><span class="linenos">141</span></a><span class="sd">        objective (typing.Callable): objective function used to evaluate the candidate solutions (lower is better)</span>
-</span><span id="differential_evolution-142"><a href="#differential_evolution-142"><span class="linenos">142</span></a><span class="sd">        bounds (np.ndarray): bounds that limit the search space</span>
+</span><span id="differential_evolution-142"><a href="#differential_evolution-142"><span class="linenos">142</span></a><span class="sd">        bounds (list): bounds that limit the search space</span>
 </span><span id="differential_evolution-143"><a href="#differential_evolution-143"><span class="linenos">143</span></a><span class="sd">        population (list): optional list of candidate solutions (default None)</span>
 </span><span id="differential_evolution-144"><a href="#differential_evolution-144"><span class="linenos">144</span></a><span class="sd">        variant (str): string that specifies the DE variant (default best/1/bin)</span>
 </span><span id="differential_evolution-145"><a href="#differential_evolution-145"><span class="linenos">145</span></a><span class="sd">        callback (typing.Callable): callback function that is called at each epoch (deafult None)</span>
@@ -896,7 +896,7 @@ about the problem being optimized and can search very large spaces of candidate 
 
 <ul>
 <li><strong>objective (typing.Callable):</strong>  objective function used to evaluate the candidate solutions (lower is better)</li>
-<li><strong>bounds (np.ndarray):</strong>  bounds that limit the search space</li>
+<li><strong>bounds (list):</strong>  bounds that limit the search space</li>
 <li><strong>population (list):</strong>  optional list of candidate solutions (default None)</li>
 <li><strong>variant (str):</strong>  string that specifies the DE variant (default best/1/bin)</li>
 <li><strong>callback (typing.Callable):</strong>  callback function that is called at each epoch (deafult None)</li>

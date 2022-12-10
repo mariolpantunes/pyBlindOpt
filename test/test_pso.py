@@ -55,3 +55,9 @@ class TestPSO(unittest.TestCase):
         result, _ = pso.particle_swarm_optimization(f2, bounds, population=population, n_iter=100, verbose=False)
         desired = np.array([0.0, 0.0])
         np.testing.assert_allclose(result, desired, atol=1)
+    
+    def test_pso_04(self):
+        bounds = np.asarray([(-5.0, 5.0), (-5.0, 5.0)])
+        population = [np.array([1,1]), np.array([-1,1]), np.array([2,-2]), np.array([.5,-.5]), np.array([-.5,.5])]
+        result, _ = pso.particle_swarm_optimization(f2, bounds, population=population, n_iter=100, verbose=False)
+        self.assertTrue(isinstance(result,np.ndarray))

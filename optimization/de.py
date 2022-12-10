@@ -138,7 +138,7 @@ cached:bool=False, debug:bool=False, verbose:bool=False, seed:int=42) -> tuple:
 
     Args:
         objective (typing.Callable): objective function used to evaluate the candidate solutions (lower is better)
-        bounds (np.ndarray): bounds that limit the search space
+        bounds (list): bounds that limit the search space
         population (list): optional list of candidate solutions (default None)
         variant (str): string that specifies the DE variant (default best/1/bin)
         callback (typing.Callable): callback function that is called at each epoch (deafult None)
