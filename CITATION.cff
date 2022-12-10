@@ -1,0 +1,17 @@
+# This CITATION.cff file was generated with cffinit.
+# Visit https://bit.ly/cffinit to generate yours today!
+
+cff-version: 1.2.0
+title: optimization
+message: >-
+  A library that implements several derivation-free
+  optimization algorithms (such as genetic
+  optimization). The code was optimized to a certain
+  degree but was made for teaching purposes.
+type: software
+authors:
+  - given-names: Mário
+    family-names: Antunes
+    email: mario.antunes@av.it.pt
+    affiliation: IT Aveiro
+    orcid: 'https://orcid.org/0000-0002-6504-9441'

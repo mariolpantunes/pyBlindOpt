@@ -1,5 +1,19 @@
 # coding: utf-8
 
+
+'''
+Particle swarm optimization is a computational method that optimizes 
+a problem by iteratively trying to improve a candidate solution with 
+regard to a given measure of quality. It solves a problem by having 
+a population of candidate solutions, here dubbed particles, and 
+moving these particles around in the search space according to simple 
+mathematical formula over the particle's position and velocity. Each 
+particle's movement is influenced by its local best-known position but 
+is also guided toward the best-known positions in the search space, 
+which are updated as better positions are found by other particles.
+'''
+
+
 __author__ = 'Mário Antunes'
 __version__ = '0.1'
 __email__ = 'mariolpantunes@gmail.com'
@@ -22,6 +36,28 @@ def particle_swarm_optimization(objective:typing.Callable, bounds:np.ndarray,
 population:np.ndarray=None, callback:typing.Callable=None,
 n_iter:int=100, n_pop:int=10, c1:float=0.1, c2:float=0.1, w:float=0.8,
 n_jobs:int=-1, cached=False, debug=False, verbose=False, seed:int=42) -> tuple:
+    '''
+    Computes the particle_swarm_optimization.
+
+    Args:
+        objective (typing.Callable): objective function used to evaluate the candidate solutions (lower is better)
+        bounds (list): bounds that limit the search space
+        population (list): optional list of candidate solutions (default None)
+        callback (typing.Callable): callback function that is called at each epoch (deafult None)
+        n_iter (int): the number of iterations (default 100)
+        n_pop (int): the number of elements in the population (default 10)
+        c1 (float): weight of personal best (default 0.1)
+        c2 (float): weight of global best (default 0.1)
+        w (float): weight of momentum (default 0.8)
+        n_jobs (int): number of concurrent jobs (default -1)
+        cached (bool): controls if the objective function is cached by joblib (default False)
+        debug (bool): controls if debug information is returned (default False)
+        verbose (bool): controls the usage of tqdm as a progress bar (default False)
+        seed (int): seed to init the random generator (default 42)
+
+    Returns:
+        tuple: the best solution
+    '''
     # define the seed of the random generation
     np.random.seed(seed)
     # cache the initial objective function
