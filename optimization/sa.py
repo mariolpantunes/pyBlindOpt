@@ -19,28 +19,30 @@ import optimization.utils as utils
 logger = logging.getLogger(__name__)
 
 
-# Cache from joblib
-location = tempfile.gettempdir()
-memory = joblib.Memory(location, verbose=0)
 
 
-def simulated_annealing(objective:typing.Callable, bounds:np.ndarray,
-callback:typing.Callable=None, n_iter:int=100, step_size:float=0.01, 
-temp:float=20.0, cached=False, debug=False, verbose=False, seed:int=42) -> list:
-    """
+
+def simulated_annealing(objective:typing.Callable, bounds:list,
+callback:typing.Callable=None, n_iter:int=200, step_size:float=0.01, 
+temp:float=20.0, cached:bool=False, debug:bool=False, verbose:bool=False, seed:int=42) -> tuple:
+    '''
     Simulated annealing algorithm.
 
     Args:
-        objective (typing.Callable): objective fucntion
-        bounds (np.ndarray): the bounds of valid solutions
+        objective (typing.Callable): objective function used to evaluate the candidate solutions (lower is better)
+        bounds (list): bounds that limit the search space
+        callback (typing.Callable): callback function that is called at each epoch (deafult None)
         n_iter (int): the number of iterations (default 200)
         step_size (float): the step size (default 0.01)
         temp (float): initial temperature (default 20.0)
+        cached (bool): controls if the objective function is cached by joblib (default False)
+        debug (bool): controls if debug information is returned (default False)
+        verbose (bool): controls the usage of tqdm as a progress bar (default False)
+        seed (int): seed to init the random generator (default 42)
 
     Returns:
-        list: [solution, solution_cost]
-    """
-
+        tuple: the best solution
+    '''
     # define the seed of the random generation
     np.random.seed(seed)
 
@@ -53,11 +55,7 @@ temp:float=20.0, cached=False, debug=False, verbose=False, seed:int=42) -> list:
     else:
         objective_cache = objective
 
-	# min and max for each bound
-    #bounds_max = bounds.max(axis = 1)
-    #bounds_min = bounds.min(axis = 1)
     # generate an initial point
-    #best = bounds[:, 0] + np.random.rand(len(bounds)) * (bounds[:, 1] - bounds[:, 0])
     best = utils.get_random_solution(bounds)
     
     # evaluate the initial point
@@ -69,19 +67,15 @@ temp:float=20.0, cached=False, debug=False, verbose=False, seed:int=42) -> list:
     for i in tqdm.tqdm(range(n_iter), disable=not verbose):
 		# take a step
         candidate = curr + np.random.randn(len(bounds)) * step_size
-        # Fix out of bounds value
+        # fix out of bounds value
         candidate = utils.check_bounds(candidate, bounds)
-        #candidate = np.maximum(candidate, bounds_min)
 		# evaluate candidate point
         candidate_cost = objective_cache(candidate)
 		# check for new best solution
-        #print(f'{i}/{n_iterations} -> {candidate} -> {candidate_cost}')
         if candidate_cost < best_cost:
 			# store new best point
             best, best_eval = candidate, candidate_cost
             cost_iter.append(best_eval)
-			# report progress
-            #logger.info('>%d f(%s) = %.5f' % (i, best, best_cost))
 		# difference between candidate and current point evaluation
         diff = candidate_cost - curr_cost
         # calculate temperature for current epoch

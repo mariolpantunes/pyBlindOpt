@@ -71,88 +71,106 @@
                     <h1 class="modulename">
 <a href="./../optimization.html">optimization</a><wbr>.hc    </h1>
 
-                
+                        <div class="docstring"><p>Hill climbing is a mathematical optimization technique that belongs to the 
+family of local search. It is an iterative algorithm that starts with an 
+arbitrary solution to a problem and then attempts to find a better solution 
+by making an incremental change to the solution.</p>
+</div>
+
                         <input id="mod-hc-view-source" class="view-source-toggle-state" type="checkbox" aria-hidden="true" tabindex="-1">
 
                         <label class="view-source-button" for="mod-hc-view-source"><span>View Source</span></label>
 
                         <div class="pdoc-code codehilite"><pre><span></span><span id="L-1"><a href="#L-1"><span class="linenos"> 1</span></a><span class="c1"># coding: utf-8</span>
 </span><span id="L-2"><a href="#L-2"><span class="linenos"> 2</span></a>
-</span><span id="L-3"><a href="#L-3"><span class="linenos"> 3</span></a><span class="n">__author__</span> <span class="o">=</span> <span class="s1">&#39;Mário Antunes&#39;</span>
-</span><span id="L-4"><a href="#L-4"><span class="linenos"> 4</span></a><span class="n">__version__</span> <span class="o">=</span> <span class="s1">&#39;0.1&#39;</span>
-</span><span id="L-5"><a href="#L-5"><span class="linenos"> 5</span></a><span class="n">__email__</span> <span class="o">=</span> <span class="s1">&#39;mariolpantunes@gmail.com&#39;</span>
-</span><span id="L-6"><a href="#L-6"><span class="linenos"> 6</span></a><span class="n">__status__</span> <span class="o">=</span> <span class="s1">&#39;Development&#39;</span>
-</span><span id="L-7"><a href="#L-7"><span class="linenos"> 7</span></a>
-</span><span id="L-8"><a href="#L-8"><span class="linenos"> 8</span></a>
-</span><span id="L-9"><a href="#L-9"><span class="linenos"> 9</span></a><span class="kn">import</span> <span class="nn">math</span>
-</span><span id="L-10"><a href="#L-10"><span class="linenos">10</span></a><span class="kn">import</span> <span class="nn">tqdm</span>
-</span><span id="L-11"><a href="#L-11"><span class="linenos">11</span></a><span class="kn">import</span> <span class="nn">typing</span>
-</span><span id="L-12"><a href="#L-12"><span class="linenos">12</span></a><span class="kn">import</span> <span class="nn">joblib</span>
-</span><span id="L-13"><a href="#L-13"><span class="linenos">13</span></a><span class="kn">import</span> <span class="nn">logging</span>
-</span><span id="L-14"><a href="#L-14"><span class="linenos">14</span></a><span class="kn">import</span> <span class="nn">tempfile</span>
-</span><span id="L-15"><a href="#L-15"><span class="linenos">15</span></a><span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
-</span><span id="L-16"><a href="#L-16"><span class="linenos">16</span></a><span class="kn">import</span> <span class="nn">optimization.utils</span> <span class="k">as</span> <span class="nn">utils</span>
+</span><span id="L-3"><a href="#L-3"><span class="linenos"> 3</span></a>
+</span><span id="L-4"><a href="#L-4"><span class="linenos"> 4</span></a><span class="sd">&#39;&#39;&#39;</span>
+</span><span id="L-5"><a href="#L-5"><span class="linenos"> 5</span></a><span class="sd">Hill climbing is a mathematical optimization technique that belongs to the </span>
+</span><span id="L-6"><a href="#L-6"><span class="linenos"> 6</span></a><span class="sd">family of local search. It is an iterative algorithm that starts with an </span>
+</span><span id="L-7"><a href="#L-7"><span class="linenos"> 7</span></a><span class="sd">arbitrary solution to a problem and then attempts to find a better solution </span>
+</span><span id="L-8"><a href="#L-8"><span class="linenos"> 8</span></a><span class="sd">by making an incremental change to the solution.</span>
+</span><span id="L-9"><a href="#L-9"><span class="linenos"> 9</span></a><span class="sd">&#39;&#39;&#39;</span>
+</span><span id="L-10"><a href="#L-10"><span class="linenos">10</span></a>
+</span><span id="L-11"><a href="#L-11"><span class="linenos">11</span></a>
+</span><span id="L-12"><a href="#L-12"><span class="linenos">12</span></a><span class="n">__author__</span> <span class="o">=</span> <span class="s1">&#39;Mário Antunes&#39;</span>
+</span><span id="L-13"><a href="#L-13"><span class="linenos">13</span></a><span class="n">__version__</span> <span class="o">=</span> <span class="s1">&#39;0.1&#39;</span>
+</span><span id="L-14"><a href="#L-14"><span class="linenos">14</span></a><span class="n">__email__</span> <span class="o">=</span> <span class="s1">&#39;mariolpantunes@gmail.com&#39;</span>
+</span><span id="L-15"><a href="#L-15"><span class="linenos">15</span></a><span class="n">__status__</span> <span class="o">=</span> <span class="s1">&#39;Development&#39;</span>
+</span><span id="L-16"><a href="#L-16"><span class="linenos">16</span></a>
 </span><span id="L-17"><a href="#L-17"><span class="linenos">17</span></a>
-</span><span id="L-18"><a href="#L-18"><span class="linenos">18</span></a>
-</span><span id="L-19"><a href="#L-19"><span class="linenos">19</span></a><span class="n">logger</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="vm">__name__</span><span class="p">)</span>
-</span><span id="L-20"><a href="#L-20"><span class="linenos">20</span></a>
-</span><span id="L-21"><a href="#L-21"><span class="linenos">21</span></a>
-</span><span id="L-22"><a href="#L-22"><span class="linenos">22</span></a><span class="c1"># Cache from joblib</span>
-</span><span id="L-23"><a href="#L-23"><span class="linenos">23</span></a><span class="n">location</span> <span class="o">=</span> <span class="n">tempfile</span><span class="o">.</span><span class="n">gettempdir</span><span class="p">()</span>
-</span><span id="L-24"><a href="#L-24"><span class="linenos">24</span></a><span class="n">memory</span> <span class="o">=</span> <span class="n">joblib</span><span class="o">.</span><span class="n">Memory</span><span class="p">(</span><span class="n">location</span><span class="p">,</span> <span class="n">verbose</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
-</span><span id="L-25"><a href="#L-25"><span class="linenos">25</span></a>
+</span><span id="L-18"><a href="#L-18"><span class="linenos">18</span></a><span class="kn">import</span> <span class="nn">math</span>
+</span><span id="L-19"><a href="#L-19"><span class="linenos">19</span></a><span class="kn">import</span> <span class="nn">tqdm</span>
+</span><span id="L-20"><a href="#L-20"><span class="linenos">20</span></a><span class="kn">import</span> <span class="nn">typing</span>
+</span><span id="L-21"><a href="#L-21"><span class="linenos">21</span></a><span class="kn">import</span> <span class="nn">joblib</span>
+</span><span id="L-22"><a href="#L-22"><span class="linenos">22</span></a><span class="kn">import</span> <span class="nn">logging</span>
+</span><span id="L-23"><a href="#L-23"><span class="linenos">23</span></a><span class="kn">import</span> <span class="nn">tempfile</span>
+</span><span id="L-24"><a href="#L-24"><span class="linenos">24</span></a><span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
+</span><span id="L-25"><a href="#L-25"><span class="linenos">25</span></a><span class="kn">import</span> <span class="nn">optimization.utils</span> <span class="k">as</span> <span class="nn">utils</span>
 </span><span id="L-26"><a href="#L-26"><span class="linenos">26</span></a>
-</span><span id="L-27"><a href="#L-27"><span class="linenos">27</span></a><span class="k">def</span> <span class="nf">hillclimbing</span><span class="p">(</span><span class="n">objective</span><span class="p">:</span><span class="n">typing</span><span class="o">.</span><span class="n">Callable</span><span class="p">,</span> <span class="n">bounds</span><span class="p">:</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
-</span><span id="L-28"><a href="#L-28"><span class="linenos">28</span></a><span class="n">callback</span><span class="p">:</span><span class="n">typing</span><span class="o">.</span><span class="n">Callable</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">n_iter</span><span class="p">:</span><span class="nb">int</span><span class="o">=</span><span class="mi">200</span><span class="p">,</span> <span class="n">step_size</span><span class="p">:</span><span class="nb">float</span><span class="o">=</span><span class="mf">.01</span><span class="p">,</span>
-</span><span id="L-29"><a href="#L-29"><span class="linenos">29</span></a><span class="n">cached</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">debug</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">verbose</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">:</span>
-</span><span id="L-30"><a href="#L-30"><span class="linenos">30</span></a>    <span class="sd">&quot;&quot;&quot;</span>
-</span><span id="L-31"><a href="#L-31"><span class="linenos">31</span></a><span class="sd">    Hill climbing local search algorithm.</span>
-</span><span id="L-32"><a href="#L-32"><span class="linenos">32</span></a>
-</span><span id="L-33"><a href="#L-33"><span class="linenos">33</span></a><span class="sd">    Args:</span>
-</span><span id="L-34"><a href="#L-34"><span class="linenos">34</span></a><span class="sd">        objective (typing.Callable): objective fucntion</span>
-</span><span id="L-35"><a href="#L-35"><span class="linenos">35</span></a><span class="sd">        bounds (np.ndarray): the bounds of valid solutions</span>
-</span><span id="L-36"><a href="#L-36"><span class="linenos">36</span></a><span class="sd">        n_iter (int): the number of iterations (default 200)</span>
-</span><span id="L-37"><a href="#L-37"><span class="linenos">37</span></a><span class="sd">        step_size (float): the step size (default 0.01)</span>
-</span><span id="L-38"><a href="#L-38"><span class="linenos">38</span></a>
-</span><span id="L-39"><a href="#L-39"><span class="linenos">39</span></a><span class="sd">    Returns:</span>
-</span><span id="L-40"><a href="#L-40"><span class="linenos">40</span></a><span class="sd">        list: [solution, solution_cost]</span>
-</span><span id="L-41"><a href="#L-41"><span class="linenos">41</span></a><span class="sd">    &quot;&quot;&quot;</span>
-</span><span id="L-42"><a href="#L-42"><span class="linenos">42</span></a>    <span class="c1"># cache the initial objective function</span>
-</span><span id="L-43"><a href="#L-43"><span class="linenos">43</span></a>    <span class="k">if</span> <span class="n">cached</span><span class="p">:</span>
-</span><span id="L-44"><a href="#L-44"><span class="linenos">44</span></a>        <span class="c1"># Cache from joblib</span>
-</span><span id="L-45"><a href="#L-45"><span class="linenos">45</span></a>        <span class="n">location</span> <span class="o">=</span> <span class="n">tempfile</span><span class="o">.</span><span class="n">gettempdir</span><span class="p">()</span>
-</span><span id="L-46"><a href="#L-46"><span class="linenos">46</span></a>        <span class="n">memory</span> <span class="o">=</span> <span class="n">joblib</span><span class="o">.</span><span class="n">Memory</span><span class="p">(</span><span class="n">location</span><span class="p">,</span> <span class="n">verbose</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
-</span><span id="L-47"><a href="#L-47"><span class="linenos">47</span></a>        <span class="n">objective_cache</span> <span class="o">=</span> <span class="n">memory</span><span class="o">.</span><span class="n">cache</span><span class="p">(</span><span class="n">objective</span><span class="p">)</span>
-</span><span id="L-48"><a href="#L-48"><span class="linenos">48</span></a>    <span class="k">else</span><span class="p">:</span>
-</span><span id="L-49"><a href="#L-49"><span class="linenos">49</span></a>        <span class="n">objective_cache</span> <span class="o">=</span> <span class="n">objective</span>
-</span><span id="L-50"><a href="#L-50"><span class="linenos">50</span></a>
-</span><span id="L-51"><a href="#L-51"><span class="linenos">51</span></a>    <span class="c1"># generate an initial point</span>
-</span><span id="L-52"><a href="#L-52"><span class="linenos">52</span></a>    <span class="n">solution</span> <span class="o">=</span> <span class="n">utils</span><span class="o">.</span><span class="n">get_random_solution</span><span class="p">(</span><span class="n">bounds</span><span class="p">)</span>
-</span><span id="L-53"><a href="#L-53"><span class="linenos">53</span></a>    <span class="c1"># evaluate the initial point</span>
-</span><span id="L-54"><a href="#L-54"><span class="linenos">54</span></a>    <span class="n">solution_cost</span> <span class="o">=</span> <span class="n">objective_cache</span><span class="p">(</span><span class="n">solution</span><span class="p">)</span>
-</span><span id="L-55"><a href="#L-55"><span class="linenos">55</span></a>    <span class="c1"># run the hill climb</span>
-</span><span id="L-56"><a href="#L-56"><span class="linenos">56</span></a>    
-</span><span id="L-57"><a href="#L-57"><span class="linenos">57</span></a>    <span class="k">for</span> <span class="n">epoch</span> <span class="ow">in</span> <span class="n">tqdm</span><span class="o">.</span><span class="n">tqdm</span><span class="p">(</span><span class="nb">range</span><span class="p">(</span><span class="n">n_iter</span><span class="p">),</span> <span class="n">disable</span><span class="o">=</span><span class="ow">not</span> <span class="n">verbose</span><span class="p">):</span>
-</span><span id="L-58"><a href="#L-58"><span class="linenos">58</span></a>		<span class="c1"># take a step</span>
-</span><span id="L-59"><a href="#L-59"><span class="linenos">59</span></a>        <span class="n">candidate</span> <span class="o">=</span> <span class="n">solution</span> <span class="o">+</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">bounds</span><span class="p">))</span> <span class="o">*</span> <span class="n">step_size</span>
-</span><span id="L-60"><a href="#L-60"><span class="linenos">60</span></a>        <span class="c1"># Fix out of bounds value</span>
-</span><span id="L-61"><a href="#L-61"><span class="linenos">61</span></a>        <span class="n">candidate</span> <span class="o">=</span> <span class="n">utils</span><span class="o">.</span><span class="n">check_bounds</span><span class="p">(</span><span class="n">candidate</span><span class="p">,</span> <span class="n">bounds</span><span class="p">)</span>
-</span><span id="L-62"><a href="#L-62"><span class="linenos">62</span></a>        <span class="c1"># evaluate candidate point</span>
-</span><span id="L-63"><a href="#L-63"><span class="linenos">63</span></a>        <span class="n">candidate_cost</span> <span class="o">=</span> <span class="n">objective_cache</span><span class="p">(</span><span class="n">candidate</span><span class="p">)</span>
-</span><span id="L-64"><a href="#L-64"><span class="linenos">64</span></a>		<span class="c1"># check if we should keep the new point</span>
-</span><span id="L-65"><a href="#L-65"><span class="linenos">65</span></a>        
-</span><span id="L-66"><a href="#L-66"><span class="linenos">66</span></a>        <span class="k">if</span> <span class="n">candidate_cost</span> <span class="o">&lt;</span> <span class="n">solution_cost</span><span class="p">:</span>
-</span><span id="L-67"><a href="#L-67"><span class="linenos">67</span></a>			<span class="c1"># store the new point</span>
-</span><span id="L-68"><a href="#L-68"><span class="linenos">68</span></a>            <span class="n">solution</span><span class="p">,</span> <span class="n">solution_cost</span> <span class="o">=</span> <span class="n">candidate</span><span class="p">,</span> <span class="n">candidate_cost</span>
-</span><span id="L-69"><a href="#L-69"><span class="linenos">69</span></a>        
-</span><span id="L-70"><a href="#L-70"><span class="linenos">70</span></a>        <span class="c1">## Optional execute the callback code</span>
-</span><span id="L-71"><a href="#L-71"><span class="linenos">71</span></a>        <span class="k">if</span> <span class="n">callback</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-</span><span id="L-72"><a href="#L-72"><span class="linenos">72</span></a>            <span class="n">callback</span><span class="p">(</span><span class="n">epoch</span><span class="p">,</span> <span class="n">solution_cost</span><span class="p">,</span> <span class="n">candidate_cost</span><span class="p">)</span>
-</span><span id="L-73"><a href="#L-73"><span class="linenos">73</span></a>    
-</span><span id="L-74"><a href="#L-74"><span class="linenos">74</span></a>    <span class="k">if</span> <span class="n">cached</span><span class="p">:</span>
-</span><span id="L-75"><a href="#L-75"><span class="linenos">75</span></a>        <span class="n">memory</span><span class="o">.</span><span class="n">clear</span><span class="p">(</span><span class="n">warn</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
-</span><span id="L-76"><a href="#L-76"><span class="linenos">76</span></a>
-</span><span id="L-77"><a href="#L-77"><span class="linenos">77</span></a>    <span class="k">return</span> <span class="p">(</span><span class="n">solution</span><span class="p">,</span> <span class="n">solution_cost</span><span class="p">)</span>
+</span><span id="L-27"><a href="#L-27"><span class="linenos">27</span></a>
+</span><span id="L-28"><a href="#L-28"><span class="linenos">28</span></a><span class="n">logger</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="vm">__name__</span><span class="p">)</span>
+</span><span id="L-29"><a href="#L-29"><span class="linenos">29</span></a>
+</span><span id="L-30"><a href="#L-30"><span class="linenos">30</span></a>
+</span><span id="L-31"><a href="#L-31"><span class="linenos">31</span></a>
+</span><span id="L-32"><a href="#L-32"><span class="linenos">32</span></a><span class="k">def</span> <span class="nf">hillclimbing</span><span class="p">(</span><span class="n">objective</span><span class="p">:</span><span class="n">typing</span><span class="o">.</span><span class="n">Callable</span><span class="p">,</span> <span class="n">bounds</span><span class="p">:</span><span class="nb">list</span><span class="p">,</span>
+</span><span id="L-33"><a href="#L-33"><span class="linenos">33</span></a><span class="n">callback</span><span class="p">:</span><span class="n">typing</span><span class="o">.</span><span class="n">Callable</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">n_iter</span><span class="p">:</span><span class="nb">int</span><span class="o">=</span><span class="mi">200</span><span class="p">,</span> <span class="n">step_size</span><span class="p">:</span><span class="nb">float</span><span class="o">=</span><span class="mf">.01</span><span class="p">,</span>
+</span><span id="L-34"><a href="#L-34"><span class="linenos">34</span></a><span class="n">cached</span><span class="p">:</span><span class="nb">bool</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">debug</span><span class="p">:</span><span class="nb">bool</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">verbose</span><span class="p">:</span><span class="nb">bool</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">seed</span><span class="p">:</span><span class="nb">int</span><span class="o">=</span><span class="mi">42</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">:</span>
+</span><span id="L-35"><a href="#L-35"><span class="linenos">35</span></a>    <span class="sd">&quot;&quot;&quot;</span>
+</span><span id="L-36"><a href="#L-36"><span class="linenos">36</span></a><span class="sd">    Hill climbing local search algorithm.</span>
+</span><span id="L-37"><a href="#L-37"><span class="linenos">37</span></a>
+</span><span id="L-38"><a href="#L-38"><span class="linenos">38</span></a><span class="sd">    Args:</span>
+</span><span id="L-39"><a href="#L-39"><span class="linenos">39</span></a><span class="sd">        objective (typing.Callable): objective function used to evaluate the candidate solutions (lower is better)</span>
+</span><span id="L-40"><a href="#L-40"><span class="linenos">40</span></a><span class="sd">        bounds (list): bounds that limit the search space</span>
+</span><span id="L-41"><a href="#L-41"><span class="linenos">41</span></a><span class="sd">        callback (typing.Callable): callback function that is called at each epoch (deafult None)</span>
+</span><span id="L-42"><a href="#L-42"><span class="linenos">42</span></a><span class="sd">        n_iter (int): the number of iterations (default 200)</span>
+</span><span id="L-43"><a href="#L-43"><span class="linenos">43</span></a><span class="sd">        step_size (float): the step size (default 0.01)</span>
+</span><span id="L-44"><a href="#L-44"><span class="linenos">44</span></a><span class="sd">        cached (bool): controls if the objective function is cached by joblib (default False)</span>
+</span><span id="L-45"><a href="#L-45"><span class="linenos">45</span></a><span class="sd">        debug (bool): controls if debug information is returned (default False)</span>
+</span><span id="L-46"><a href="#L-46"><span class="linenos">46</span></a><span class="sd">        verbose (bool): controls the usage of tqdm as a progress bar (default False)</span>
+</span><span id="L-47"><a href="#L-47"><span class="linenos">47</span></a><span class="sd">        seed (int): seed to init the random generator (default 42)</span>
+</span><span id="L-48"><a href="#L-48"><span class="linenos">48</span></a>
+</span><span id="L-49"><a href="#L-49"><span class="linenos">49</span></a><span class="sd">    Returns:</span>
+</span><span id="L-50"><a href="#L-50"><span class="linenos">50</span></a><span class="sd">        tuple: the best solution</span>
+</span><span id="L-51"><a href="#L-51"><span class="linenos">51</span></a><span class="sd">    &quot;&quot;&quot;</span>
+</span><span id="L-52"><a href="#L-52"><span class="linenos">52</span></a>    <span class="c1"># define the seed of the random generation</span>
+</span><span id="L-53"><a href="#L-53"><span class="linenos">53</span></a>    <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">seed</span><span class="p">(</span><span class="n">seed</span><span class="p">)</span>
+</span><span id="L-54"><a href="#L-54"><span class="linenos">54</span></a>
+</span><span id="L-55"><a href="#L-55"><span class="linenos">55</span></a>    <span class="c1"># cache the initial objective function</span>
+</span><span id="L-56"><a href="#L-56"><span class="linenos">56</span></a>    <span class="k">if</span> <span class="n">cached</span><span class="p">:</span>
+</span><span id="L-57"><a href="#L-57"><span class="linenos">57</span></a>        <span class="c1"># Cache from joblib</span>
+</span><span id="L-58"><a href="#L-58"><span class="linenos">58</span></a>        <span class="n">location</span> <span class="o">=</span> <span class="n">tempfile</span><span class="o">.</span><span class="n">gettempdir</span><span class="p">()</span>
+</span><span id="L-59"><a href="#L-59"><span class="linenos">59</span></a>        <span class="n">memory</span> <span class="o">=</span> <span class="n">joblib</span><span class="o">.</span><span class="n">Memory</span><span class="p">(</span><span class="n">location</span><span class="p">,</span> <span class="n">verbose</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+</span><span id="L-60"><a href="#L-60"><span class="linenos">60</span></a>        <span class="n">objective_cache</span> <span class="o">=</span> <span class="n">memory</span><span class="o">.</span><span class="n">cache</span><span class="p">(</span><span class="n">objective</span><span class="p">)</span>
+</span><span id="L-61"><a href="#L-61"><span class="linenos">61</span></a>    <span class="k">else</span><span class="p">:</span>
+</span><span id="L-62"><a href="#L-62"><span class="linenos">62</span></a>        <span class="n">objective_cache</span> <span class="o">=</span> <span class="n">objective</span>
+</span><span id="L-63"><a href="#L-63"><span class="linenos">63</span></a>
+</span><span id="L-64"><a href="#L-64"><span class="linenos">64</span></a>    <span class="c1"># generate an initial point</span>
+</span><span id="L-65"><a href="#L-65"><span class="linenos">65</span></a>    <span class="n">solution</span> <span class="o">=</span> <span class="n">utils</span><span class="o">.</span><span class="n">get_random_solution</span><span class="p">(</span><span class="n">bounds</span><span class="p">)</span>
+</span><span id="L-66"><a href="#L-66"><span class="linenos">66</span></a>    <span class="c1"># evaluate the initial point</span>
+</span><span id="L-67"><a href="#L-67"><span class="linenos">67</span></a>    <span class="n">solution_cost</span> <span class="o">=</span> <span class="n">objective_cache</span><span class="p">(</span><span class="n">solution</span><span class="p">)</span>
+</span><span id="L-68"><a href="#L-68"><span class="linenos">68</span></a>    <span class="c1"># run the hill climb</span>
+</span><span id="L-69"><a href="#L-69"><span class="linenos">69</span></a>    
+</span><span id="L-70"><a href="#L-70"><span class="linenos">70</span></a>    <span class="k">for</span> <span class="n">epoch</span> <span class="ow">in</span> <span class="n">tqdm</span><span class="o">.</span><span class="n">tqdm</span><span class="p">(</span><span class="nb">range</span><span class="p">(</span><span class="n">n_iter</span><span class="p">),</span> <span class="n">disable</span><span class="o">=</span><span class="ow">not</span> <span class="n">verbose</span><span class="p">):</span>
+</span><span id="L-71"><a href="#L-71"><span class="linenos">71</span></a>		<span class="c1"># take a step</span>
+</span><span id="L-72"><a href="#L-72"><span class="linenos">72</span></a>        <span class="n">candidate</span> <span class="o">=</span> <span class="n">solution</span> <span class="o">+</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">bounds</span><span class="p">))</span> <span class="o">*</span> <span class="n">step_size</span>
+</span><span id="L-73"><a href="#L-73"><span class="linenos">73</span></a>        <span class="c1"># Fix out of bounds value</span>
+</span><span id="L-74"><a href="#L-74"><span class="linenos">74</span></a>        <span class="n">candidate</span> <span class="o">=</span> <span class="n">utils</span><span class="o">.</span><span class="n">check_bounds</span><span class="p">(</span><span class="n">candidate</span><span class="p">,</span> <span class="n">bounds</span><span class="p">)</span>
+</span><span id="L-75"><a href="#L-75"><span class="linenos">75</span></a>        <span class="c1"># evaluate candidate point</span>
+</span><span id="L-76"><a href="#L-76"><span class="linenos">76</span></a>        <span class="n">candidate_cost</span> <span class="o">=</span> <span class="n">objective_cache</span><span class="p">(</span><span class="n">candidate</span><span class="p">)</span>
+</span><span id="L-77"><a href="#L-77"><span class="linenos">77</span></a>		<span class="c1"># check if we should keep the new point</span>
+</span><span id="L-78"><a href="#L-78"><span class="linenos">78</span></a>        
+</span><span id="L-79"><a href="#L-79"><span class="linenos">79</span></a>        <span class="k">if</span> <span class="n">candidate_cost</span> <span class="o">&lt;</span> <span class="n">solution_cost</span><span class="p">:</span>
+</span><span id="L-80"><a href="#L-80"><span class="linenos">80</span></a>			<span class="c1"># store the new point</span>
+</span><span id="L-81"><a href="#L-81"><span class="linenos">81</span></a>            <span class="n">solution</span><span class="p">,</span> <span class="n">solution_cost</span> <span class="o">=</span> <span class="n">candidate</span><span class="p">,</span> <span class="n">candidate_cost</span>
+</span><span id="L-82"><a href="#L-82"><span class="linenos">82</span></a>        
+</span><span id="L-83"><a href="#L-83"><span class="linenos">83</span></a>        <span class="c1">## Optional execute the callback code</span>
+</span><span id="L-84"><a href="#L-84"><span class="linenos">84</span></a>        <span class="k">if</span> <span class="n">callback</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+</span><span id="L-85"><a href="#L-85"><span class="linenos">85</span></a>            <span class="n">callback</span><span class="p">(</span><span class="n">epoch</span><span class="p">,</span> <span class="n">solution_cost</span><span class="p">,</span> <span class="n">candidate_cost</span><span class="p">)</span>
+</span><span id="L-86"><a href="#L-86"><span class="linenos">86</span></a>    
+</span><span id="L-87"><a href="#L-87"><span class="linenos">87</span></a>    <span class="k">if</span> <span class="n">cached</span><span class="p">:</span>
+</span><span id="L-88"><a href="#L-88"><span class="linenos">88</span></a>        <span class="n">memory</span><span class="o">.</span><span class="n">clear</span><span class="p">(</span><span class="n">warn</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+</span><span id="L-89"><a href="#L-89"><span class="linenos">89</span></a>
+</span><span id="L-90"><a href="#L-90"><span class="linenos">90</span></a>    <span class="k">return</span> <span class="p">(</span><span class="n">solution</span><span class="p">,</span> <span class="n">solution_cost</span><span class="p">)</span>
 </span></pre></div>
 
 
@@ -162,63 +180,71 @@
 <div class="attr function">
             
         <span class="def">def</span>
-        <span class="name">hillclimbing</span><span class="signature pdoc-code multiline">(<span class="param">	<span class="n">objective</span><span class="p">:</span> <span class="n">Callable</span>,</span><span class="param">	<span class="n">bounds</span><span class="p">:</span> <span class="n">numpy</span><span class="o">.</span><span class="n">ndarray</span>,</span><span class="param">	<span class="n">callback</span><span class="p">:</span> <span class="n">Callable</span> <span class="o">=</span> <span class="kc">None</span>,</span><span class="param">	<span class="n">n_iter</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">200</span>,</span><span class="param">	<span class="n">step_size</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.01</span>,</span><span class="param">	<span class="n">cached</span><span class="o">=</span><span class="kc">False</span>,</span><span class="param">	<span class="n">debug</span><span class="o">=</span><span class="kc">False</span>,</span><span class="param">	<span class="n">verbose</span><span class="o">=</span><span class="kc">False</span></span><span class="return-annotation">) -> <span class="nb">tuple</span>:</span></span>
+        <span class="name">hillclimbing</span><span class="signature pdoc-code multiline">(<span class="param">	<span class="n">objective</span><span class="p">:</span> <span class="n">Callable</span>,</span><span class="param">	<span class="n">bounds</span><span class="p">:</span> <span class="nb">list</span>,</span><span class="param">	<span class="n">callback</span><span class="p">:</span> <span class="n">Callable</span> <span class="o">=</span> <span class="kc">None</span>,</span><span class="param">	<span class="n">n_iter</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">200</span>,</span><span class="param">	<span class="n">step_size</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.01</span>,</span><span class="param">	<span class="n">cached</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>,</span><span class="param">	<span class="n">debug</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>,</span><span class="param">	<span class="n">verbose</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>,</span><span class="param">	<span class="n">seed</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">42</span></span><span class="return-annotation">) -> <span class="nb">tuple</span>:</span></span>
 
                 <label class="view-source-button" for="hillclimbing-view-source"><span>View Source</span></label>
 
     </div>
     <a class="headerlink" href="#hillclimbing"></a>
-            <div class="pdoc-code codehilite"><pre><span></span><span id="hillclimbing-28"><a href="#hillclimbing-28"><span class="linenos">28</span></a><span class="k">def</span> <span class="nf">hillclimbing</span><span class="p">(</span><span class="n">objective</span><span class="p">:</span><span class="n">typing</span><span class="o">.</span><span class="n">Callable</span><span class="p">,</span> <span class="n">bounds</span><span class="p">:</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
-</span><span id="hillclimbing-29"><a href="#hillclimbing-29"><span class="linenos">29</span></a><span class="n">callback</span><span class="p">:</span><span class="n">typing</span><span class="o">.</span><span class="n">Callable</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">n_iter</span><span class="p">:</span><span class="nb">int</span><span class="o">=</span><span class="mi">200</span><span class="p">,</span> <span class="n">step_size</span><span class="p">:</span><span class="nb">float</span><span class="o">=</span><span class="mf">.01</span><span class="p">,</span>
-</span><span id="hillclimbing-30"><a href="#hillclimbing-30"><span class="linenos">30</span></a><span class="n">cached</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">debug</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">verbose</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">:</span>
-</span><span id="hillclimbing-31"><a href="#hillclimbing-31"><span class="linenos">31</span></a>    <span class="sd">&quot;&quot;&quot;</span>
-</span><span id="hillclimbing-32"><a href="#hillclimbing-32"><span class="linenos">32</span></a><span class="sd">    Hill climbing local search algorithm.</span>
-</span><span id="hillclimbing-33"><a href="#hillclimbing-33"><span class="linenos">33</span></a>
-</span><span id="hillclimbing-34"><a href="#hillclimbing-34"><span class="linenos">34</span></a><span class="sd">    Args:</span>
-</span><span id="hillclimbing-35"><a href="#hillclimbing-35"><span class="linenos">35</span></a><span class="sd">        objective (typing.Callable): objective fucntion</span>
-</span><span id="hillclimbing-36"><a href="#hillclimbing-36"><span class="linenos">36</span></a><span class="sd">        bounds (np.ndarray): the bounds of valid solutions</span>
-</span><span id="hillclimbing-37"><a href="#hillclimbing-37"><span class="linenos">37</span></a><span class="sd">        n_iter (int): the number of iterations (default 200)</span>
-</span><span id="hillclimbing-38"><a href="#hillclimbing-38"><span class="linenos">38</span></a><span class="sd">        step_size (float): the step size (default 0.01)</span>
-</span><span id="hillclimbing-39"><a href="#hillclimbing-39"><span class="linenos">39</span></a>
-</span><span id="hillclimbing-40"><a href="#hillclimbing-40"><span class="linenos">40</span></a><span class="sd">    Returns:</span>
-</span><span id="hillclimbing-41"><a href="#hillclimbing-41"><span class="linenos">41</span></a><span class="sd">        list: [solution, solution_cost]</span>
-</span><span id="hillclimbing-42"><a href="#hillclimbing-42"><span class="linenos">42</span></a><span class="sd">    &quot;&quot;&quot;</span>
-</span><span id="hillclimbing-43"><a href="#hillclimbing-43"><span class="linenos">43</span></a>    <span class="c1"># cache the initial objective function</span>
-</span><span id="hillclimbing-44"><a href="#hillclimbing-44"><span class="linenos">44</span></a>    <span class="k">if</span> <span class="n">cached</span><span class="p">:</span>
-</span><span id="hillclimbing-45"><a href="#hillclimbing-45"><span class="linenos">45</span></a>        <span class="c1"># Cache from joblib</span>
-</span><span id="hillclimbing-46"><a href="#hillclimbing-46"><span class="linenos">46</span></a>        <span class="n">location</span> <span class="o">=</span> <span class="n">tempfile</span><span class="o">.</span><span class="n">gettempdir</span><span class="p">()</span>
-</span><span id="hillclimbing-47"><a href="#hillclimbing-47"><span class="linenos">47</span></a>        <span class="n">memory</span> <span class="o">=</span> <span class="n">joblib</span><span class="o">.</span><span class="n">Memory</span><span class="p">(</span><span class="n">location</span><span class="p">,</span> <span class="n">verbose</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
-</span><span id="hillclimbing-48"><a href="#hillclimbing-48"><span class="linenos">48</span></a>        <span class="n">objective_cache</span> <span class="o">=</span> <span class="n">memory</span><span class="o">.</span><span class="n">cache</span><span class="p">(</span><span class="n">objective</span><span class="p">)</span>
-</span><span id="hillclimbing-49"><a href="#hillclimbing-49"><span class="linenos">49</span></a>    <span class="k">else</span><span class="p">:</span>
-</span><span id="hillclimbing-50"><a href="#hillclimbing-50"><span class="linenos">50</span></a>        <span class="n">objective_cache</span> <span class="o">=</span> <span class="n">objective</span>
-</span><span id="hillclimbing-51"><a href="#hillclimbing-51"><span class="linenos">51</span></a>
-</span><span id="hillclimbing-52"><a href="#hillclimbing-52"><span class="linenos">52</span></a>    <span class="c1"># generate an initial point</span>
-</span><span id="hillclimbing-53"><a href="#hillclimbing-53"><span class="linenos">53</span></a>    <span class="n">solution</span> <span class="o">=</span> <span class="n">utils</span><span class="o">.</span><span class="n">get_random_solution</span><span class="p">(</span><span class="n">bounds</span><span class="p">)</span>
-</span><span id="hillclimbing-54"><a href="#hillclimbing-54"><span class="linenos">54</span></a>    <span class="c1"># evaluate the initial point</span>
-</span><span id="hillclimbing-55"><a href="#hillclimbing-55"><span class="linenos">55</span></a>    <span class="n">solution_cost</span> <span class="o">=</span> <span class="n">objective_cache</span><span class="p">(</span><span class="n">solution</span><span class="p">)</span>
-</span><span id="hillclimbing-56"><a href="#hillclimbing-56"><span class="linenos">56</span></a>    <span class="c1"># run the hill climb</span>
-</span><span id="hillclimbing-57"><a href="#hillclimbing-57"><span class="linenos">57</span></a>    
-</span><span id="hillclimbing-58"><a href="#hillclimbing-58"><span class="linenos">58</span></a>    <span class="k">for</span> <span class="n">epoch</span> <span class="ow">in</span> <span class="n">tqdm</span><span class="o">.</span><span class="n">tqdm</span><span class="p">(</span><span class="nb">range</span><span class="p">(</span><span class="n">n_iter</span><span class="p">),</span> <span class="n">disable</span><span class="o">=</span><span class="ow">not</span> <span class="n">verbose</span><span class="p">):</span>
-</span><span id="hillclimbing-59"><a href="#hillclimbing-59"><span class="linenos">59</span></a>		<span class="c1"># take a step</span>
-</span><span id="hillclimbing-60"><a href="#hillclimbing-60"><span class="linenos">60</span></a>        <span class="n">candidate</span> <span class="o">=</span> <span class="n">solution</span> <span class="o">+</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">bounds</span><span class="p">))</span> <span class="o">*</span> <span class="n">step_size</span>
-</span><span id="hillclimbing-61"><a href="#hillclimbing-61"><span class="linenos">61</span></a>        <span class="c1"># Fix out of bounds value</span>
-</span><span id="hillclimbing-62"><a href="#hillclimbing-62"><span class="linenos">62</span></a>        <span class="n">candidate</span> <span class="o">=</span> <span class="n">utils</span><span class="o">.</span><span class="n">check_bounds</span><span class="p">(</span><span class="n">candidate</span><span class="p">,</span> <span class="n">bounds</span><span class="p">)</span>
-</span><span id="hillclimbing-63"><a href="#hillclimbing-63"><span class="linenos">63</span></a>        <span class="c1"># evaluate candidate point</span>
-</span><span id="hillclimbing-64"><a href="#hillclimbing-64"><span class="linenos">64</span></a>        <span class="n">candidate_cost</span> <span class="o">=</span> <span class="n">objective_cache</span><span class="p">(</span><span class="n">candidate</span><span class="p">)</span>
-</span><span id="hillclimbing-65"><a href="#hillclimbing-65"><span class="linenos">65</span></a>		<span class="c1"># check if we should keep the new point</span>
-</span><span id="hillclimbing-66"><a href="#hillclimbing-66"><span class="linenos">66</span></a>        
-</span><span id="hillclimbing-67"><a href="#hillclimbing-67"><span class="linenos">67</span></a>        <span class="k">if</span> <span class="n">candidate_cost</span> <span class="o">&lt;</span> <span class="n">solution_cost</span><span class="p">:</span>
-</span><span id="hillclimbing-68"><a href="#hillclimbing-68"><span class="linenos">68</span></a>			<span class="c1"># store the new point</span>
-</span><span id="hillclimbing-69"><a href="#hillclimbing-69"><span class="linenos">69</span></a>            <span class="n">solution</span><span class="p">,</span> <span class="n">solution_cost</span> <span class="o">=</span> <span class="n">candidate</span><span class="p">,</span> <span class="n">candidate_cost</span>
-</span><span id="hillclimbing-70"><a href="#hillclimbing-70"><span class="linenos">70</span></a>        
-</span><span id="hillclimbing-71"><a href="#hillclimbing-71"><span class="linenos">71</span></a>        <span class="c1">## Optional execute the callback code</span>
-</span><span id="hillclimbing-72"><a href="#hillclimbing-72"><span class="linenos">72</span></a>        <span class="k">if</span> <span class="n">callback</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-</span><span id="hillclimbing-73"><a href="#hillclimbing-73"><span class="linenos">73</span></a>            <span class="n">callback</span><span class="p">(</span><span class="n">epoch</span><span class="p">,</span> <span class="n">solution_cost</span><span class="p">,</span> <span class="n">candidate_cost</span><span class="p">)</span>
-</span><span id="hillclimbing-74"><a href="#hillclimbing-74"><span class="linenos">74</span></a>    
-</span><span id="hillclimbing-75"><a href="#hillclimbing-75"><span class="linenos">75</span></a>    <span class="k">if</span> <span class="n">cached</span><span class="p">:</span>
-</span><span id="hillclimbing-76"><a href="#hillclimbing-76"><span class="linenos">76</span></a>        <span class="n">memory</span><span class="o">.</span><span class="n">clear</span><span class="p">(</span><span class="n">warn</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
-</span><span id="hillclimbing-77"><a href="#hillclimbing-77"><span class="linenos">77</span></a>
-</span><span id="hillclimbing-78"><a href="#hillclimbing-78"><span class="linenos">78</span></a>    <span class="k">return</span> <span class="p">(</span><span class="n">solution</span><span class="p">,</span> <span class="n">solution_cost</span><span class="p">)</span>
+            <div class="pdoc-code codehilite"><pre><span></span><span id="hillclimbing-33"><a href="#hillclimbing-33"><span class="linenos">33</span></a><span class="k">def</span> <span class="nf">hillclimbing</span><span class="p">(</span><span class="n">objective</span><span class="p">:</span><span class="n">typing</span><span class="o">.</span><span class="n">Callable</span><span class="p">,</span> <span class="n">bounds</span><span class="p">:</span><span class="nb">list</span><span class="p">,</span>
+</span><span id="hillclimbing-34"><a href="#hillclimbing-34"><span class="linenos">34</span></a><span class="n">callback</span><span class="p">:</span><span class="n">typing</span><span class="o">.</span><span class="n">Callable</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">n_iter</span><span class="p">:</span><span class="nb">int</span><span class="o">=</span><span class="mi">200</span><span class="p">,</span> <span class="n">step_size</span><span class="p">:</span><span class="nb">float</span><span class="o">=</span><span class="mf">.01</span><span class="p">,</span>
+</span><span id="hillclimbing-35"><a href="#hillclimbing-35"><span class="linenos">35</span></a><span class="n">cached</span><span class="p">:</span><span class="nb">bool</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">debug</span><span class="p">:</span><span class="nb">bool</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">verbose</span><span class="p">:</span><span class="nb">bool</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">seed</span><span class="p">:</span><span class="nb">int</span><span class="o">=</span><span class="mi">42</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">:</span>
+</span><span id="hillclimbing-36"><a href="#hillclimbing-36"><span class="linenos">36</span></a>    <span class="sd">&quot;&quot;&quot;</span>
+</span><span id="hillclimbing-37"><a href="#hillclimbing-37"><span class="linenos">37</span></a><span class="sd">    Hill climbing local search algorithm.</span>
+</span><span id="hillclimbing-38"><a href="#hillclimbing-38"><span class="linenos">38</span></a>
+</span><span id="hillclimbing-39"><a href="#hillclimbing-39"><span class="linenos">39</span></a><span class="sd">    Args:</span>
+</span><span id="hillclimbing-40"><a href="#hillclimbing-40"><span class="linenos">40</span></a><span class="sd">        objective (typing.Callable): objective function used to evaluate the candidate solutions (lower is better)</span>
+</span><span id="hillclimbing-41"><a href="#hillclimbing-41"><span class="linenos">41</span></a><span class="sd">        bounds (list): bounds that limit the search space</span>
+</span><span id="hillclimbing-42"><a href="#hillclimbing-42"><span class="linenos">42</span></a><span class="sd">        callback (typing.Callable): callback function that is called at each epoch (deafult None)</span>
+</span><span id="hillclimbing-43"><a href="#hillclimbing-43"><span class="linenos">43</span></a><span class="sd">        n_iter (int): the number of iterations (default 200)</span>
+</span><span id="hillclimbing-44"><a href="#hillclimbing-44"><span class="linenos">44</span></a><span class="sd">        step_size (float): the step size (default 0.01)</span>
+</span><span id="hillclimbing-45"><a href="#hillclimbing-45"><span class="linenos">45</span></a><span class="sd">        cached (bool): controls if the objective function is cached by joblib (default False)</span>
+</span><span id="hillclimbing-46"><a href="#hillclimbing-46"><span class="linenos">46</span></a><span class="sd">        debug (bool): controls if debug information is returned (default False)</span>
+</span><span id="hillclimbing-47"><a href="#hillclimbing-47"><span class="linenos">47</span></a><span class="sd">        verbose (bool): controls the usage of tqdm as a progress bar (default False)</span>
+</span><span id="hillclimbing-48"><a href="#hillclimbing-48"><span class="linenos">48</span></a><span class="sd">        seed (int): seed to init the random generator (default 42)</span>
+</span><span id="hillclimbing-49"><a href="#hillclimbing-49"><span class="linenos">49</span></a>
+</span><span id="hillclimbing-50"><a href="#hillclimbing-50"><span class="linenos">50</span></a><span class="sd">    Returns:</span>
+</span><span id="hillclimbing-51"><a href="#hillclimbing-51"><span class="linenos">51</span></a><span class="sd">        tuple: the best solution</span>
+</span><span id="hillclimbing-52"><a href="#hillclimbing-52"><span class="linenos">52</span></a><span class="sd">    &quot;&quot;&quot;</span>
+</span><span id="hillclimbing-53"><a href="#hillclimbing-53"><span class="linenos">53</span></a>    <span class="c1"># define the seed of the random generation</span>
+</span><span id="hillclimbing-54"><a href="#hillclimbing-54"><span class="linenos">54</span></a>    <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">seed</span><span class="p">(</span><span class="n">seed</span><span class="p">)</span>
+</span><span id="hillclimbing-55"><a href="#hillclimbing-55"><span class="linenos">55</span></a>
+</span><span id="hillclimbing-56"><a href="#hillclimbing-56"><span class="linenos">56</span></a>    <span class="c1"># cache the initial objective function</span>
+</span><span id="hillclimbing-57"><a href="#hillclimbing-57"><span class="linenos">57</span></a>    <span class="k">if</span> <span class="n">cached</span><span class="p">:</span>
+</span><span id="hillclimbing-58"><a href="#hillclimbing-58"><span class="linenos">58</span></a>        <span class="c1"># Cache from joblib</span>
+</span><span id="hillclimbing-59"><a href="#hillclimbing-59"><span class="linenos">59</span></a>        <span class="n">location</span> <span class="o">=</span> <span class="n">tempfile</span><span class="o">.</span><span class="n">gettempdir</span><span class="p">()</span>
+</span><span id="hillclimbing-60"><a href="#hillclimbing-60"><span class="linenos">60</span></a>        <span class="n">memory</span> <span class="o">=</span> <span class="n">joblib</span><span class="o">.</span><span class="n">Memory</span><span class="p">(</span><span class="n">location</span><span class="p">,</span> <span class="n">verbose</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+</span><span id="hillclimbing-61"><a href="#hillclimbing-61"><span class="linenos">61</span></a>        <span class="n">objective_cache</span> <span class="o">=</span> <span class="n">memory</span><span class="o">.</span><span class="n">cache</span><span class="p">(</span><span class="n">objective</span><span class="p">)</span>
+</span><span id="hillclimbing-62"><a href="#hillclimbing-62"><span class="linenos">62</span></a>    <span class="k">else</span><span class="p">:</span>
+</span><span id="hillclimbing-63"><a href="#hillclimbing-63"><span class="linenos">63</span></a>        <span class="n">objective_cache</span> <span class="o">=</span> <span class="n">objective</span>
+</span><span id="hillclimbing-64"><a href="#hillclimbing-64"><span class="linenos">64</span></a>
+</span><span id="hillclimbing-65"><a href="#hillclimbing-65"><span class="linenos">65</span></a>    <span class="c1"># generate an initial point</span>
+</span><span id="hillclimbing-66"><a href="#hillclimbing-66"><span class="linenos">66</span></a>    <span class="n">solution</span> <span class="o">=</span> <span class="n">utils</span><span class="o">.</span><span class="n">get_random_solution</span><span class="p">(</span><span class="n">bounds</span><span class="p">)</span>
+</span><span id="hillclimbing-67"><a href="#hillclimbing-67"><span class="linenos">67</span></a>    <span class="c1"># evaluate the initial point</span>
+</span><span id="hillclimbing-68"><a href="#hillclimbing-68"><span class="linenos">68</span></a>    <span class="n">solution_cost</span> <span class="o">=</span> <span class="n">objective_cache</span><span class="p">(</span><span class="n">solution</span><span class="p">)</span>
+</span><span id="hillclimbing-69"><a href="#hillclimbing-69"><span class="linenos">69</span></a>    <span class="c1"># run the hill climb</span>
+</span><span id="hillclimbing-70"><a href="#hillclimbing-70"><span class="linenos">70</span></a>    
+</span><span id="hillclimbing-71"><a href="#hillclimbing-71"><span class="linenos">71</span></a>    <span class="k">for</span> <span class="n">epoch</span> <span class="ow">in</span> <span class="n">tqdm</span><span class="o">.</span><span class="n">tqdm</span><span class="p">(</span><span class="nb">range</span><span class="p">(</span><span class="n">n_iter</span><span class="p">),</span> <span class="n">disable</span><span class="o">=</span><span class="ow">not</span> <span class="n">verbose</span><span class="p">):</span>
+</span><span id="hillclimbing-72"><a href="#hillclimbing-72"><span class="linenos">72</span></a>		<span class="c1"># take a step</span>
+</span><span id="hillclimbing-73"><a href="#hillclimbing-73"><span class="linenos">73</span></a>        <span class="n">candidate</span> <span class="o">=</span> <span class="n">solution</span> <span class="o">+</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">bounds</span><span class="p">))</span> <span class="o">*</span> <span class="n">step_size</span>
+</span><span id="hillclimbing-74"><a href="#hillclimbing-74"><span class="linenos">74</span></a>        <span class="c1"># Fix out of bounds value</span>
+</span><span id="hillclimbing-75"><a href="#hillclimbing-75"><span class="linenos">75</span></a>        <span class="n">candidate</span> <span class="o">=</span> <span class="n">utils</span><span class="o">.</span><span class="n">check_bounds</span><span class="p">(</span><span class="n">candidate</span><span class="p">,</span> <span class="n">bounds</span><span class="p">)</span>
+</span><span id="hillclimbing-76"><a href="#hillclimbing-76"><span class="linenos">76</span></a>        <span class="c1"># evaluate candidate point</span>
+</span><span id="hillclimbing-77"><a href="#hillclimbing-77"><span class="linenos">77</span></a>        <span class="n">candidate_cost</span> <span class="o">=</span> <span class="n">objective_cache</span><span class="p">(</span><span class="n">candidate</span><span class="p">)</span>
+</span><span id="hillclimbing-78"><a href="#hillclimbing-78"><span class="linenos">78</span></a>		<span class="c1"># check if we should keep the new point</span>
+</span><span id="hillclimbing-79"><a href="#hillclimbing-79"><span class="linenos">79</span></a>        
+</span><span id="hillclimbing-80"><a href="#hillclimbing-80"><span class="linenos">80</span></a>        <span class="k">if</span> <span class="n">candidate_cost</span> <span class="o">&lt;</span> <span class="n">solution_cost</span><span class="p">:</span>
+</span><span id="hillclimbing-81"><a href="#hillclimbing-81"><span class="linenos">81</span></a>			<span class="c1"># store the new point</span>
+</span><span id="hillclimbing-82"><a href="#hillclimbing-82"><span class="linenos">82</span></a>            <span class="n">solution</span><span class="p">,</span> <span class="n">solution_cost</span> <span class="o">=</span> <span class="n">candidate</span><span class="p">,</span> <span class="n">candidate_cost</span>
+</span><span id="hillclimbing-83"><a href="#hillclimbing-83"><span class="linenos">83</span></a>        
+</span><span id="hillclimbing-84"><a href="#hillclimbing-84"><span class="linenos">84</span></a>        <span class="c1">## Optional execute the callback code</span>
+</span><span id="hillclimbing-85"><a href="#hillclimbing-85"><span class="linenos">85</span></a>        <span class="k">if</span> <span class="n">callback</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+</span><span id="hillclimbing-86"><a href="#hillclimbing-86"><span class="linenos">86</span></a>            <span class="n">callback</span><span class="p">(</span><span class="n">epoch</span><span class="p">,</span> <span class="n">solution_cost</span><span class="p">,</span> <span class="n">candidate_cost</span><span class="p">)</span>
+</span><span id="hillclimbing-87"><a href="#hillclimbing-87"><span class="linenos">87</span></a>    
+</span><span id="hillclimbing-88"><a href="#hillclimbing-88"><span class="linenos">88</span></a>    <span class="k">if</span> <span class="n">cached</span><span class="p">:</span>
+</span><span id="hillclimbing-89"><a href="#hillclimbing-89"><span class="linenos">89</span></a>        <span class="n">memory</span><span class="o">.</span><span class="n">clear</span><span class="p">(</span><span class="n">warn</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+</span><span id="hillclimbing-90"><a href="#hillclimbing-90"><span class="linenos">90</span></a>
+</span><span id="hillclimbing-91"><a href="#hillclimbing-91"><span class="linenos">91</span></a>    <span class="k">return</span> <span class="p">(</span><span class="n">solution</span><span class="p">,</span> <span class="n">solution_cost</span><span class="p">)</span>
 </span></pre></div>
 
 
@@ -227,16 +253,21 @@
 <h6 id="arguments">Arguments:</h6>
 
 <ul>
-<li><strong>objective (typing.Callable):</strong>  objective fucntion</li>
-<li><strong>bounds (np.ndarray):</strong>  the bounds of valid solutions</li>
+<li><strong>objective (typing.Callable):</strong>  objective function used to evaluate the candidate solutions (lower is better)</li>
+<li><strong>bounds (list):</strong>  bounds that limit the search space</li>
+<li><strong>callback (typing.Callable):</strong>  callback function that is called at each epoch (deafult None)</li>
 <li><strong>n_iter (int):</strong>  the number of iterations (default 200)</li>
 <li><strong>step_size (float):</strong>  the step size (default 0.01)</li>
+<li><strong>cached (bool):</strong>  controls if the objective function is cached by joblib (default False)</li>
+<li><strong>debug (bool):</strong>  controls if debug information is returned (default False)</li>
+<li><strong>verbose (bool):</strong>  controls the usage of tqdm as a progress bar (default False)</li>
+<li><strong>seed (int):</strong>  seed to init the random generator (default 42)</li>
 </ul>
 
 <h6 id="returns">Returns:</h6>
 
 <blockquote>
-  <p>list: [solution, solution_cost]</p>
+  <p>tuple: the best solution</p>
 </blockquote>
 </div>
 

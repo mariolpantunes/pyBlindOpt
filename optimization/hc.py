@@ -1,5 +1,14 @@
 # coding: utf-8
 
+
+'''
+Hill climbing is a mathematical optimization technique that belongs to the 
+family of local search. It is an iterative algorithm that starts with an 
+arbitrary solution to a problem and then attempts to find a better solution 
+by making an incremental change to the solution.
+'''
+
+
 __author__ = 'Mário Antunes'
 __version__ = '0.1'
 __email__ = 'mariolpantunes@gmail.com'
@@ -19,26 +28,30 @@ import optimization.utils as utils
 logger = logging.getLogger(__name__)
 
 
-# Cache from joblib
-location = tempfile.gettempdir()
-memory = joblib.Memory(location, verbose=0)
 
-
-def hillclimbing(objective:typing.Callable, bounds:np.ndarray,
+def hillclimbing(objective:typing.Callable, bounds:list,
 callback:typing.Callable=None, n_iter:int=200, step_size:float=.01,
-cached=False, debug=False, verbose=False) -> tuple:
+cached:bool=False, debug:bool=False, verbose:bool=False, seed:int=42) -> tuple:
     """
     Hill climbing local search algorithm.
 
     Args:
-        objective (typing.Callable): objective fucntion
-        bounds (np.ndarray): the bounds of valid solutions
+        objective (typing.Callable): objective function used to evaluate the candidate solutions (lower is better)
+        bounds (list): bounds that limit the search space
+        callback (typing.Callable): callback function that is called at each epoch (deafult None)
         n_iter (int): the number of iterations (default 200)
         step_size (float): the step size (default 0.01)
+        cached (bool): controls if the objective function is cached by joblib (default False)
+        debug (bool): controls if debug information is returned (default False)
+        verbose (bool): controls the usage of tqdm as a progress bar (default False)
+        seed (int): seed to init the random generator (default 42)
 
     Returns:
-        list: [solution, solution_cost]
+        tuple: the best solution
     """
+    # define the seed of the random generation
+    np.random.seed(seed)
+
     # cache the initial objective function
     if cached:
         # Cache from joblib

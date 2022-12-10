@@ -118,7 +118,8 @@ def genetic_algorithm(objective:typing.Callable, bounds:np.ndarray,
 population:np.ndarray=None, selection:typing.Callable=tournament_selection,
 crossover:typing.Callable=blend_crossover, mutation:typing.Callable=random_mutation,  
 callback:typing.Callable=None, n_iter:int=200, n_pop:int=20, r_cross:float=0.9, 
-r_mut:float=0.3, n_jobs:int=-1, cached=False, debug=False, verbose=False, seed:int=42) -> tuple:
+r_mut:float=0.3, n_jobs:int=-1, cached:bool=False, 
+debug:bool=False, verbose:bool=False, seed:int=42) -> tuple:
     '''
     Computes the genetic algorithm optimization.
 
