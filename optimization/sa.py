@@ -1,5 +1,13 @@
 # coding: utf-8
 
+
+'''
+Simulated annealing is a probabilistic technique for approximating the global 
+optimum of a given function. Specifically, it is a metaheuristic to approximate
+global optimization in a large search space for an optimization problem.
+'''
+
+
 __author__ = 'Mário Antunes'
 __version__ = '0.1'
 __email__ = 'mariolpantunes@gmail.com'
@@ -17,9 +25,6 @@ import optimization.utils as utils
 
 
 logger = logging.getLogger(__name__)
-
-
-
 
 
 def simulated_annealing(objective:typing.Callable, bounds:list,
