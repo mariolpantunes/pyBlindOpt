@@ -37,4 +37,4 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## Status
 
-![Python CI]()
+![Python CI](https://github.com/mariolpantunes/optimization/actions/workflows/Python%20CI/badge.svg)
