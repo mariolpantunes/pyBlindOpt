@@ -1,5 +1,13 @@
 # coding: utf-8
 
+'''
+Differential evolution is a method that optimizes a problem by iteratively trying to 
+improve a candidate solution with regard to a given measure of quality.
+Such methods are commonly known as metaheuristics as they make few or no assumptions 
+about the problem being optimized and can search very large spaces of candidate solutions.
+'''
+
+
 __author__ = 'Mário Antunes'
 __version__ = '0.1'
 __email__ = 'mariolpantunes@gmail.com'
@@ -21,8 +29,12 @@ import optimization.utils as utils
 
 logger = logging.getLogger(__name__)
 
+
 @enum.unique
 class TargetVector(enum.Enum):
+    '''
+    Enum data type that represents how the target vector is selected
+    '''
     best = 'best'
     rand = 'rand'
 
@@ -32,6 +44,9 @@ class TargetVector(enum.Enum):
 
 @enum.unique
 class CrossoverMethod(enum.Enum):
+    '''
+    Enum data type that represents the crossover method
+    '''
     bin = 'bin'
     exp = 'exp'
 
@@ -39,21 +54,50 @@ class CrossoverMethod(enum.Enum):
         return self.value
 
 
-# define mutation operation
-def mutation(x, F):
+def mutation(x:np.ndarray, F:float) -> np.ndarray:
+    '''
+    Computes the mutation operation.
+
+    Args:
+        x (np.ndarray): a set (at least three) candidate solutions
+        F (float): weight that controls the mutation operation
+
+    Returns:
+        np.ndarray: the mutated candidate solution
+    '''
     diff = np.empty(x[0].shape)
     for i in range(1, len(x), 2):
         diff += x[i] - x[i+1]
     return x[0] + F * diff
 
 
-def idx_bin(dims, cr):
+def idx_bin(dims:int, cr:float) -> list:
+    '''
+    Computes crossover based on Binomial crossover.
+
+    Args:
+        dims (int): the size of the solution vector
+        cr (float): weight that controls the crossover operation
+
+    Returns:
+        list: with the binary valued based on the binomial distribution
+    '''
     j = random.randrange(dims)
     idx = [True if random.random() < cr or i == j else False for i in range(dims)]
     return idx
 
 
-def idx_exp(dims, cr):
+def idx_exp(dims:int, cr:float) -> list:
+    '''
+    Computes crossover based on Exponential crossover.
+
+    Args:
+        dims (int): the size of the solution vector
+        cr (float): weight that controls the crossover operation
+
+    Returns:
+        list: with the binary valued based on the exponential distribution
+    '''
     idx = []
     j = random.randrange(dims)
     idx.append(j)
@@ -65,16 +109,54 @@ def idx_exp(dims, cr):
     return rv
 
 
-def crossover(mutated, target, dims, cr, cross_method):
+def crossover(mutated:np.ndarray, target:np.ndarray,
+dims:int, cr:float, cross_method:typing.Callable) -> np.ndarray:
+    '''
+    Applies the crossover operation based on the cross_method.
+
+    Args:
+        mutated (np.ndarray): mutated version of the target candidate
+        target (np.ndarray): original target candidate
+        dims (int): the size of the solution vector
+        cr (float): weight that controls the crossover operation
+        cross_method (typing.Callable): method that computes the crossover index list
+
+    Returns:
+        np.ndarray: the offstring of the target and mutated parents
+    '''
     idx = cross_method(dims, cr)
     trial = [mutated[i] if idx[i] else target[i] for i in range(dims)]
-    return trial
+    return np.asarray(trial)
 
 
-def differential_evolution(objective:typing.Callable, bounds:np.ndarray, population:np.ndarray=None, 
-variant='best/1/bin', callback:typing.Callable=None, n_iter:int=100, n_pop:int=10,
+def differential_evolution(objective:typing.Callable, bounds:np.ndarray, population:list=None, 
+variant:str='best/1/bin', callback:typing.Callable=None, n_iter:int=100, n_pop:int=10,
 F:float=0.5, cr:float=0.7, rt:int=10, n_jobs:int=-1,
-cached=False, debug=False, verbose=False, seed:int=42):
+cached:bool=False, debug:bool=False, verbose:bool=False, seed:int=42) -> tuple:
+    '''
+    Computes the differential evolution optimization algorithm.
+
+    Args:
+        objective (typing.Callable): objective function used to evaluate the candidate solutions (lower is better)
+        bounds (np.ndarray): bounds that limit the search space
+        population (list): optional list of candidate solutions (default None)
+        variant (str): string that specifies the DE variant (default best/1/bin)
+        callback (typing.Callable): callback function that is called at each epoch (deafult None)
+        n_iter (int): the number of iterations (default 100)
+        n_pop (int): the number of elements in the population (default 10)
+        F (float): weight that controls the mutation operation (default 0.5)
+        cr (float): weight that controls the crossover operation (default 0.7)
+        rt (int): number of retries when refines initial population (default 10)
+        n_jobs (int): number of concurrent jobs (default -1)
+        cached (bool): controls if the objective function is cached by joblib (default False)
+        debug (bool): controls if debug information is returned (default False)
+        verbose (bool): controls the usage of tqdm as a progress bar (default False)
+        seed (int): seed to init the random generator (default 42)
+
+    Returns:
+        tuple: the best solution
+    '''
+
     try:
         v = variant.split('/')
         tv = TargetVector[v[0]]
@@ -158,11 +240,10 @@ cached=False, debug=False, verbose=False, seed:int=42):
 
             # perform mutation
             mutated = mutation(candidates, F)
-            # check that lower and upper bounds are retained after mutation
-            #mutated = utils.check_bounds(mutated, bounds)
             # perform crossover
             trial = crossover(mutated, pop[j], len(bounds), cr, cross_method[cm])
             offspring.append(trial)
+        # check that lower and upper bounds are retained after mutation and crossover
         offspring = [utils.check_bounds(trial, bounds) for trial in offspring]
         obj_trial = joblib.Parallel(n_jobs=n_jobs, backend='loky')(joblib.delayed(objective_cache)(c) for c in offspring)
 

@@ -68,9 +68,7 @@
                     <h1 class="modulename">
 optimization    </h1>
 
-                        <div class="docstring"><p>Optimization</p>
-
-<p>A library that implements several derivation-free optimization algorithms (such as genetic optimization).
+                        <div class="docstring"><p>A library that implements several derivation-free optimization algorithms (such as genetic optimization).
 Currently, it implements 5 different algorithms:</p>
 
 <ol>
@@ -92,27 +90,25 @@ Regardless, any reported issues will be fixed as possible.</p>
                         <label class="view-source-button" for="mod-optimization-view-source"><span>View Source</span></label>
 
                         <div class="pdoc-code codehilite"><pre><span></span><span id="L-1"><a href="#L-1"><span class="linenos"> 1</span></a><span class="sd">&#39;&#39;&#39;</span>
-</span><span id="L-2"><a href="#L-2"><span class="linenos"> 2</span></a><span class="sd">Optimization</span>
-</span><span id="L-3"><a href="#L-3"><span class="linenos"> 3</span></a>
-</span><span id="L-4"><a href="#L-4"><span class="linenos"> 4</span></a><span class="sd">A library that implements several derivation-free optimization algorithms (such as genetic optimization).</span>
-</span><span id="L-5"><a href="#L-5"><span class="linenos"> 5</span></a><span class="sd">Currently, it implements 5 different algorithms:</span>
-</span><span id="L-6"><a href="#L-6"><span class="linenos"> 6</span></a><span class="sd">1. Hill climbing is a mathematical optimization technique that belongs to the family of local search. It is an iterative algorithm that starts with an arbitrary solution to a problem and then attempts to find a better solution by making an incremental change to the solution.</span>
-</span><span id="L-7"><a href="#L-7"><span class="linenos"> 7</span></a><span class="sd">2. Simulated annealing is a probabilistic technique for approximating the global optimum of a given function. Specifically, it is a metaheuristic to approximate global optimization in a large search space for an optimization problem.</span>
-</span><span id="L-8"><a href="#L-8"><span class="linenos"> 8</span></a><span class="sd">3. Genetic algorithm is a metaheuristic inspired by the process of natural selection that belongs to the larger class of evolutionary algorithms (EA). Genetic algorithms are commonly used to generate high-quality solutions to optimization and search problems by relying on biologically inspired operators such as mutation, crossover, and selection.</span>
-</span><span id="L-9"><a href="#L-9"><span class="linenos"> 9</span></a><span class="sd">4. Differential evolution is a method that optimizes a problem by iteratively trying to improve a candidate solution with regard to a given measure of quality. Such methods are commonly known as metaheuristics as they make few or no assumptions about the problem being optimized and can search very large spaces of candidate solutions.</span>
-</span><span id="L-10"><a href="#L-10"><span class="linenos">10</span></a><span class="sd">5. Particle swarm optimization is a computational method that optimizes a problem by iteratively trying to improve a candidate solution with regard to a given measure of quality. It solves a problem by having a population of candidate solutions, here dubbed particles, and moving these particles around in the search space according to simple mathematical formula over the particle&#39;s position and velocity. Each particle&#39;s movement is influenced by its local best-known position but is also guided toward the best-known positions in the search space, which are updated as better positions are found by other particles.</span>
-</span><span id="L-11"><a href="#L-11"><span class="linenos">11</span></a>
-</span><span id="L-12"><a href="#L-12"><span class="linenos">12</span></a><span class="sd">All the algorithms take advantage of the [joblib](https://joblib.readthedocs.io/en/latest/) library to speed up the objective function and cache the results.</span>
-</span><span id="L-13"><a href="#L-13"><span class="linenos">13</span></a><span class="sd">The code was optimized to a certain degree but was made for teaching purposes.</span>
-</span><span id="L-14"><a href="#L-14"><span class="linenos">14</span></a><span class="sd">Please consider other libraries if you are looking for a stable implementation, such as [pymoo](https://pymoo.org/).</span>
-</span><span id="L-15"><a href="#L-15"><span class="linenos">15</span></a><span class="sd">Regardless, any reported issues will be fixed as possible.</span>
-</span><span id="L-16"><a href="#L-16"><span class="linenos">16</span></a><span class="sd">&#39;&#39;&#39;</span>
-</span><span id="L-17"><a href="#L-17"><span class="linenos">17</span></a><span class="kn">import</span> <span class="nn">optimization.de</span>
-</span><span id="L-18"><a href="#L-18"><span class="linenos">18</span></a><span class="kn">import</span> <span class="nn">optimization.ga</span>
-</span><span id="L-19"><a href="#L-19"><span class="linenos">19</span></a><span class="kn">import</span> <span class="nn">optimization.hc</span>
-</span><span id="L-20"><a href="#L-20"><span class="linenos">20</span></a><span class="kn">import</span> <span class="nn">optimization.pso</span>
-</span><span id="L-21"><a href="#L-21"><span class="linenos">21</span></a><span class="kn">import</span> <span class="nn">optimization.sa</span>
-</span><span id="L-22"><a href="#L-22"><span class="linenos">22</span></a><span class="kn">import</span> <span class="nn">optimization.utils</span>
+</span><span id="L-2"><a href="#L-2"><span class="linenos"> 2</span></a><span class="sd">A library that implements several derivation-free optimization algorithms (such as genetic optimization).</span>
+</span><span id="L-3"><a href="#L-3"><span class="linenos"> 3</span></a><span class="sd">Currently, it implements 5 different algorithms:</span>
+</span><span id="L-4"><a href="#L-4"><span class="linenos"> 4</span></a><span class="sd">1. Hill climbing is a mathematical optimization technique that belongs to the family of local search. It is an iterative algorithm that starts with an arbitrary solution to a problem and then attempts to find a better solution by making an incremental change to the solution.</span>
+</span><span id="L-5"><a href="#L-5"><span class="linenos"> 5</span></a><span class="sd">2. Simulated annealing is a probabilistic technique for approximating the global optimum of a given function. Specifically, it is a metaheuristic to approximate global optimization in a large search space for an optimization problem.</span>
+</span><span id="L-6"><a href="#L-6"><span class="linenos"> 6</span></a><span class="sd">3. Genetic algorithm is a metaheuristic inspired by the process of natural selection that belongs to the larger class of evolutionary algorithms (EA). Genetic algorithms are commonly used to generate high-quality solutions to optimization and search problems by relying on biologically inspired operators such as mutation, crossover, and selection.</span>
+</span><span id="L-7"><a href="#L-7"><span class="linenos"> 7</span></a><span class="sd">4. Differential evolution is a method that optimizes a problem by iteratively trying to improve a candidate solution with regard to a given measure of quality. Such methods are commonly known as metaheuristics as they make few or no assumptions about the problem being optimized and can search very large spaces of candidate solutions.</span>
+</span><span id="L-8"><a href="#L-8"><span class="linenos"> 8</span></a><span class="sd">5. Particle swarm optimization is a computational method that optimizes a problem by iteratively trying to improve a candidate solution with regard to a given measure of quality. It solves a problem by having a population of candidate solutions, here dubbed particles, and moving these particles around in the search space according to simple mathematical formula over the particle&#39;s position and velocity. Each particle&#39;s movement is influenced by its local best-known position but is also guided toward the best-known positions in the search space, which are updated as better positions are found by other particles.</span>
+</span><span id="L-9"><a href="#L-9"><span class="linenos"> 9</span></a>
+</span><span id="L-10"><a href="#L-10"><span class="linenos">10</span></a><span class="sd">All the algorithms take advantage of the [joblib](https://joblib.readthedocs.io/en/latest/) library to speed up the objective function and cache the results.</span>
+</span><span id="L-11"><a href="#L-11"><span class="linenos">11</span></a><span class="sd">The code was optimized to a certain degree but was made for teaching purposes.</span>
+</span><span id="L-12"><a href="#L-12"><span class="linenos">12</span></a><span class="sd">Please consider other libraries if you are looking for a stable implementation, such as [pymoo](https://pymoo.org/).</span>
+</span><span id="L-13"><a href="#L-13"><span class="linenos">13</span></a><span class="sd">Regardless, any reported issues will be fixed as possible.</span>
+</span><span id="L-14"><a href="#L-14"><span class="linenos">14</span></a><span class="sd">&#39;&#39;&#39;</span>
+</span><span id="L-15"><a href="#L-15"><span class="linenos">15</span></a><span class="kn">import</span> <span class="nn">optimization.de</span>
+</span><span id="L-16"><a href="#L-16"><span class="linenos">16</span></a><span class="kn">import</span> <span class="nn">optimization.ga</span>
+</span><span id="L-17"><a href="#L-17"><span class="linenos">17</span></a><span class="kn">import</span> <span class="nn">optimization.hc</span>
+</span><span id="L-18"><a href="#L-18"><span class="linenos">18</span></a><span class="kn">import</span> <span class="nn">optimization.pso</span>
+</span><span id="L-19"><a href="#L-19"><span class="linenos">19</span></a><span class="kn">import</span> <span class="nn">optimization.sa</span>
+</span><span id="L-20"><a href="#L-20"><span class="linenos">20</span></a><span class="kn">import</span> <span class="nn">optimization.utils</span>
 </span></pre></div>
 
 
