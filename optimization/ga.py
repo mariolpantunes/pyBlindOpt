@@ -7,36 +7,16 @@ __status__ = 'Development'
 
 
 import math
+import tqdm
 import typing
 import joblib
 import logging
 import tempfile
 import numpy as np
-
-
-from tqdm import tqdm
-
-
 import optimization.utils as utils
 
 
 logger = logging.getLogger(__name__)
-
-
-def get_random_solution(bounds:np.ndarray) -> np.ndarray:
-    """
-    Generates a random solutions that is within the bounds.
-
-    Args:
-        bounds (np.ndarray): the bounds of valid solutions
-
-    Returns:
-        np.ndarray: a random solutions that is within the bounds
-    """
-    solution = bounds[:, 0] + np.random.rand(len(bounds)) * (bounds[:, 1] - bounds[:, 0])
-    solution = np.minimum(solution, bounds.max(axis = 1))
-    solution = np.maximum(solution, bounds.min(axis = 1))
-    return solution
 
 
 # tournament selection
@@ -50,12 +30,40 @@ def selection(pop, scores, k=3):
 	return pop[selection_ix]
 
 
-# genetic algorithm
+# random mutation operator
+def random_mutation(candidate, r_mut, bounds):
+    if np.random.rand() < r_mut:
+        solution = utils.get_random_solution(bounds)
+        for i in range(len(candidate)):
+            candidate[i] = solution[i]
+
+
+# linear crossover operator: two parents to create three children
+def linear_crossover(p1, p2, r_cross):
+    if np.random.rand() < r_cross:
+        c1 = 0.5*p1 + 0.5*p2
+        c2 = 1.5*p1 - 0.5*p2
+        c3 = -0.5*p1 + 1.5*p2
+        return [c1, c2, c3]
+    else:
+        return [p1, p2]
+
+
+# blend crossover operator: two parents to create two children
+def blend_crossover(p1, p2, r_cross, alpha=.5):
+    if np.random.rand() < r_cross:
+        c1 = p1 + alpha*(p2-p1)
+        c2 = p2 - alpha*(p2-p1)
+        return [c1, c2]
+    else:
+        return [p1, p2]
+
+
 def genetic_algorithm(objective:typing.Callable, bounds:np.ndarray,
-crossover:typing.Callable, mutation:typing.Callable, population:np.ndarray=None,
-selection:typing.Callable=selection, callback:typing.Callable=None,
-n_iter:int=200, n_pop:int=20, r_cross:float=0.9, r_mut:float=0.3,
-cached=False, debug=False, verbose=False) -> list:
+crossover:typing.Callable=blend_crossover, mutation:typing.Callable=random_mutation, 
+population:np.ndarray=None, selection:typing.Callable=selection, 
+callback:typing.Callable=None, n_iter:int=200, n_pop:int=20, r_cross:float=0.9, 
+r_mut:float=0.3, n_jobs:int=-1, cached=False, debug=False, verbose=False, seed:int=42) -> tuple:
     """
     Genetic optimization algorithm.
 
@@ -73,6 +81,8 @@ cached=False, debug=False, verbose=False) -> list:
     Returns:
         list: [solution, solution_cost]
     """
+    # define the seed of the random generation
+    np.random.seed(seed)
     # cache the initial objective function
     if cached:
         # Cache from joblib
@@ -85,7 +95,7 @@ cached=False, debug=False, verbose=False) -> list:
     # check if the initial population is given
     if population is None:
         # initial population of random bitstring
-        pop = [get_random_solution(bounds) for _ in range(n_pop)]
+        pop = [utils.get_random_solution(bounds) for _ in range(n_pop)]
     else:
         # initialise population of candidate and validate the bounds
         pop = [utils.check_bounds(p, bounds) for p in population]
@@ -100,9 +110,13 @@ cached=False, debug=False, verbose=False) -> list:
         obj_worst_iter = []
     
     # enumerate generations
-    for epoch in tqdm(range(n_iter), disable=not verbose):
+    for epoch in tqdm.tqdm(range(n_iter), disable=not verbose):
         # evaluate all candidates in the population
-        scores = joblib.Parallel(n_jobs=-1)(joblib.delayed(objective_cache)(c) for c in pop)
+        scores = joblib.Parallel(n_jobs=n_jobs)(joblib.delayed(objective_cache)(c) for c in pop)
+
+        ## Optional execute the callback code
+        if callback is not None:
+            callback(epoch, scores)
 
         # check for new best solution
         for i in range(n_pop):
@@ -126,10 +140,6 @@ cached=False, debug=False, verbose=False) -> list:
         
         # replace population
         pop = [utils.check_bounds(c, bounds) for c in children]
-    
-        ## Optional execute the callback code
-        if callback is not None:
-            callback(epoch, obj_all)
 
         ## Optional store the debug information
         if debug:

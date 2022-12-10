@@ -7,14 +7,13 @@ __status__ = 'Development'
 
 
 import math
+import tqdm
 import typing
 import joblib
 import logging
 import tempfile
 import numpy as np
-
-
-from tqdm import tqdm
+import optimization.utils as utils
 
 
 logger = logging.getLogger(__name__)
@@ -25,7 +24,9 @@ location = tempfile.gettempdir()
 memory = joblib.Memory(location, verbose=0)
 
 
-def hillclimbing(objective:typing.Callable, bounds:np.ndarray, n_iter:int=200, step_size:float=.01, cached=False, debug=False) -> tuple:
+def hillclimbing(objective:typing.Callable, bounds:np.ndarray,
+callback:typing.Callable=None, n_iter:int=200, step_size:float=.01,
+cached=False, debug=False, verbose=False) -> tuple:
     """
     Hill climbing local search algorithm.
 
@@ -47,33 +48,28 @@ def hillclimbing(objective:typing.Callable, bounds:np.ndarray, n_iter:int=200, s
     else:
         objective_cache = objective
 
-    # min and max for each bound
-    bounds_max = bounds.max(axis = 1)
-    bounds_min = bounds.min(axis = 1)
-    
     # generate an initial point
-    solution = bounds[:, 0] + np.random.rand(len(bounds)) * (bounds[:, 1] - bounds[:, 0])
+    solution = utils.get_random_solution(bounds)
     # evaluate the initial point
     solution_cost = objective_cache(solution)
     # run the hill climb
     
-    for _ in tqdm(range(n_iter), disable=not debug):
+    for epoch in tqdm.tqdm(range(n_iter), disable=not verbose):
 		# take a step
         candidate = solution + np.random.randn(len(bounds)) * step_size
-        
         # Fix out of bounds value
-        candidate = np.minimum(candidate, bounds_max)
-        candidate = np.maximum(candidate, bounds_min)
-        
+        candidate = utils.check_bounds(candidate, bounds)
         # evaluate candidate point
-        candidte_cost = objective_cache(candidate)
+        candidate_cost = objective_cache(candidate)
 		# check if we should keep the new point
         
-        if candidte_cost < solution_cost:
+        if candidate_cost < solution_cost:
 			# store the new point
-            solution, solution_cost = candidate, candidte_cost
-			# report progress
-            #logger.info('>%d f(%s) = %.5f', i, solution, solution_cost)
+            solution, solution_cost = candidate, candidate_cost
+        
+        ## Optional execute the callback code
+        if callback is not None:
+            callback(epoch, solution_cost, candidate_cost)
     
     if cached:
         memory.clear(warn=False)

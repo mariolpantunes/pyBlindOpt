@@ -1,17 +1,19 @@
+# coding: utf-8
+
+__author__ = 'Mário Antunes'
 __version__ = '0.1'
 __email__ = 'mariolpantunes@gmail.com'
 __status__ = 'Development'
 
 
 import math
+import tqdm
 import typing
 import joblib
 import logging
 import tempfile
 import numpy as np
-
-
-from tqdm import tqdm
+import optimization.utils as utils
 
 
 logger = logging.getLogger(__name__)
@@ -22,7 +24,9 @@ location = tempfile.gettempdir()
 memory = joblib.Memory(location, verbose=0)
 
 
-def simulated_annealing(objective:typing.Callable, bounds:np.ndarray, n_iter:int=200, step_size:float=0.01, temp:float=20.0, cached=False, debug=False) -> list:
+def simulated_annealing(objective:typing.Callable, bounds:np.ndarray,
+callback:typing.Callable=None, n_iter:int=100, step_size:float=0.01, 
+temp:float=20.0, cached=False, debug=False, verbose=False, seed:int=42) -> list:
     """
     Simulated annealing algorithm.
 
@@ -37,6 +41,9 @@ def simulated_annealing(objective:typing.Callable, bounds:np.ndarray, n_iter:int
         list: [solution, solution_cost]
     """
 
+    # define the seed of the random generation
+    np.random.seed(seed)
+
     # cache the initial objective function
     if cached:
         # Cache from joblib
@@ -47,22 +54,24 @@ def simulated_annealing(objective:typing.Callable, bounds:np.ndarray, n_iter:int
         objective_cache = objective
 
 	# min and max for each bound
-    bounds_max = bounds.max(axis = 1)
-    bounds_min = bounds.min(axis = 1)
+    #bounds_max = bounds.max(axis = 1)
+    #bounds_min = bounds.min(axis = 1)
     # generate an initial point
-    best = bounds[:, 0] + np.random.rand(len(bounds)) * (bounds[:, 1] - bounds[:, 0])
-	# evaluate the initial point
+    #best = bounds[:, 0] + np.random.rand(len(bounds)) * (bounds[:, 1] - bounds[:, 0])
+    best = utils.get_random_solution(bounds)
+    
+    # evaluate the initial point
     best_cost = objective_cache(best)
 	# current working solution
     curr, curr_cost = best, best_cost
     cost_iter = []
 	# run the algorithm
-    for i in tqdm(range(n_iter), disable=not debug):
+    for i in tqdm.tqdm(range(n_iter), disable=not verbose):
 		# take a step
         candidate = curr + np.random.randn(len(bounds)) * step_size
         # Fix out of bounds value
-        candidate = np.minimum(candidate, bounds_max)
-        candidate = np.maximum(candidate, bounds_min)
+        candidate = utils.check_bounds(candidate, bounds)
+        #candidate = np.maximum(candidate, bounds_min)
 		# evaluate candidate point
         candidate_cost = objective_cache(candidate)
 		# check for new best solution
@@ -83,11 +92,15 @@ def simulated_annealing(objective:typing.Callable, bounds:np.ndarray, n_iter:int
         if diff < 0 or np.random.rand() < metropolis:
             # store the new current point
             curr, curr_cost = candidate, candidate_cost
-    
+        
+        ## Optional execute the callback code
+        if callback is not None:
+            callback(i, best_cost, candidate_cost)
+
     if cached:
         memory.clear(warn=False)
 
     if debug:
-        return (best, best_eval, np.array(cost_iter))
+        return (best, best_cost, np.array(cost_iter))
     else:
-        return (best, best_eval)
+        return (best, best_cost)

@@ -8,6 +8,7 @@ __status__ = 'Development'
 
 import enum
 import math
+import tqdm
 import random
 import typing
 import joblib
@@ -15,10 +16,6 @@ import logging
 import tempfile
 import statistics
 import numpy as np
-
-from tqdm import tqdm
-
-
 import optimization.utils as utils
 
 
@@ -75,8 +72,9 @@ def crossover(mutated, target, dims, cr, cross_method):
 
 
 def differential_evolution(objective:typing.Callable, bounds:np.ndarray, population:np.ndarray=None, 
-callback:typing.Callable=None, variant='best/1/bin', n_iter:int=200, n_pop:int=20,
-F=0.5, cr=0.7, rt=10, n_jobs=-1, cached=False, debug=False, verbose=False):
+variant='best/1/bin', callback:typing.Callable=None, n_iter:int=100, n_pop:int=10,
+F:float=0.5, cr:float=0.7, rt:int=10, n_jobs:int=-1,
+cached=False, debug=False, verbose=False, seed:int=42):
     try:
         v = variant.split('/')
         tv = TargetVector[v[0]]
@@ -88,6 +86,9 @@ F=0.5, cr=0.7, rt=10, n_jobs=-1, cached=False, debug=False, verbose=False):
         raise ValueError('variant must be = [rand|best]/n/[bin|exp]')
 
     cross_method = {CrossoverMethod.bin: idx_bin, CrossoverMethod.exp: idx_exp}
+
+    # define the seed of the random generation
+    np.random.seed(seed)
 
     # cache the initial objective function
     if cached:
@@ -138,10 +139,10 @@ F=0.5, cr=0.7, rt=10, n_jobs=-1, cached=False, debug=False, verbose=False):
         obj_worst_iter = []
     
     # run iterations of the algorithm
-    for epoch in tqdm(range(n_iter), disable=not verbose):
+    for epoch in tqdm.tqdm(range(n_iter), disable=not verbose):
         # generate offspring
         offspring = []
-        for j in tqdm(range(n_pop), leave=False, disable=not verbose):
+        for j in tqdm.tqdm(range(n_pop), leave=False, disable=not verbose):
             # choose three candidates, a, b and c, that are not the current one
             candidates_idx = random.choices([candidate for candidate in range(n_pop) if candidate != j], k = nc)
             diff_candidates = [pop[i] for i in candidates_idx]
