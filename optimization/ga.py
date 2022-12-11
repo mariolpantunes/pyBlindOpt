@@ -166,10 +166,6 @@ debug:bool=False, verbose:bool=False, seed:int=42) -> tuple:
         n_pop = len(population)
 
     # keep track of best solution
-    best, best_eval = 0, objective_cache(pop[0])
-
-
-    
     scores = joblib.Parallel(n_jobs=n_jobs)(joblib.delayed(objective_cache)(c) for c in pop)
     best_eval = min(scores)
     best = pop[scores.index(best_eval)]
