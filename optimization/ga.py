@@ -167,6 +167,12 @@ debug:bool=False, verbose:bool=False, seed:int=42) -> tuple:
 
     # keep track of best solution
     best, best_eval = 0, objective_cache(pop[0])
+
+
+    
+    scores = joblib.Parallel(n_jobs=n_jobs)(joblib.delayed(objective_cache)(c) for c in pop)
+    best_eval = min(scores)
+    best = pop[scores.index(best_eval)]
     
     # arrays to store the debug information
     if debug:
@@ -186,12 +192,9 @@ debug:bool=False, verbose:bool=False, seed:int=42) -> tuple:
         if callback is not None:
             callback(epoch, scores)
 
-        # TODO: optimize this code
         # check for new best solution
-        for i in range(n_pop):
-            if scores[i] < best_eval:
-                best, best_eval = pop[i], scores[i]
-                #logger.info('>%d, new best f(%s) = %.3f' % (gen,  pop[i], scores[i]))
+        best_eval = min(scores)
+        best = pop[scores.index(best_eval)]
         
         # select parents
         selected = [selection(pop, scores) for _ in range(n_pop)]
