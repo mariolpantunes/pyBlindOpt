@@ -47,3 +47,16 @@ class TestSA(unittest.TestCase):
         sa.simulated_annealing(f2, bounds, n_iter=10, callback=callback, verbose=False)
         desired = 10
         self.assertEqual(total, desired)
+    
+    def test_sa_03(self):
+        bounds = np.asarray([(-5.0, 5.0), (-5.0, 5.0)])
+        result, _ = sa.simulated_annealing(f2, bounds, n_iter=100, verbose=False)
+        self.assertTrue(isinstance(result,np.ndarray))
+    
+    def test_sa_04(self):
+        n_iter = 100
+        bounds = np.asarray([(-5.0, 5.0), (-5.0, 5.0)])
+        _, _, debug = sa.simulated_annealing(f2, bounds, n_iter=n_iter, verbose=False, debug=True)
+        
+        self.assertTrue(isinstance(debug, list))
+        self.assertEqual(len(debug), n_iter)

@@ -65,10 +65,15 @@ temp:float=20.0, cached:bool=False, debug:bool=False, verbose:bool=False, seed:i
     
     # evaluate the initial point
     best_cost = objective_cache(best)
-	# current working solution
+	
+    # current working solution
     curr, curr_cost = best, best_cost
-    cost_iter = []
-	# run the algorithm
+    
+     # arrays to store the debug information
+    if debug:
+        cost_iter = []
+	
+    # run the algorithm
     for i in tqdm.tqdm(range(n_iter), disable=not verbose):
 		# take a step
         candidate = curr + np.random.randn(len(bounds)) * step_size
@@ -79,8 +84,8 @@ temp:float=20.0, cached:bool=False, debug:bool=False, verbose:bool=False, seed:i
 		# check for new best solution
         if candidate_cost < best_cost:
 			# store new best point
-            best, best_eval = candidate, candidate_cost
-            cost_iter.append(best_eval)
+            best, best_cost = candidate, candidate_cost
+            
 		# difference between candidate and current point evaluation
         diff = candidate_cost - curr_cost
         # calculate temperature for current epoch
@@ -95,11 +100,16 @@ temp:float=20.0, cached:bool=False, debug:bool=False, verbose:bool=False, seed:i
         ## Optional execute the callback code
         if callback is not None:
             callback(i, best_cost, candidate_cost)
+        
+         ## Optional store the debug information
+        if debug:
+            # store the best cost
+            cost_iter.append(best_cost)
 
     if cached:
         memory.clear(warn=False)
 
     if debug:
-        return (best, best_cost, np.array(cost_iter))
+        return (best, best_cost, cost_iter)
     else:
         return (best, best_cost)
