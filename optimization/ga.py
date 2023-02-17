@@ -20,6 +20,7 @@ import tqdm
 import joblib
 import logging
 import tempfile
+import statistics
 import numpy as np
 import optimization.utils as utils
 
@@ -213,9 +214,9 @@ debug:bool=False, verbose:bool=False, seed:int=42) -> tuple:
         ## Optional store the debug information
         if debug:
             # store best, wort and average cost for all candidates
-            obj_avg_iter.append(statistics.mean(obj_all))
-            obj_best_iter.append(best_obj)
-            obj_worst_iter.append(max(obj_all))
+            obj_avg_iter.append(statistics.mean(scores))
+            obj_best_iter.append(best_eval)
+            obj_worst_iter.append(max(scores))
     # clean the cache
     if cached:
         memory.clear(warn=False)

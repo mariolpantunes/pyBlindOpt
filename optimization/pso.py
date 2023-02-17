@@ -24,6 +24,7 @@ import tqdm
 import joblib
 import logging
 import tempfile
+import statistics
 import numpy as np
 import optimization.utils as utils
 
@@ -89,6 +90,12 @@ n_jobs:int=-1, cached=False, debug=False, verbose=False, seed:int=42) -> tuple:
     #print(f'gbest_obj: {gbest_obj}')
     gbest = pbest[pbest_obj.index(gbest_obj)]
     #print(f'gbest: {gbest}')
+
+    # arrays to store the debug information
+    if debug:
+        obj_avg_iter = []
+        obj_best_iter = []
+        obj_worst_iter = []
     
     for epoch in tqdm.tqdm(range(n_iter), disable=not verbose):
         # Update params
@@ -115,6 +122,13 @@ n_jobs:int=-1, cached=False, debug=False, verbose=False, seed:int=42) -> tuple:
         ## Optional execute the callback code
         if callback is not None:
             callback(epoch, pbest_obj)
+        
+        ## Optional store the debug information
+        if debug:
+            # store best, wort and average cost for all candidates
+            obj_avg_iter.append(statistics.mean(obj))
+            obj_best_iter.append(gbest_obj)
+            obj_worst_iter.append(max(obj))
 
     # clean the cache
     if cached:
