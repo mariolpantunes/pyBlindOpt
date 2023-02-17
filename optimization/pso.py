@@ -21,7 +21,6 @@ __status__ = 'Development'
 
 
 import tqdm
-import typing
 import joblib
 import logging
 import tempfile
@@ -32,18 +31,18 @@ import optimization.utils as utils
 logger = logging.getLogger(__name__)
 
 
-def particle_swarm_optimization(objective:typing.Callable, bounds:np.ndarray,
-population:np.ndarray=None, callback:typing.Callable=None,
+def particle_swarm_optimization(objective:callable, bounds:np.ndarray,
+population:np.ndarray=None, callback:callable=None,
 n_iter:int=100, n_pop:int=10, c1:float=0.1, c2:float=0.1, w:float=0.8,
 n_jobs:int=-1, cached=False, debug=False, verbose=False, seed:int=42) -> tuple:
     '''
     Computes the particle_swarm_optimization.
 
     Args:
-        objective (typing.Callable): objective function used to evaluate the candidate solutions (lower is better)
+        objective (callable): objective function used to evaluate the candidate solutions (lower is better)
         bounds (list): bounds that limit the search space
         population (list): optional list of candidate solutions (default None)
-        callback (typing.Callable): callback function that is called at each epoch (deafult None)
+        callback (callable): callback function that is called at each epoch (deafult None)
         n_iter (int): the number of iterations (default 100)
         n_pop (int): the number of elements in the population (default 10)
         c1 (float): weight of personal best (default 0.1)

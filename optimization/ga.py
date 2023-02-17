@@ -8,6 +8,7 @@ optimization and search problems by relying on biologically inspired operators
 such as mutation, crossover, and selection.
 '''
 
+
 __author__ = 'Mário Antunes'
 __version__ = '0.1'
 __email__ = 'mariolpantunes@gmail.com'
@@ -16,7 +17,6 @@ __status__ = 'Development'
 
 import math
 import tqdm
-import typing
 import joblib
 import logging
 import tempfile
@@ -114,23 +114,23 @@ def blend_crossover(p1, p2, r_cross, alpha=.5):
         return [p1, p2]
 
 
-def genetic_algorithm(objective:typing.Callable, bounds:np.ndarray,
-population:np.ndarray=None, selection:typing.Callable=tournament_selection,
-crossover:typing.Callable=blend_crossover, mutation:typing.Callable=random_mutation,  
-callback:typing.Callable=None, n_iter:int=200, n_pop:int=20, r_cross:float=0.9, 
+def genetic_algorithm(objective:callable, bounds:np.ndarray,
+population:np.ndarray=None, selection:callable=tournament_selection,
+crossover:callable=blend_crossover, mutation:callable=random_mutation,  
+callback:callable=None, n_iter:int=200, n_pop:int=20, r_cross:float=0.9, 
 r_mut:float=0.3, n_jobs:int=-1, cached:bool=False, 
 debug:bool=False, verbose:bool=False, seed:int=42) -> tuple:
     '''
     Computes the genetic algorithm optimization.
 
     Args:
-        objective (typing.Callable): objective function used to evaluate the candidate solutions (lower is better)
+        objective (callable): objective function used to evaluate the candidate solutions (lower is better)
         bounds (list): bounds that limit the search space
         population (list): optional list of candidate solutions (default None)
-        selection (typing.Callable): selection operator (default tournament_selection)
-        crossover (typing.Callable): crossover operator (default blend_crossover)
-        mutation (typing.Callable): mutation operator (default random_mutation)
-        callback (typing.Callable): callback function that is called at each epoch (deafult None)
+        selection (callable): selection operator (default tournament_selection)
+        crossover (callable): crossover operator (default blend_crossover)
+        mutation (callable): mutation operator (default random_mutation)
+        callback (callable): callback function that is called at each epoch (deafult None)
         n_iter (int): the number of iterations (default 100)
         n_pop (int): the number of elements in the population (default 10)
         r_cross (float): ratio of crossover (default 0.9)

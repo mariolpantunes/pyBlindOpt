@@ -1,5 +1,6 @@
 # coding: utf-8
 
+
 '''
 Differential evolution is a method that optimizes a problem by iteratively trying to 
 improve a candidate solution with regard to a given measure of quality.
@@ -18,7 +19,6 @@ import enum
 import math
 import tqdm
 import random
-import typing
 import joblib
 import logging
 import tempfile
@@ -110,7 +110,7 @@ def idx_exp(dims:int, cr:float) -> list:
 
 
 def crossover(mutated:np.ndarray, target:np.ndarray,
-dims:int, cr:float, cross_method:typing.Callable) -> np.ndarray:
+dims:int, cr:float, cross_method:callable) -> np.ndarray:
     '''
     Applies the crossover operation based on the cross_method.
 
@@ -119,7 +119,7 @@ dims:int, cr:float, cross_method:typing.Callable) -> np.ndarray:
         target (np.ndarray): original target candidate
         dims (int): the size of the solution vector
         cr (float): weight that controls the crossover operation
-        cross_method (typing.Callable): method that computes the crossover index list
+        cross_method (callable): method that computes the crossover index list
 
     Returns:
         np.ndarray: the offstring of the target and mutated parents
@@ -129,19 +129,19 @@ dims:int, cr:float, cross_method:typing.Callable) -> np.ndarray:
     return np.asarray(trial)
 
 
-def differential_evolution(objective:typing.Callable, bounds:np.ndarray, population:list=None, 
-variant:str='best/1/bin', callback:typing.Callable=None, n_iter:int=100, n_pop:int=10,
+def differential_evolution(objective:callable, bounds:np.ndarray, population:list=None, 
+variant:str='best/1/bin', callback:callable=None, n_iter:int=100, n_pop:int=10,
 F:float=0.5, cr:float=0.7, rt:int=10, n_jobs:int=-1,
 cached:bool=False, debug:bool=False, verbose:bool=False, seed:int=42) -> tuple:
     '''
     Computes the differential evolution optimization algorithm.
 
     Args:
-        objective (typing.Callable): objective function used to evaluate the candidate solutions (lower is better)
+        objective (callable): objective function used to evaluate the candidate solutions (lower is better)
         bounds (list): bounds that limit the search space
         population (list): optional list of candidate solutions (default None)
         variant (str): string that specifies the DE variant (default best/1/bin)
-        callback (typing.Callable): callback function that is called at each epoch (deafult None)
+        callback (callable): callback function that is called at each epoch (deafult None)
         n_iter (int): the number of iterations (default 100)
         n_pop (int): the number of elements in the population (default 10)
         F (float): weight that controls the mutation operation (default 0.5)

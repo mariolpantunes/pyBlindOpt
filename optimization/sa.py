@@ -16,7 +16,6 @@ __status__ = 'Development'
 
 import math
 import tqdm
-import typing
 import joblib
 import logging
 import tempfile
@@ -27,16 +26,16 @@ import optimization.utils as utils
 logger = logging.getLogger(__name__)
 
 
-def simulated_annealing(objective:typing.Callable, bounds:list,
-callback:typing.Callable=None, n_iter:int=200, step_size:float=0.01, 
+def simulated_annealing(objective:callable, bounds:list,
+callback:callable=None, n_iter:int=200, step_size:float=0.01, 
 temp:float=20.0, cached:bool=False, debug:bool=False, verbose:bool=False, seed:int=42) -> tuple:
     '''
     Simulated annealing algorithm.
 
     Args:
-        objective (typing.Callable): objective function used to evaluate the candidate solutions (lower is better)
+        objective (callable): objective function used to evaluate the candidate solutions (lower is better)
         bounds (list): bounds that limit the search space
-        callback (typing.Callable): callback function that is called at each epoch (deafult None)
+        callback (callable): callback function that is called at each epoch (deafult None)
         n_iter (int): the number of iterations (default 200)
         step_size (float): the step size (default 0.01)
         temp (float): initial temperature (default 20.0)
