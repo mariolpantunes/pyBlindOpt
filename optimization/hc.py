@@ -86,7 +86,7 @@ cached:bool=False, debug:bool=False, verbose:bool=False, seed:int=42) -> tuple:
         
         ## Optional execute the callback code
         if callback is not None:
-            callback(epoch, solution_cost, candidate_cost)
+            callback(epoch, solution_cost, candidate_cost, candidate)
         
         ## Optional store the debug information
         if debug:

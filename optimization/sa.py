@@ -98,7 +98,7 @@ temp:float=20.0, cached:bool=False, debug:bool=False, verbose:bool=False, seed:i
         
         ## Optional execute the callback code
         if callback is not None:
-            callback(i, best_cost, candidate_cost)
+            callback(i, best_cost, candidate_cost, candidate)
         
          ## Optional store the debug information
         if debug:

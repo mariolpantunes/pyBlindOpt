@@ -264,7 +264,7 @@ cached:bool=False, debug:bool=False, verbose:bool=False, seed:int=42) -> tuple:
         
         ## Optional execute the callback code
         if callback is not None:
-            callback(epoch, obj_all)
+            callback(epoch, obj_all, pop)
 
         ## Optional store the debug information
         if debug:

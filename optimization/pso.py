@@ -121,7 +121,7 @@ n_jobs:int=-1, cached=False, debug=False, verbose=False, seed:int=42) -> tuple:
 
         ## Optional execute the callback code
         if callback is not None:
-            callback(epoch, pbest_obj)
+            callback(epoch, pbest_obj, pbest)
         
         ## Optional store the debug information
         if debug:

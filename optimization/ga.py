@@ -187,7 +187,7 @@ debug:bool=False, verbose:bool=False, seed:int=42) -> tuple:
 
         ## Optional execute the callback code
         if callback is not None:
-            callback(epoch, scores)
+            callback(epoch, scores, pop)
 
         # check for new best solution
         best_eval = min(scores)
