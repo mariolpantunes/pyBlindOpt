@@ -20,7 +20,7 @@ import joblib
 import logging
 import tempfile
 import numpy as np
-import optimization.utils as utils
+import pyBlindOpt.utils as utils
 
 
 logger = logging.getLogger(__name__)

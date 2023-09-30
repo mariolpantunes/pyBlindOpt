@@ -8,7 +8,7 @@ __status__ = 'Development'
 
 import unittest
 import numpy as np
-import optimization.utils as utils
+import pyBlindOpt.utils as utils
 
 
 class TestUtils(unittest.TestCase):

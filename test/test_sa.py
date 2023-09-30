@@ -7,7 +7,7 @@ __status__ = 'Development'
 
 import unittest
 import numpy as np
-import optimization.sa as sa
+import pyBlindOpt.sa as sa
 
 
 # define objective function
@@ -22,7 +22,7 @@ def f2(x):
 
 # define global variable and callback
 total = 0
-def callback(epoch, best, current):
+def callback(epoch, best, current, candidate):
     global total
     total += 1
 

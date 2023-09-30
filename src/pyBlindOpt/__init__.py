@@ -12,9 +12,10 @@ The code was optimized to a certain degree but was made for teaching purposes.
 Please consider other libraries if you are looking for a stable implementation, such as [pymoo](https://pymoo.org/).
 Regardless, any reported issues will be fixed as possible.
 '''
-import optimization.de
-import optimization.ga
-import optimization.hc
-import optimization.pso
-import optimization.sa
-import optimization.utils
+import pyBlindOpt.de
+import pyBlindOpt.ga
+import pyBlindOpt.hc
+import pyBlindOpt.init
+import pyBlindOpt.pso
+import pyBlindOpt.sa
+import pyBlindOpt.utils

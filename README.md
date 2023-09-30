@@ -1,4 +1,4 @@
-# Optimization
+# pyBlindOpt
 
 A library that implements several derivation-free optimization algorithms (such as genetic optimization).
 Currently, it implements 5 different algorithms:
@@ -17,11 +17,17 @@ Regardless, any reported issues will be fixed as possible.
 The library can be used by adding this line to the requirement.txt file:
 
 ```bash
-git+https://github.com/mariolpantunes/optimization@main#egg=optimization
+git+https://github.com/mariolpantunes/pyBlindOpt@main#egg=pyBlindOpt
+```
+
+Or add the following line to the requirements.txt file:
+
+```bash
+pyBlindOpt>=0.1.1 
 ```
 
 ## Documentation
-This library was documented using the google style docstring, it can be accessed [here](https://mariolpantunes.github.io/optimization/). Run the following commands to produce the documentation for this library.
+This library was documented using the google style docstring, it can be accessed [here](https://mariolpantunes.github.io/pyBlindOpt/). Run the following commands to produce the documentation for this library.
 
 ```bash
 pdoc --math -d google -o docs optimization

@@ -8,7 +8,7 @@ __status__ = 'Development'
 
 import unittest
 import numpy as np
-import optimization.init as init
+import pyBlindOpt.init as init
 
 
 # define objective function

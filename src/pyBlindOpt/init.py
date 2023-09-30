@@ -14,7 +14,7 @@ __status__ = 'Development'
 
 import joblib
 import numpy as np
-import optimization.utils as utils
+import pyBlindOpt.utils as utils
 
 
 def opposition_based(objective:callable, bounds:np.ndarray,
