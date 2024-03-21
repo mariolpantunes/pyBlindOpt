@@ -101,6 +101,9 @@ cached=False, debug=False, verbose=False, seed:int=42) -> tuple:
             Xnew = np.mean([X1, X2, X3], axis=0)
             offspring.append(Xnew)
         
+        # check that lower and upper bounds are retained
+        offspring = [utils.check_bounds(trial, bounds) for trial in offspring]
+
         # compute the fitness and update the population
         scores_offspring = joblib.Parallel(n_jobs=n_jobs)(joblib.delayed(objective_cache)(c) for c in offspring)
         for i in range(n_pop):
