@@ -14,6 +14,7 @@ Regardless, any reported issues will be fixed as possible.
 '''
 import pyBlindOpt.de
 import pyBlindOpt.ga
+import pyBlindOpt.gwo
 import pyBlindOpt.hc
 import pyBlindOpt.init
 import pyBlindOpt.pso

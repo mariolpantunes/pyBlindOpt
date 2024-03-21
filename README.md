@@ -7,6 +7,7 @@ Currently, it implements 5 different algorithms:
 3. Genetic algorithm is a metaheuristic inspired by the process of natural selection that belongs to the larger class of evolutionary algorithms (EA). Genetic algorithms are commonly used to generate high-quality solutions to optimization and search problems by relying on biologically inspired operators such as mutation, crossover, and selection.
 4. Differential evolution is a method that optimizes a problem by iteratively trying to improve a candidate solution with regard to a given measure of quality. Such methods are commonly known as metaheuristics as they make few or no assumptions about the problem being optimized and can search very large spaces of candidate solutions.
 5. Particle swarm optimization is a computational method that optimizes a problem by iteratively trying to improve a candidate solution with regard to a given measure of quality. It solves a problem by having a population of candidate solutions, here dubbed particles, and moving these particles around in the search space according to simple mathematical formula over the particle's position and velocity. Each particle's movement is influenced by its local best-known position but is also guided toward the best-known positions in the search space, which are updated as better positions are found by other particles.
+6. Grey Wolf Optimization (GWO) is a population-based meta-heuristics algorithm that simulates the leadership hierarchy and hunting mechanism of grey wolves in nature.
 
 All the algorithms take advantage of the [joblib](https://joblib.readthedocs.io/en/latest/) library to speed up the objective function and cache the results.
 The code was optimized to a certain degree but was made for teaching purposes.
@@ -23,14 +24,14 @@ git+https://github.com/mariolpantunes/pyBlindOpt@main#egg=pyBlindOpt
 Or add the following line to the requirements.txt file:
 
 ```bash
-pyBlindOpt>=0.1.1 
+pyBlindOpt>=0.1.3
 ```
 
 ## Documentation
 This library was documented using the google style docstring, it can be accessed [here](https://mariolpantunes.github.io/pyBlindOpt/). Run the following commands to produce the documentation for this library.
 
 ```bash
-pdoc --math -d google -o docs optimization
+pdoc --math -d google -o docs pyBlindOpt
 ```
 
 ## Authors
