@@ -29,11 +29,14 @@ import numpy as np
 import pyBlindOpt.utils as utils
 
 
+from collections.abc import Sequence
+
+
 logger = logging.getLogger(__name__)
 
 
 def particle_swarm_optimization(objective:callable, bounds:np.ndarray,
-population:np.ndarray=None, callback:callable=None,
+population:np.ndarray=None, callback:"Sequence[callable] | callable"=None,
 n_iter:int=100, n_pop:int=10, c1:float=0.1, c2:float=0.1, w:float=0.8,
 n_jobs:int=-1, cached=False, debug=False, verbose=False, seed:int=42) -> tuple:
     '''
@@ -118,10 +121,6 @@ n_jobs:int=-1, cached=False, debug=False, verbose=False, seed:int=42) -> tuple:
                 pbest_obj[j] = obj[j]
         gbest_obj = min(pbest_obj)
         gbest = pbest[pbest_obj.index(gbest_obj)]
-
-        ## Optional execute the callback code
-        if callback is not None:
-            callback(epoch, pbest_obj, pbest)
         
         ## Optional store the debug information
         if debug:
@@ -129,6 +128,17 @@ n_jobs:int=-1, cached=False, debug=False, verbose=False, seed:int=42) -> tuple:
             obj_avg_iter.append(statistics.mean(obj))
             obj_best_iter.append(gbest_obj)
             obj_worst_iter.append(max(obj))
+        
+        ## Optional execute the callback code
+        if callback is not None:
+            terminate = False
+            if isinstance(callback, Sequence):
+                terminate = any([c(epoch, pbest_obj, pbest) for c in callback])
+            else:
+                terminate = callback(epoch, pbest_obj, pbest)
+
+            if terminate:
+                break
 
     # clean the cache
     if cached:
