@@ -26,3 +26,13 @@ class EarlyStopping:
             return True
         else:
             return False
+
+
+class CountEpochs:
+    
+    def __init__(self) -> None:
+        self.epoch = 0
+        
+    def callback(self, epoch:int, fitness:list, population:list) -> bool:
+        self.epoch += 1
+        return False

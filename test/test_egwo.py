@@ -10,49 +10,47 @@ import unittest
 import numpy as np
 import pyBlindOpt.egwo as egwo
 import pyBlindOpt.callback as callback
-
-
-from test import utils_test as utils
+import pyBlindOpt.functions as functions
 
 
 class TestEGWO(unittest.TestCase):
     def test_egwo_00(self):
         bounds = np.asarray([(-5.0, 5.0)])
-        result, _ = egwo.grey_wolf_optimization(utils.f1, bounds, n_iter=100, verbose=False)
+        result, _ = egwo.grey_wolf_optimization(functions.sphere, bounds, n_iter=100, verbose=False)
         desired = np.array([0])
         np.testing.assert_allclose(result, desired, atol=1)
     
     def test_egwo_01(self):
         bounds = np.asarray([(-5.0, 5.0), (-5.0, 5.0)])
-        result, _ = egwo.grey_wolf_optimization(utils.f2, bounds, n_iter=100, verbose=False)
+        result, _ = egwo.grey_wolf_optimization(functions.rastrigin, bounds, n_iter=100, verbose=False)
         desired = np.array([0.0, 0.0])
         np.testing.assert_allclose(result, desired, atol=1)
     
     def test_egwo_02(self):
-        c = utils.CountEpochs()
+        c = callback.CountEpochs()
         bounds = np.asarray([(-5.0, 5.0), (-5.0, 5.0)])
-        egwo.grey_wolf_optimization(utils.f2, bounds, n_iter=10, callback=c.callback, verbose=False)
+        egwo.grey_wolf_optimization(functions.rastrigin, bounds, n_iter=10, callback=c.callback, verbose=False)
         desired = 10
         self.assertEqual(c.epoch, desired)
     
     def test_egwo_03(self):
         bounds = np.asarray([(-5.0, 5.0), (-5.0, 5.0)])
         population = [np.array([1,1]), np.array([-1,1]), np.array([2,-2]), np.array([.5,-.5]), np.array([-.5,.5])]
-        result, _ = egwo.grey_wolf_optimization(utils.f2, bounds, population=population, n_iter=100, verbose=False)
+        result, _ = egwo.grey_wolf_optimization(functions.rastrigin, bounds, population=population, n_iter=100, verbose=False)
         desired = np.array([0.0, 0.0])
         np.testing.assert_allclose(result, desired, atol=1)
     
     def test_egwo_04(self):
         bounds = np.asarray([(-5.0, 5.0), (-5.0, 5.0)])
         population = [np.array([1,1]), np.array([-1,1]), np.array([2,-2]), np.array([.5,-.5]), np.array([-.5,.5])]
-        result, _ = egwo.grey_wolf_optimization(utils.f2, bounds, population=population, n_iter=100, verbose=False)
+        result, _ = egwo.grey_wolf_optimization(functions.rastrigin, bounds, population=population, n_iter=100, verbose=False)
         self.assertTrue(isinstance(result,np.ndarray))
     
     def test_egwo_05(self):
         n_iter = 100
         bounds = np.asarray([(-5.0, 5.0), (-5.0, 5.0)])
         population = [np.array([1,1]), np.array([-1,1]), np.array([2,-2]), np.array([.5,-.5]), np.array([-.5,.5])]
-        _, _, debug = egwo.grey_wolf_optimization(utils.f2, bounds, population=population, n_iter=n_iter, verbose=False, debug=True)
+        _, _, debug = egwo.grey_wolf_optimization(functions.rastrigin, bounds, population=population, n_iter=n_iter, verbose=False, debug=True)
         
         list_best, list_avg, list_worst = debug
         
@@ -68,7 +66,7 @@ class TestEGWO(unittest.TestCase):
         n_iter=100
         c = callback.EarlyStopping(threshold)
         bounds = np.asarray([(-1.0, 1.0), (-1.0, 1.0), (-1.0, 1.0), (-1.0, 1.0), (-1.0, 1.0)])
-        result, objective = egwo.grey_wolf_optimization(utils.sphere, bounds, n_iter=n_iter, callback=c.callback, verbose=False)
+        result, objective = egwo.grey_wolf_optimization(functions.sphere, bounds, n_iter=n_iter, callback=c.callback, verbose=False)
         #print(f'Epoch {c.epoch} -> {result}|{objective}')
         self.assertTrue(c.epoch < (n_iter-1))
         self.assertTrue(objective < threshold)

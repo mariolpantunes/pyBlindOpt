@@ -17,8 +17,12 @@ import numpy as np
 import pyBlindOpt.utils as utils
 
 
+def random(bounds:np.ndarray, n_pop:int=20) -> list:
+    return [utils.get_random_solution(bounds) for _ in range(n_pop)]
+
+
 def opposition_based(objective:callable, bounds:np.ndarray,
-population:np.ndarray=None, n_pop:int=20, n_jobs:int=-1) -> np.ndarray:
+population:np.ndarray=None, n_pop:int=20, n_jobs:int=-1) -> list:
     '''
     '''
 

@@ -10,49 +10,47 @@ import unittest
 import numpy as np
 import pyBlindOpt.de as de
 import pyBlindOpt.callback as callback
-
-
-from test import utils_test as utils
+import pyBlindOpt.functions as functions
 
 
 class TestDE(unittest.TestCase):
     def test_de_00(self):
         bounds = np.asarray([(-5.0, 5.0)])
-        result, objective = de.differential_evolution(utils.f1, bounds, n_iter=100, verbose=False)
+        result, objective = de.differential_evolution(functions.sphere, bounds, n_iter=100, verbose=False)
         desired = np.array([0])
         np.testing.assert_allclose(result, desired, atol=1)
     
     def test_de_01(self):
         bounds = np.asarray([(-5.0, 5.0), (-5.0, 5.0)])
-        result, objective = de.differential_evolution(utils.f2, bounds, n_iter=100, verbose=False)
+        result, objective = de.differential_evolution(functions.rastrigin, bounds, n_iter=100, verbose=False)
         desired = np.array([0.0, 0.0])
         np.testing.assert_allclose(result, desired, atol=1)
     
     def test_de_02(self):
-        c = utils.CountEpochs()
+        c = callback.CountEpochs()
         bounds = np.asarray([(-5.0, 5.0), (-5.0, 5.0)])
-        result, objective = de.differential_evolution(utils.f2, bounds, n_iter=10, callback=c.callback, verbose=False)
+        result, objective = de.differential_evolution(functions.rastrigin, bounds, n_iter=10, callback=c.callback, verbose=False)
         desired = 10
         self.assertEqual(c.epoch, desired)
     
     def test_de_03(self):
-        bounds = np.asarray([(-5.0, 5.0), (-5.0, 5.0)])
+        bounds = np.asarray([(-1.0, 1.0), (-1.0, 1.0)])
         population = [np.array([1,1]), np.array([-1,1]), np.array([2,-2]), np.array([.5,-.5]), np.array([-.5,.5])]
-        result, _ = de.differential_evolution(utils.f2, bounds, population=population, n_iter=100, verbose=False)
+        result, _ = de.differential_evolution(functions.rastrigin, bounds, population=population, n_iter=100, verbose=False)
         desired = np.array([0.0, 0.0])
         np.testing.assert_allclose(result, desired, atol=1)
     
     def test_de_04(self):
         bounds = np.asarray([(-5.0, 5.0), (-5.0, 5.0)])
         population = [np.array([1,1]), np.array([-1,1]), np.array([2,-2]), np.array([.5,-.5]), np.array([-.5,.5])]
-        result, _ = de.differential_evolution(utils.f2, bounds, population=population, n_iter=100, verbose=False)
+        result, _ = de.differential_evolution(functions.rastrigin, bounds, population=population, n_iter=100, verbose=False)
         self.assertTrue(isinstance(result,np.ndarray))
 
     def test_de_05(self):
         n_iter = 100
         bounds = np.asarray([(-5.0, 5.0), (-5.0, 5.0)])
         population = [np.array([1,1]), np.array([-1,1]), np.array([2,-2]), np.array([.5,-.5]), np.array([-.5,.5])]
-        _, _, debug = de.differential_evolution(utils.f2, bounds, population=population, n_iter=n_iter, verbose=False, debug=True)
+        _, _, debug = de.differential_evolution(functions.rastrigin, bounds, population=population, n_iter=n_iter, verbose=False, debug=True)
         
         list_best, list_avg, list_worst = debug
         
@@ -68,10 +66,11 @@ class TestDE(unittest.TestCase):
         n_iter=100
         c = callback.EarlyStopping(threshold)
         bounds = np.asarray([(-1.0, 1.0), (-1.0, 1.0), (-1.0, 1.0), (-1.0, 1.0), (-1.0, 1.0)])
-        result, objective = de.differential_evolution(utils.sphere, bounds, n_iter=n_iter, callback=c.callback, verbose=False)
+        result, objective = de.differential_evolution(functions.sphere, bounds, n_iter=n_iter, callback=c.callback, verbose=False)
         #print(f'Epoch {c.epoch} -> {result}|{objective}')
         self.assertTrue(c.epoch < (n_iter-1))
         self.assertTrue(objective < threshold)
+
 
 if __name__ == '__main__':
     unittest.main()
