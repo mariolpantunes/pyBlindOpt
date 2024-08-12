@@ -23,11 +23,14 @@ import numpy as np
 import pyBlindOpt.utils as utils
 
 
+from collections.abc import Sequence
+
+
 logger = logging.getLogger(__name__)
 
 
 def grey_wolf_optimization(objective:callable, bounds:np.ndarray, population:np.ndarray=None, 
-callback:callable=None, n_iter:int=100, n_pop:int=10, n_jobs:int=-1, 
+callback:"Sequence[callable] | callable"=None, n_iter:int=100, n_pop:int=10, n_jobs:int=-1, 
 cached=False, debug=False, verbose=False, seed:int=42) -> tuple:
     '''
     Computes the Grey Wolf optimization algorithm.
@@ -115,16 +118,24 @@ cached=False, debug=False, verbose=False, seed:int=42) -> tuple:
         beta_wolf = pop[scores.index(beta_score)]
         gamma_wolf = pop[scores.index(gamma_score)]
 
-        ## Optional execute the callback code
-        if callback is not None:
-            callback(epoch, scores, pop)
-
         ## Optional store the debug information
         if debug:
             # store best, wort and average cost for all candidates
             obj_avg_iter.append(statistics.mean(scores))
             obj_best_iter.append(alfa_score)
             obj_worst_iter.append(max(scores))
+
+        ## Optional execute the callback code
+        if callback is not None:
+            terminate = False
+            if isinstance(callback, Sequence):
+                terminate = any([c(epoch, scores, pop) for c in callback])
+            else:
+                terminate = callback(epoch, scores, pop)
+
+            if terminate:
+                break
+    
     # clean the cache
     if cached:
         memory.clear(warn=False)
