@@ -61,7 +61,7 @@ class TestPSO(unittest.TestCase):
         self.assertTrue(isinstance(list_worst, list))
         self.assertEqual(len(list_worst), n_iter)
     
-    def test_de_06(self):
+    def test_pso_06(self):
         threshold = 0.1
         n_iter=100
         c = callback.EarlyStopping(threshold)

@@ -32,4 +32,7 @@ class TestUtils(unittest.TestCase):
         result = utils.get_random_solution(bounds)
         desired = utils.check_bounds(result, bounds)
         np.testing.assert_array_almost_equal_nulp(result, desired)
-    
+
+
+if __name__ == '__main__':
+    unittest.main()

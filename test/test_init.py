@@ -35,3 +35,7 @@ class TestInit(unittest.TestCase):
         result = init.opposition_based(f1, bounds, population=population)
         desired = [np.array([-2, 2.5]), np.array([-2.7, 0.5])]
         np.testing.assert_array_almost_equal(result, desired, decimal=1)
+
+
+if __name__ == '__main__':
+    unittest.main()

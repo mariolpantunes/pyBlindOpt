@@ -46,7 +46,7 @@ class TestGWO(unittest.TestCase):
         result, _ = gwo.grey_wolf_optimization(functions.rastrigin, bounds, population=population, n_iter=100, verbose=False)
         self.assertTrue(isinstance(result,np.ndarray))
     
-    def test_egwo_05(self):
+    def test_gwo_05(self):
         n_iter = 100
         bounds = np.asarray([(-5.0, 5.0), (-5.0, 5.0)])
         population = [np.array([1,1]), np.array([-1,1]), np.array([2,-2]), np.array([.5,-.5]), np.array([-.5,.5])]
@@ -61,7 +61,7 @@ class TestGWO(unittest.TestCase):
         self.assertTrue(isinstance(list_worst, list))
         self.assertEqual(len(list_worst), n_iter)
     
-    def test_de_06(self):
+    def test_gwo_06(self):
         threshold = 0.1
         n_iter=100
         c = callback.EarlyStopping(threshold)
@@ -70,6 +70,7 @@ class TestGWO(unittest.TestCase):
         #print(f'Epoch {c.epoch} -> {result}|{objective}')
         self.assertTrue(c.epoch < (n_iter-1))
         self.assertTrue(objective < threshold)
+
 
 if __name__ == '__main__':
     unittest.main()
