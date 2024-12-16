@@ -9,64 +9,48 @@ __status__ = 'Development'
 import unittest
 import numpy as np
 import pyBlindOpt.egwo as egwo
-
-
-# define objective function
-def f1(x):
-    return np.power(x, 2)[0]
-
-
-# define objective function
-def f2(x):
-    return x[0]**2.0 + x[1]**2.0
-
-
-# define global variable and callback
-total = 0
-def callback(epoch, obj, pop):
-    global total
-    total += 1
+import pyBlindOpt.callback as callback
+import pyBlindOpt.functions as functions
 
 
 class TestEGWO(unittest.TestCase):
     def test_egwo_00(self):
         bounds = np.asarray([(-5.0, 5.0)])
-        result, _ = egwo.grey_wolf_optimization(f1, bounds, n_iter=100, verbose=False)
+        result, _ = egwo.grey_wolf_optimization(functions.sphere, bounds, n_iter=100, verbose=False)
         desired = np.array([0])
         np.testing.assert_allclose(result, desired, atol=1)
     
     def test_egwo_01(self):
         bounds = np.asarray([(-5.0, 5.0), (-5.0, 5.0)])
-        result, _ = egwo.grey_wolf_optimization(f2, bounds, n_iter=100, verbose=False)
+        result, _ = egwo.grey_wolf_optimization(functions.rastrigin, bounds, n_iter=100, verbose=False)
         desired = np.array([0.0, 0.0])
         np.testing.assert_allclose(result, desired, atol=1)
     
     def test_egwo_02(self):
-        global total
-        total = 0
+        c = callback.CountEpochs()
         bounds = np.asarray([(-5.0, 5.0), (-5.0, 5.0)])
-        egwo.grey_wolf_optimization(f2, bounds, n_iter=10, callback=callback, verbose=False)
+        egwo.grey_wolf_optimization(functions.rastrigin, bounds, n_iter=10, callback=c.callback, verbose=False)
         desired = 10
-        self.assertEqual(total, desired)
+        self.assertEqual(c.epoch, desired)
     
     def test_egwo_03(self):
         bounds = np.asarray([(-5.0, 5.0), (-5.0, 5.0)])
         population = [np.array([1,1]), np.array([-1,1]), np.array([2,-2]), np.array([.5,-.5]), np.array([-.5,.5])]
-        result, _ = egwo.grey_wolf_optimization(f2, bounds, population=population, n_iter=100, verbose=False)
+        result, _ = egwo.grey_wolf_optimization(functions.rastrigin, bounds, population=population, n_iter=100, verbose=False)
         desired = np.array([0.0, 0.0])
         np.testing.assert_allclose(result, desired, atol=1)
     
     def test_egwo_04(self):
         bounds = np.asarray([(-5.0, 5.0), (-5.0, 5.0)])
         population = [np.array([1,1]), np.array([-1,1]), np.array([2,-2]), np.array([.5,-.5]), np.array([-.5,.5])]
-        result, _ = egwo.grey_wolf_optimization(f2, bounds, population=population, n_iter=100, verbose=False)
+        result, _ = egwo.grey_wolf_optimization(functions.rastrigin, bounds, population=population, n_iter=100, verbose=False)
         self.assertTrue(isinstance(result,np.ndarray))
     
     def test_egwo_05(self):
         n_iter = 100
         bounds = np.asarray([(-5.0, 5.0), (-5.0, 5.0)])
         population = [np.array([1,1]), np.array([-1,1]), np.array([2,-2]), np.array([.5,-.5]), np.array([-.5,.5])]
-        _, _, debug = egwo.grey_wolf_optimization(f2, bounds, population=population, n_iter=n_iter, verbose=False, debug=True)
+        _, _, debug = egwo.grey_wolf_optimization(functions.rastrigin, bounds, population=population, n_iter=n_iter, verbose=False, debug=True)
         
         list_best, list_avg, list_worst = debug
         
@@ -76,3 +60,17 @@ class TestEGWO(unittest.TestCase):
         self.assertEqual(len(list_avg), n_iter)
         self.assertTrue(isinstance(list_worst, list))
         self.assertEqual(len(list_worst), n_iter)
+    
+    def test_egwo_06(self):
+        threshold = 0.1
+        n_iter=100
+        c = callback.EarlyStopping(threshold)
+        bounds = np.asarray([(-1.0, 1.0), (-1.0, 1.0), (-1.0, 1.0), (-1.0, 1.0), (-1.0, 1.0)])
+        result, objective = egwo.grey_wolf_optimization(functions.sphere, bounds, n_iter=n_iter, callback=c.callback, verbose=False)
+        #print(f'Epoch {c.epoch} -> {result}|{objective}')
+        self.assertTrue(c.epoch < (n_iter-1))
+        self.assertTrue(objective < threshold)
+
+
+if __name__ == '__main__':
+    unittest.main()

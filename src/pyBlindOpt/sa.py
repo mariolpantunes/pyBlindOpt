@@ -23,11 +23,14 @@ import numpy as np
 import pyBlindOpt.utils as utils
 
 
+from collections.abc import Sequence
+
+
 logger = logging.getLogger(__name__)
 
 
 def simulated_annealing(objective:callable, bounds:list,
-callback:callable=None, n_iter:int=200, step_size:float=0.01, 
+callback:"Sequence[callable] | callable"=None, n_iter:int=200, step_size:float=0.01, 
 temp:float=20.0, cached:bool=False, debug:bool=False, verbose:bool=False, seed:int=42) -> tuple:
     '''
     Simulated annealing algorithm.
@@ -96,14 +99,21 @@ temp:float=20.0, cached:bool=False, debug:bool=False, verbose:bool=False, seed:i
             # store the new current point
             curr, curr_cost = candidate, candidate_cost
         
-        ## Optional execute the callback code
-        if callback is not None:
-            callback(i, best_cost, candidate_cost, candidate)
-        
          ## Optional store the debug information
         if debug:
             # store the best cost
             cost_iter.append(best_cost)
+
+        ## Optional execute the callback code
+        if callback is not None:
+            terminate = False
+            if isinstance(callback, Sequence):
+                terminate = any([c(i, [best_cost, candidate_cost], [best, candidate]) for c in callback])
+            else:
+                terminate = callback(i, [best_cost, candidate_cost], [best, candidate])
+
+            if terminate:
+                break
 
     if cached:
         memory.clear(warn=False)

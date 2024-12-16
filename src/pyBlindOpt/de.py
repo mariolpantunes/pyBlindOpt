@@ -27,6 +27,9 @@ import numpy as np
 import pyBlindOpt.utils as utils
 
 
+from collections.abc import Sequence
+
+
 logger = logging.getLogger(__name__)
 
 
@@ -130,9 +133,9 @@ dims:int, cr:float, cross_method:callable) -> np.ndarray:
 
 
 def differential_evolution(objective:callable, bounds:np.ndarray, population:list=None, 
-variant:str='best/1/bin', callback:callable=None, n_iter:int=100, n_pop:int=10,
-F:float=0.5, cr:float=0.7, rt:int=10, n_jobs:int=-1,
-cached:bool=False, debug:bool=False, verbose:bool=False, seed:int=42) -> tuple:
+variant:str='best/1/bin', callback:"Sequence[callable] | callable"=None, n_iter:int=100, 
+n_pop:int=10, F:float=0.5, cr:float=0.7, rt:int=10, n_jobs:int=-1, cached:bool=False, 
+debug:bool=False, verbose:bool=False, seed:int=42) -> tuple:
     '''
     Computes the differential evolution optimization algorithm.
 
@@ -257,14 +260,11 @@ cached:bool=False, debug:bool=False, verbose:bool=False, seed:int=42) -> tuple:
                 obj_all[j] = obj_trial[j]
         # find the best performing vector at each iteration
         best_obj = min(obj_all)
+        
         # store the lowest objective function value
         if best_obj < prev_obj:
             best_vector = pop[np.argmin(obj_all)]
             prev_obj = best_obj
-        
-        ## Optional execute the callback code
-        if callback is not None:
-            callback(epoch, obj_all, pop)
 
         ## Optional store the debug information
         if debug:
@@ -272,6 +272,18 @@ cached:bool=False, debug:bool=False, verbose:bool=False, seed:int=42) -> tuple:
             obj_avg_iter.append(statistics.mean(obj_all))
             obj_best_iter.append(best_obj)
             obj_worst_iter.append(max(obj_all))
+    
+        ## Optional execute the callback code
+        if callback is not None:
+            terminate = False
+            if isinstance(callback, Sequence):
+                terminate = any([c(epoch, obj_all, pop) for c in callback])
+            else:
+                terminate = callback(epoch, obj_all, pop)
+
+            if terminate:
+                break
+
     # clean the cache
     if cached:
         memory.clear(warn=False)

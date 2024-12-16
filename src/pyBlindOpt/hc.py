@@ -25,12 +25,14 @@ import numpy as np
 import pyBlindOpt.utils as utils
 
 
+from collections.abc import Sequence
+
+
 logger = logging.getLogger(__name__)
 
 
-
 def hillclimbing(objective:typing.Callable, bounds:list,
-callback:typing.Callable=None, n_iter:int=200, step_size:float=.01,
+callback:"Sequence[callable] | callable"=None, n_iter:int=200, step_size:float=.01,
 cached:bool=False, debug:bool=False, verbose:bool=False, seed:int=42) -> tuple:
     """
     Hill climbing local search algorithm.
@@ -84,14 +86,21 @@ cached:bool=False, debug:bool=False, verbose:bool=False, seed:int=42) -> tuple:
 			# store the new point
             solution, solution_cost = candidate, candidate_cost
         
-        ## Optional execute the callback code
-        if callback is not None:
-            callback(epoch, solution_cost, candidate_cost, candidate)
-        
         ## Optional store the debug information
         if debug:
             # store the best cost
             obj_cost_iter.append(solution_cost)
+        
+        ## Optional execute the callback code
+        if callback is not None:
+            terminate = False
+            if isinstance(callback, Sequence):
+                terminate = any([c(epoch, [solution_cost, candidate_cost], [solution, candidate]) for c in callback])
+            else:
+                terminate = callback(epoch, [solution_cost, candidate_cost], [solution, candidate])
+
+            if terminate:
+                break
     
     if cached:
         memory.clear(warn=False)

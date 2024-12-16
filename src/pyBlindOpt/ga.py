@@ -25,6 +25,9 @@ import numpy as np
 import pyBlindOpt.utils as utils
 
 
+from collections.abc import Sequence
+
+
 logger = logging.getLogger(__name__)
 
 
@@ -118,9 +121,9 @@ def blend_crossover(p1, p2, r_cross, alpha=.5):
 def genetic_algorithm(objective:callable, bounds:np.ndarray,
 population:np.ndarray=None, selection:callable=tournament_selection,
 crossover:callable=blend_crossover, mutation:callable=random_mutation,  
-callback:callable=None, n_iter:int=200, n_pop:int=20, r_cross:float=0.9, 
-r_mut:float=0.3, n_jobs:int=-1, cached:bool=False, 
-debug:bool=False, verbose:bool=False, seed:int=42) -> tuple:
+callback:"Sequence[callable] | callable"=None, n_iter:int=200, 
+n_pop:int=20, r_cross:float=0.9, r_mut:float=0.3, n_jobs:int=-1, 
+cached:bool=False, debug:bool=False, verbose:bool=False, seed:int=42) -> tuple:
     '''
     Computes the genetic algorithm optimization.
 
@@ -185,10 +188,6 @@ debug:bool=False, verbose:bool=False, seed:int=42) -> tuple:
         # evaluate all candidates in the population
         scores = joblib.Parallel(n_jobs=n_jobs)(joblib.delayed(objective_cache)(c) for c in pop)
 
-        ## Optional execute the callback code
-        if callback is not None:
-            callback(epoch, scores, pop)
-
         # check for new best solution
         best_eval = min(scores)
         best = pop[scores.index(best_eval)]
@@ -217,6 +216,18 @@ debug:bool=False, verbose:bool=False, seed:int=42) -> tuple:
             obj_avg_iter.append(statistics.mean(scores))
             obj_best_iter.append(best_eval)
             obj_worst_iter.append(max(scores))
+        
+        ## Optional execute the callback code
+        if callback is not None:
+            terminate = False
+            if isinstance(callback, Sequence):
+                terminate = any([c(epoch, scores, pop) for c in callback])
+            else:
+                terminate = callback(epoch, scores, pop)
+
+            if terminate:
+                break
+
     # clean the cache
     if cached:
         memory.clear(warn=False)
