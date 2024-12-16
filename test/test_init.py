@@ -12,9 +12,6 @@ import pyBlindOpt.init as init
 import pyBlindOpt.functions as functions
 
 
-
-
-
 class TestInit(unittest.TestCase):
     def test_opposition_00(self):
         bounds = np.asarray([(-3.0, 5.0)])
@@ -27,7 +24,7 @@ class TestInit(unittest.TestCase):
         bounds = np.asarray([(-3.0, 5.0), [-5.0, 3.0]])
         population = [np.array([-2, 2.5]), np.array([4.7, -2.5])]
         result = init.opposition_based(functions.sphere, bounds, population=population)
-        desired = [np.array([-2, 2.5]), np.array([-2.7, 0.5])]
+        desired = [np.array([-2.7, 0.5]), np.array([-2, 2.5])]
         np.testing.assert_array_almost_equal(result, desired, decimal=1)
     
     def test_round_init_00(self):
