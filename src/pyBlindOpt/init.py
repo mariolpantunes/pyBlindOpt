@@ -67,6 +67,7 @@ n_pop:int=20, n_rounds:int=5, n_jobs:int=-1) -> np.ndarray:
         samples.extend(sample)
         fitness.extend(sample_fitness)
     
+    fitness = np.array(fitness)
     # Additional code - get best n_pop points that are far away from each other
     # Optimal solution with pareto front too slow, use a simple heuristic
     # 1. Compute the global distance from one sample to all the others
