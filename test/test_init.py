@@ -35,3 +35,8 @@ class TestInit(unittest.TestCase):
         result = init.opposition_based(f1, bounds, population=population)
         desired = [np.array([-2, 2.5]), np.array([-2.7, 0.5])]
         np.testing.assert_array_almost_equal(result, desired, decimal=1)
+    
+    def test_round_init_00(self):
+        bounds = np.asarray([(-3.0, 5.0), [-5.0, 3.0]])
+        population = init.round_init(f1, bounds, n_pop=10, n_rounds=10)
+        #print(population)

@@ -96,7 +96,6 @@ cached=False, debug=False, verbose=False, seed:int=42) -> tuple:
         omega = np.sort(omega, kind='stable')[::-1]
         # the standard deviation of the simulated stochastic error
         epoch_std = math.exp(-100 * (epoch + 1) / n_iter)
-        #TODO: optimize this step 
         #prey = [omega[0] * alfa_wolf[i] + omega[1] * beta_wolf[i] + omega[2] * gamma_wolf[i] 
         #+ random.normalvariate(0, epoch_std) for i in range(bounds.shape[0])]
         prey = (omega[0] * alfa_wolf + omega[1] * beta_wolf + omega[2] * gamma_wolf) 
@@ -112,7 +111,6 @@ cached=False, debug=False, verbose=False, seed:int=42) -> tuple:
             #X2 = beta_wolf - A2 * np.abs(C2*beta_wolf-pop[i])
             #X3 = gamma_wolf - A3 * np.abs(C3*gamma_wolf-pop[i])
             #Xnew = np.mean([X1, X2, X3], axis=0)
-            #TODO:optimize this step
             #Xnew = np.array([pop[i][j] - random.uniform(-2, 2) * abs(prey_pos[j] - pop[i][j]) for j in range(bounds.shape[0])])
             Xnew = pop[i] - np.random.uniform(-2,2,(bounds.shape[0],)) * np.absolute(prey - pop[i])
             offspring.append(Xnew)

@@ -11,6 +11,7 @@ __email__ = 'mariolpantunes@gmail.com'
 __status__ = 'Development'
 
 
+import math
 import numpy as np
 
 
@@ -42,3 +43,29 @@ def get_random_solution(bounds:np.ndarray) -> np.ndarray:
     '''
     solution = bounds[:, 0] + np.random.rand(len(bounds)) * (bounds[:, 1] - bounds[:, 0])
     return check_bounds(solution, bounds)
+
+
+def scale(arr, min_val=None, max_val=None):
+    if min_val is None:
+        min_val = min(arr)
+    
+    if max_val is None:
+        max_val = max(arr)
+
+    scl_arr = (arr - min_val) / (max_val - min_val)
+    return scl_arr, min_val, max_val
+
+
+def inv_scale(scl_arr, min_val, max_val):
+    return scl_arr*(max_val - min_val) + min_val
+
+
+def global_distances(samples):
+    distances = np.zeros(len(samples))
+    for i in range(len(samples)):
+        s1 = samples[i]
+        dist = 0.0
+        for s2 in samples:
+            dist += math.dist(s1, s2)
+        distances[i] = dist
+    return distances
