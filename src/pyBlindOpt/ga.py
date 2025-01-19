@@ -150,6 +150,7 @@ cached:bool=False, debug:bool=False, verbose:bool=False, seed:int=42) -> tuple:
     '''
     # define the seed of the random generation
     np.random.seed(seed)
+    
     # cache the initial objective function
     if cached:
         # Cache from joblib
