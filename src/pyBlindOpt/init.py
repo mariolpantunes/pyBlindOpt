@@ -15,6 +15,7 @@ __status__ = 'Development'
 import heapq
 import joblib
 import numpy as np
+import random as rnd
 import pyBlindOpt.utils as utils
 
 
@@ -69,7 +70,7 @@ n_jobs:int=-1, seed:int=None) -> list:
 
 
 def round_init(objective:callable, bounds:np.ndarray, 
-n_pop:int=20, n_rounds:int=5, n_jobs:int=-1, seed:int=None) -> list:
+n_pop:int=30, n_rounds:int=3, n_jobs:int=-1, seed:int=None) -> list:
 
     # set the random seed
     if seed is not None:
@@ -101,13 +102,8 @@ n_pop:int=20, n_rounds:int=5, n_jobs:int=-1, seed:int=None) -> list:
     # 4. Build a score metric that is the addition
     scores = scale_inv_dist + scale_fitness
     
-    # 5. Use a minHeap to select the elements from the score points
-    solution_scores = heapq.nsmallest(int(n_pop), scores)
-    
-    # 6. Get the indexes of the solution
-    solution = [np.where(scores==s)[0][0] for s in solution_scores]
-    
-    # 7. Use the indexes to select the final population
-    population = [samples[i] for i in solution]
+    # 5. Random sample the population using the scores as weights
+    probs = utils.score_2_probs(scores)
+    population = rnd.choices(population=samples, weights=probs, k=n_pop)
     
     return population

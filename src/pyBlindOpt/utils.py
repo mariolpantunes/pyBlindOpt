@@ -60,7 +60,7 @@ def inv_scale(scl_arr, min_val, max_val):
     return scl_arr*(max_val - min_val) + min_val
 
 
-def global_distances(samples):
+def global_distances(samples:np.ndarray)->np.ndarray:
     distances = np.zeros(len(samples))
     for i in range(len(samples)):
         s1 = samples[i]
@@ -69,3 +69,11 @@ def global_distances(samples):
             dist += math.dist(s1, s2)
         distances[i] = dist
     return distances
+
+def score_2_probs(scores:np.ndarray)->np.ndarray:
+    total = np.sum(scores)
+    norm_scores = scores/total
+    norm_scores = (1.0-norm_scores)
+    total = np.sum(norm_scores)
+    norm_scores = norm_scores/total
+    return norm_scores
