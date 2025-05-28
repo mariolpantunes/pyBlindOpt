@@ -15,6 +15,14 @@ import math
 import numpy as np
 
 
+def assert_bounds(solution:np.ndarray, bounds:np.ndarray) -> bool:
+    x = solution.T
+    min_bounds = bounds[:, 0]
+    max_bounds = bounds[:, 1]
+    rv = ((x > min_bounds[:, np.newaxis]) & (x < max_bounds[:, np.newaxis])).any(1)
+    return np.all(rv)
+
+
 def check_bounds(solution:np.ndarray, bounds:np.ndarray) -> np.ndarray:
     '''
     Check if a solution is within the given bounds
@@ -26,9 +34,7 @@ def check_bounds(solution:np.ndarray, bounds:np.ndarray) -> np.ndarray:
     Returns:
         np.ndarray: a clipped version of the solution vector
     '''
-    lower = bounds[:, 0]
-    upper = bounds[:, 1]
-    return np.clip(solution, lower, upper)
+    return np.clip(solution, bounds[:, 0], bounds[:, 1])
 
 
 def get_random_solution(bounds:np.ndarray) -> np.ndarray:
@@ -42,7 +48,7 @@ def get_random_solution(bounds:np.ndarray) -> np.ndarray:
         np.ndarray: a random solutions that is within the bounds
     '''
     solution = bounds[:, 0] + np.random.rand(len(bounds)) * (bounds[:, 1] - bounds[:, 0])
-    return check_bounds(solution, bounds)
+    return np.clip(solution, bounds[:, 0], bounds[:, 1])
 
 
 def scale(arr, min_val=None, max_val=None):

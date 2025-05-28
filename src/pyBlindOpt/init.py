@@ -16,10 +16,13 @@ import heapq
 import joblib
 import numpy as np
 import random as rnd
+import ess.ess as ess
 import pyBlindOpt.utils as utils
 
 
-def random(bounds:np.ndarray, n_pop:int=20, seed:int=None) -> list:
+#TODO: replace lists with numpy arrays for improved speedup
+
+def random(bounds:np.ndarray, n_pop:int=30, seed:int=None) -> list:
     '''
     '''
 
@@ -28,7 +31,11 @@ def random(bounds:np.ndarray, n_pop:int=20, seed:int=None) -> list:
         np.random.seed(seed)
     
     # generate a random population with solutions within bounds
-    return [utils.get_random_solution(bounds) for _ in range(n_pop)]
+    #return [utils.get_random_solution(bounds) for _ in range(n_pop)]
+    population = np.empty(shape=(n_pop, bounds.shape[0]))
+    for i in range(0, n_pop):
+        population[i] = utils.get_random_solution(bounds)
+    return population
 
 
 def opposition_based(objective:callable, bounds:np.ndarray,
@@ -104,6 +111,42 @@ n_pop:int=30, n_rounds:int=3, n_jobs:int=-1, seed:int=None) -> list:
     
     # 5. Random sample the population using the scores as weights
     probs = utils.score_2_probs(scores)
-    population = rnd.choices(population=samples, weights=probs, k=n_pop)
     
-    return population
+    return np.array(rnd.choices(population=samples, weights=probs, k=n_pop))
+
+
+def oblesa(objective:callable, bounds:np.ndarray, 
+n_pop:int=30, n_jobs:int=-1, seed:int=None):
+    
+    # set the random seed
+    if seed is not None:
+        np.random.seed(seed)
+    
+    # get a initial random population
+    random_population = random(bounds=bounds, n_pop=n_pop, seed=seed)
+
+    # compute the fitness of the initial population
+    random_scores = joblib.Parallel(n_jobs=n_jobs)(joblib.delayed(objective)(c) for c in random_population)
+
+    # compute the opposition population
+    a = bounds[:,0]
+    b = bounds[:,1]
+    opposition_population = [a+b-p for p in random_population]
+
+    # compute the fitness of the opposition population
+    opposition_scores = joblib.Parallel(n_jobs=n_jobs)(joblib.delayed(objective)(c) for c in opposition_population)
+
+    # computes the empty space population
+    samples = np.concatenate((random_population, opposition_population), axis=0)
+    empty_population = ess.esa(samples, bounds, n_pop)
+
+    # compute the fitness of the empty population
+    empty_scores = joblib.Parallel(n_jobs=n_jobs)(joblib.delayed(objective)(c) for c in empty_population)
+
+    # merge all scores and populations
+    scores = random_scores + opposition_scores + empty_scores
+    population = np.concatenate((random_population, opposition_population, empty_population), axis=0)
+
+    probs = utils.score_2_probs(scores)
+    
+    return np.array(rnd.choices(population=population, weights=probs, k=n_pop))
