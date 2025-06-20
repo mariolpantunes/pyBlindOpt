@@ -50,7 +50,7 @@ class TestInit(unittest.TestCase):
 
     def test_oblesa_00(self):
         bounds = np.asarray([[-3.0, 5.0]])
-        population = init.oblesa(functions.sphere, bounds, n_pop=10)
+        population = init.oblesa(functions.sphere, bounds, n_pop=10, seed=42)
         self.assertEqual(utils.assert_bounds(population, bounds), True)
     
     def test_oblesa_01(self):

@@ -14,14 +14,17 @@ __status__ = 'Development'
 
 import heapq
 import joblib
+import logging
 import numpy as np
 import random as rnd
 import ess.ess as ess
 import pyBlindOpt.utils as utils
 
 
-#TODO: replace lists with numpy arrays for improved speedup
+logger = logging.getLogger(__name__)
 
+
+#TODO: replace lists with numpy arrays for improved speedup
 def random(bounds:np.ndarray, n_pop:int=30, seed:int=None) -> list:
     '''
     '''
@@ -116,7 +119,8 @@ n_pop:int=30, n_rounds:int=3, n_jobs:int=-1, seed:int=None) -> list:
 
 
 def oblesa(objective:callable, bounds:np.ndarray, 
-n_pop:int=30, n_jobs:int=-1, seed:int=None):
+n_pop:int=30, n_jobs:int=-1, epochs:int=64,
+lr:float=0.01, k='auto', seed:int|None=None):
     
     # set the random seed
     if seed is not None:
@@ -138,7 +142,8 @@ n_pop:int=30, n_jobs:int=-1, seed:int=None):
 
     # computes the empty space population
     samples = np.concatenate((random_population, opposition_population), axis=0)
-    empty_population = ess.esa(samples, bounds, n_pop)
+    empty_population = ess.esa(samples, bounds, n=n_pop, epochs=epochs, lr=lr, k=k, seed=seed)
+    #empty_population = random_population
 
     # compute the fitness of the empty population
     empty_scores = joblib.Parallel(n_jobs=n_jobs)(joblib.delayed(objective)(c) for c in empty_population)
