@@ -63,6 +63,7 @@ n_jobs:int=-1, seed:int=None) -> list:
     
     # compute the fitness of the initial population
     scores = joblib.Parallel(n_jobs=n_jobs)(joblib.delayed(objective)(c) for c in pop)
+    scores = utils.compute_objective(pop, objective, n_jobs)
 
     # compute the opposition population
     a = bounds[:,0]
@@ -70,7 +71,8 @@ n_jobs:int=-1, seed:int=None) -> list:
     pop_opposition = [a+b-p for p in pop]
     
     # compute the fitness of the opposition population
-    scores_opposition = joblib.Parallel(n_jobs=n_jobs)(joblib.delayed(objective)(c) for c in pop_opposition)
+    #scores_opposition = joblib.Parallel(n_jobs=n_jobs)(joblib.delayed(objective)(c) for c in pop_opposition)
+    scores_opposition = utils.compute_objective(pop_opposition, objective, n_jobs)
 
     # merge the results and filter
     results = list(zip(scores, pop)) + list(zip(scores_opposition, pop_opposition))
@@ -91,7 +93,8 @@ n_pop:int=30, n_rounds:int=3, n_jobs:int=-1, seed:int=None) -> list:
     fitness = []
     for i in range(n_rounds):
         sample = [utils.get_random_solution(bounds) for _ in range(n_pop)]
-        sample_fitness = joblib.Parallel(n_jobs=n_jobs)(joblib.delayed(objective)(c) for c in sample)
+        #sample_fitness = joblib.Parallel(n_jobs=n_jobs)(joblib.delayed(objective)(c) for c in sample)
+        sample_fitness = utils.compute_objective(sample, objective, n_jobs)
         samples.extend(sample)
         fitness.extend(sample_fitness)
     fitness = np.array(fitness)
@@ -130,15 +133,16 @@ lr:float=0.01, k='auto', seed:int|None=None):
     random_population = random(bounds=bounds, n_pop=n_pop, seed=seed)
 
     # compute the fitness of the initial population
-    random_scores = joblib.Parallel(n_jobs=n_jobs)(joblib.delayed(objective)(c) for c in random_population)
-
+    #random_scores = joblib.Parallel(n_jobs=n_jobs)(joblib.delayed(objective)(c) for c in random_population)
+    random_scores = utils.compute_objective(random_population, objective, n_jobs)
     # compute the opposition population
     a = bounds[:,0]
     b = bounds[:,1]
     opposition_population = [a+b-p for p in random_population]
 
     # compute the fitness of the opposition population
-    opposition_scores = joblib.Parallel(n_jobs=n_jobs)(joblib.delayed(objective)(c) for c in opposition_population)
+    #opposition_scores = joblib.Parallel(n_jobs=n_jobs)(joblib.delayed(objective)(c) for c in opposition_population)
+    opposition_scores = utils.compute_objective(opposition_population, objective, n_jobs)
 
     # computes the empty space population
     samples = np.concatenate((random_population, opposition_population), axis=0)
@@ -146,7 +150,8 @@ lr:float=0.01, k='auto', seed:int|None=None):
     #empty_population = random_population
 
     # compute the fitness of the empty population
-    empty_scores = joblib.Parallel(n_jobs=n_jobs)(joblib.delayed(objective)(c) for c in empty_population)
+    #empty_scores = joblib.Parallel(n_jobs=n_jobs)(joblib.delayed(objective)(c) for c in empty_population)
+    empty_scores = utils.compute_objective(empty_population, objective, n_jobs)
 
     # merge all scores and populations
     scores = random_scores + opposition_scores + empty_scores

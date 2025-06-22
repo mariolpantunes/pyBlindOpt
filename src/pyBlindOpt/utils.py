@@ -12,6 +12,8 @@ __status__ = 'Development'
 
 
 import math
+import joblib
+import pickle
 import numpy as np
 
 
@@ -76,6 +78,7 @@ def global_distances(samples:np.ndarray)->np.ndarray:
         distances[i] = dist
     return distances
 
+
 def score_2_probs(scores:np.ndarray)->np.ndarray:
     total = np.sum(scores)
     norm_scores = scores/total
@@ -83,3 +86,23 @@ def score_2_probs(scores:np.ndarray)->np.ndarray:
     total = np.sum(norm_scores)
     norm_scores = norm_scores/total
     return norm_scores
+
+
+def is_picklable(obj):
+  try:
+    pickle.dumps(obj)
+  except TypeError:
+    return False
+  return True
+
+
+def vectorized_evaluate(inputs, function):
+    return np.apply_along_axis(function, axis=1, arr=inputs)
+
+
+def compute_objective(population, function, n_jobs:int=-1):
+    if is_picklable(function):
+        obj_all = joblib.Parallel(n_jobs=n_jobs)(joblib.delayed(function)(c) for c in population)
+    else:
+        vectorized_evaluate(population, function)
+    return obj_all

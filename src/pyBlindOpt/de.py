@@ -191,7 +191,8 @@ debug:bool=False, verbose:bool=False, seed:int=42) -> tuple:
         pop = bounds[:, 0] + (np.random.rand(n_pop, len(bounds)) * (bounds[:, 1] - bounds[:, 0]))
         pop = [utils.check_bounds(p, bounds) for p in pop]
         # evaluate initial population of candidate solutions
-        obj_all = joblib.Parallel(n_jobs=n_jobs, backend='loky')(joblib.delayed(objective_cache)(c) for c in pop)
+        #obj_all = joblib.Parallel(n_jobs=n_jobs, backend='loky')(joblib.delayed(objective_cache)(c) for c in pop)
+        obj_all = utils.compute_objective(pop, objective_cache, n_jobs)
         # improve the quality of the initial solutions (avoid initial solutions with inf cost)
         r = 0
         while any(math.isinf(i) for i in obj_all) and r < rt:
@@ -199,7 +200,8 @@ debug:bool=False, verbose:bool=False, seed:int=42) -> tuple:
                 if math.isinf(obj_all[i]):
                     pop = bounds[:, 0] + (np.random.rand(n_pop, len(bounds)) * (bounds[:, 1] - bounds[:, 0]))
                     pop = [utils.check_bounds(p, bounds) for p in pop]
-            obj_all = joblib.Parallel(n_jobs=n_jobs, backend='loky')(joblib.delayed(objective_cache)(c) for c in pop)
+            #obj_all = joblib.Parallel(n_jobs=n_jobs, backend='loky')(joblib.delayed(objective_cache)(c) for c in pop)
+            obj_all = utils.compute_objective(pop, objective_cache, n_jobs)
             r += 1
         # if after R repetitions it still has inf. cost
         if any(math.isinf(i) for i in obj_all):
@@ -213,7 +215,8 @@ debug:bool=False, verbose:bool=False, seed:int=42) -> tuple:
         # overwrite the n_pop with the length of the given population
         n_pop = len(population)
         # evaluate initial population of candidate solutions
-        obj_all = joblib.Parallel(n_jobs=n_jobs, backend='loky')(joblib.delayed(objective_cache)(c) for c in pop)
+        #obj_all = joblib.Parallel(n_jobs=n_jobs, backend='loky')(joblib.delayed(objective_cache)(c) for c in pop)
+        obj_all = utils.compute_objective(pop, objective_cache, n_jobs)
 
     # find the best performing vector of initial population
     best_vector = pop[np.argmin(obj_all)]
@@ -248,7 +251,8 @@ debug:bool=False, verbose:bool=False, seed:int=42) -> tuple:
             offspring.append(trial)
         # check that lower and upper bounds are retained after mutation and crossover
         offspring = [utils.check_bounds(trial, bounds) for trial in offspring]
-        obj_trial = joblib.Parallel(n_jobs=n_jobs, backend='loky')(joblib.delayed(objective_cache)(c) for c in offspring)
+        #obj_trial = joblib.Parallel(n_jobs=n_jobs, backend='loky')(joblib.delayed(objective_cache)(c) for c in offspring)
+        obj_trial = utils.compute_objective(offspring, objective_cache, n_jobs)
 
         # iterate over all candidate solutions
         for j in range(n_pop):

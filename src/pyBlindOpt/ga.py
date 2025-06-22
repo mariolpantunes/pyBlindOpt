@@ -171,7 +171,8 @@ cached:bool=False, debug:bool=False, verbose:bool=False, seed:int=42) -> tuple:
         n_pop = len(population)
 
     # keep track of best solution
-    scores = joblib.Parallel(n_jobs=n_jobs)(joblib.delayed(objective_cache)(c) for c in pop)
+    #scores = joblib.Parallel(n_jobs=n_jobs)(joblib.delayed(objective_cache)(c) for c in pop)
+    scores = utils.compute_objective(pop, objective_cache, n_jobs)
     best_eval = min(scores)
     best = pop[scores.index(best_eval)]
     
@@ -187,7 +188,8 @@ cached:bool=False, debug:bool=False, verbose:bool=False, seed:int=42) -> tuple:
     # enumerate generations
     for epoch in tqdm.tqdm(range(n_iter), disable=not verbose):
         # evaluate all candidates in the population
-        scores = joblib.Parallel(n_jobs=n_jobs)(joblib.delayed(objective_cache)(c) for c in pop)
+        #scores = joblib.Parallel(n_jobs=n_jobs)(joblib.delayed(objective_cache)(c) for c in pop)
+        scores = utils.compute_objective(pop, objective_cache, n_jobs)
 
         # check for new best solution
         best_eval = min(scores)

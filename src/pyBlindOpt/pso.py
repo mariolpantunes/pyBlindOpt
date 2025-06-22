@@ -87,7 +87,8 @@ n_jobs:int=-1, cached=False, debug=False, verbose=False, seed:int=42) -> tuple:
 
     # Initialize data
     pbest = x
-    pbest_obj = joblib.Parallel(n_jobs=n_jobs)(joblib.delayed(objective_cache)(c) for c in pbest)
+    #pbest_obj = joblib.Parallel(n_jobs=n_jobs)(joblib.delayed(objective_cache)(c) for c in pbest)
+    pbest_obj = utils.compute_objective(pbest, objective_cache, n_jobs)
     #print(f'Pbest Obj {pbest_obj}')
     gbest_obj = min(pbest_obj)
     #print(f'gbest_obj: {gbest_obj}')
@@ -109,7 +110,8 @@ n_jobs:int=-1, cached=False, debug=False, verbose=False, seed:int=42) -> tuple:
         # Update X
         x = [x[i]+v[i] for i in range(n_pop)]
         x = [utils.check_bounds(p, bounds) for p in x]
-        obj = joblib.Parallel(n_jobs=n_jobs)(joblib.delayed(objective_cache)(c) for c in x)
+        #obj = joblib.Parallel(n_jobs=n_jobs)(joblib.delayed(objective_cache)(c) for c in x)
+        obj = utils.compute_objective(x, objective_cache, n_jobs)
         # replace personal best
         # iterate over all candidate solutions
         for j in range(n_pop):

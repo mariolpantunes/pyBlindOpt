@@ -12,11 +12,14 @@ The code was optimized to a certain degree but was made for teaching purposes.
 Please consider other libraries if you are looking for a stable implementation, such as [pymoo](https://pymoo.org/).
 Regardless, any reported issues will be fixed as possible.
 '''
-import pyBlindOpt.de
-import pyBlindOpt.ga
-import pyBlindOpt.gwo
-import pyBlindOpt.hc
-import pyBlindOpt.init
-import pyBlindOpt.pso
-import pyBlindOpt.sa
-import pyBlindOpt.utils
+import pyBlindOpt.callback as callback
+import pyBlindOpt.de as de
+import pyBlindOpt.egwo as egwo
+import pyBlindOpt.functions as functions
+import pyBlindOpt.ga as ga
+import pyBlindOpt.gwo as gwo
+import pyBlindOpt.hc as hc
+import pyBlindOpt.init as init
+import pyBlindOpt.pso as pso
+import pyBlindOpt.sa as sa
+import pyBlindOpt.utils as utils

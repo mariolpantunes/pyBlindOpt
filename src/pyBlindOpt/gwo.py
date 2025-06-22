@@ -75,7 +75,8 @@ cached=False, debug=False, verbose=False, seed:int=42) -> tuple:
         n_pop = len(population)
     
     # compute the fitness and find the alfa, beta, gamma wolves
-    scores = joblib.Parallel(n_jobs=n_jobs)(joblib.delayed(objective_cache)(c) for c in pop)
+    #scores = joblib.Parallel(n_jobs=n_jobs)(joblib.delayed(objective_cache)(c) for c in pop)
+    scores = utils.compute_objective(pop, objective_cache, n_jobs)
     alfa_score, beta_score, gamma_score = sorted(scores)[0:3]
     alfa_wolf = pop[scores.index(alfa_score)]
     beta_wolf = pop[scores.index(beta_score)]
@@ -108,7 +109,8 @@ cached=False, debug=False, verbose=False, seed:int=42) -> tuple:
         offspring = [utils.check_bounds(trial, bounds) for trial in offspring]
 
         # compute the fitness and update the population
-        scores_offspring = joblib.Parallel(n_jobs=n_jobs)(joblib.delayed(objective_cache)(c) for c in offspring)
+        #scores_offspring = joblib.Parallel(n_jobs=n_jobs)(joblib.delayed(objective_cache)(c) for c in offspring)
+        scores_offspring = utils.compute_objective(offspring, objective_cache, n_jobs)
         for i in range(n_pop):
             if scores_offspring[i] < scores[i]:
                 pop[i] = offspring[i]
