@@ -104,5 +104,5 @@ def compute_objective(population, function, n_jobs:int=-1):
     if is_picklable(function):
         obj_all = joblib.Parallel(n_jobs=n_jobs)(joblib.delayed(function)(c) for c in population)
     else:
-        vectorized_evaluate(population, function)
+        obj_all = vectorized_evaluate(population, function)
     return obj_all
