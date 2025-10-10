@@ -27,7 +27,7 @@ class LRPSO:
         y_hat = self._f(X, w)
         return np.mean(np.power((y-y_hat.flatten()), 2))
 
-    def fit(self, X, y, n_pop=10, iter=300, verbose=True):
+    def fit(self, X, y, n_pop=30, iter=100, verbose=False):
         bounds = np.asarray([(-50.0, 50.0), (-50.0, 50.0)])
         population = init.oblesa(lambda w: self._cost(X,y,w), bounds, n_pop=n_pop)
         #print(f'Population = {population}')
@@ -59,11 +59,7 @@ class TestLR(unittest.TestCase):
 
         lr = LRPSO()
         lr.fit(x, y)
-        #print(f'LR {lr.params()}')
-        y_hat = lr.predict(x)
-        cost = rmse(y, y_hat)
-        #print(f'RMSE = {cost}')
-        self.assertTrue(cost < 8)
+        self.assertLess(rmse(y, lr.predict(x)), 8.0)
 
 if __name__ == '__main__':
     unittest.main()
