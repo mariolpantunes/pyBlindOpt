@@ -24,7 +24,7 @@ git+https://github.com/mariolpantunes/pyBlindOpt@main#egg=pyBlindOpt
 Or add the following line to the requirements.txt file:
 
 ```bash
-pyBlindOpt>=0.1.3.5
+pyBlindOpt>=0.1.3.12
 ```
 
 ## Documentation

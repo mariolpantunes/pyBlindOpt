@@ -89,11 +89,13 @@ def score_2_probs(scores:np.ndarray)->np.ndarray:
 
 
 def is_picklable(obj):
-  try:
-    pickle.dumps(obj)
-  except TypeError:
-    return False
-  return True
+    try:
+        pickle.dumps(obj)
+    except TypeError:
+        return False
+    except AttributeError:
+        return True
+    return True
 
 
 def vectorized_evaluate(inputs, function):
