@@ -56,7 +56,7 @@ def get_random_solution(bounds:np.ndarray) -> np.ndarray:
 def scale(arr, min_val=None, max_val=None):
     if min_val is None:
         min_val = min(arr)
-    
+
     if max_val is None:
         max_val = max(arr)
 
@@ -88,23 +88,10 @@ def score_2_probs(scores:np.ndarray)->np.ndarray:
     return norm_scores
 
 
-def is_picklable(obj):
-    try:
-        pickle.dumps(obj)
-    except TypeError:
-        return False
-    except AttributeError:
-        return True
-    return True
-
-
-def vectorized_evaluate(inputs, function):
-    return np.apply_along_axis(function, axis=1, arr=inputs)
-
-
 def compute_objective(population, function, n_jobs:int=-1):
-    if is_picklable(function):
-        obj_all = joblib.Parallel(n_jobs=n_jobs)(joblib.delayed(function)(c) for c in population)
-    else:
-        obj_all = list(vectorized_evaluate(population, function))
+    try:
+        obj_all = joblib.Parallel(backend='loky', n_jobs=n_jobs)(joblib.delayed(function)(c) for c in population)
+    except Exception as e:
+        #obj_all = list(vectorized_evaluate(population, function))
+        obj_all = joblib.Parallel(backend='threading', n_jobs=n_jobs)(joblib.delayed(function)(c) for c in population)
     return obj_all
