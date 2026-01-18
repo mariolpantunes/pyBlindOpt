@@ -14,49 +14,136 @@ import pyBlindOpt.functions as functions
 
 
 class TestInit(unittest.TestCase):
+    
+    def setUp(self):
+        # Create a shared random generator and sampler for tests requiring them
+        self.rng = np.random.default_rng(42)
+        self.sampler = utils.RandomSampler(self.rng)
+
+    # --- Random Initialization Tests ---
     def test_random_00(self):
         bounds = np.asarray([[-3.0, 5.0]])
-        population = init.random(bounds=bounds, n_pop=10, seed=42)
-        self.assertEqual(utils.assert_bounds(population, bounds), True)
-    
+        # Use the explicit get_initial_population wrapper or the sampler directly
+        # Assuming init.random maps to get_initial_population or similar
+        population = init.get_initial_population(10, bounds, self.sampler)
+        self.assertTrue(utils.assert_bounds(population, bounds))
+        self.assertEqual(population.shape, (10, 1))
+
     def test_random_01(self):
         bounds = np.asarray([[-3.0, 5.0], [-5.0, 3.0]])
-        population = init.random(bounds=bounds, n_pop=10, seed=42)
-        self.assertEqual(utils.assert_bounds(population, bounds), True)
+        population = init.get_initial_population(10, bounds, self.sampler)
+        self.assertTrue(utils.assert_bounds(population, bounds))
+        self.assertEqual(population.shape, (10, 2))
 
-    def test_opposition_00(self):
+    # --- Opposition Based Tests ---
+    def test_opposition_list_input(self):
+        """Test with explicit list/array input to verify mathematical correctness"""
         bounds = np.asarray([[-3.0, 5.0]])
-        population = [np.array([-2]), np.array([4.7])]
-        result = init.opposition_based(functions.sphere, bounds, population=population)
-        desired = [np.array([-2]), np.array([-2.7])]
-        self.assertEqual(result, desired)
+        # Input: [-2], [4.7]
+        # Opposites: (-3+5) - (-2) = 4; (-3+5) - 4.7 = -2.7
+        # Sphere function: 0 is best.
+        # Scores:
+        # P1: -2 (sq=4), P2: 4.7 (sq=22.09)
+        # O1: 4 (sq=16), O2: -2.7 (sq=7.29)
+        # Sorted Best 2: P1 (-2), O2 (-2.7) -> Wait, Sphere minimizes.
+        # Best fitness: 4 (P1), 7.29 (O2).
+        
+        population = np.array([[-2.0], [4.7]])
+        result = init.opposition_based(functions.sphere, bounds, population=population, n_pop=2)
+        
+        # We expect the algorithm to pick the best 2 from the pool of 4
+        # Pool: [-2.0], [4.7], [4.0], [-2.7]
+        # Scores: 4.0, 22.09, 16.0, 7.29
+        # Best two: -2.0 and -2.7
+        
+        # Note: Order might vary depending on implementation (sort vs argpartition)
+        # We verify membership
+        expected_values = {-2.0, -2.7}
+        result_values = set(result.flatten())
+        
+        self.assertTrue(expected_values.issubset(result_values))
 
-    def test_opposition_00(self):
+    def test_opposition_sampler_input(self):
+        """Test passing a Sampler object"""
         bounds = np.asarray([[-3.0, 5.0], [-5.0, 3.0]])
-        population = [np.array([-2, 2.5]), np.array([4.7, -2.5])]
-        result = init.opposition_based(functions.sphere, bounds, population=population)
-        desired = [np.array([-2.7, 0.5]), np.array([-2, 2.5])]
-        np.testing.assert_array_almost_equal(result, desired, decimal=1)
-    
+        result = init.opposition_based(functions.sphere, bounds, population=self.sampler, n_pop=10, seed=42)
+        self.assertTrue(utils.assert_bounds(result, bounds))
+        self.assertEqual(result.shape, (10, 2))
+
+    # --- Round Init Tests ---
     def test_round_init_00(self):
         bounds = np.asarray([[-3.0, 5.0]])
-        population = init.round_init(functions.sphere, bounds, n_pop=10, n_rounds=10)
-        self.assertEqual(utils.assert_bounds(population, bounds), True)
+        # Updated to pass the required 'sampler' argument
+        population = init.round_init(functions.sphere, bounds, sampler=self.sampler, n_pop=10, n_rounds=3)
+        self.assertTrue(utils.assert_bounds(population, bounds))
+        self.assertEqual(population.shape, (10, 1))
 
-    def test_round_init_01(self):
+    def test_round_init_diversity(self):
+        """Ensure diversity weighting doesn't crash execution"""
+        bounds = np.asarray([[-10, 10], [-10, 10]])
+        # High diversity weight
+        population = init.round_init(
+            functions.sphere, bounds, sampler=self.sampler, 
+            n_pop=10, n_rounds=5, diversity_weight=0.9
+        )
+        self.assertEqual(population.shape, (10, 2))
+
+    # --- OBLESA Tests ---
+    def test_oblesa_shape_and_bounds(self):
+        """Basic sanity check for OBLESA output"""
         bounds = np.asarray([[-3.0, 5.0], [-5.0, 3.0]])
-        population = init.round_init(functions.sphere, bounds, n_pop=10, n_rounds=10)
-        self.assertEqual(utils.assert_bounds(population, bounds), True)
-
-    def test_oblesa_00(self):
-        bounds = np.asarray([[-3.0, 5.0]])
         population = init.oblesa(functions.sphere, bounds, n_pop=10, seed=42)
-        self.assertEqual(utils.assert_bounds(population, bounds), True)
-    
-    def test_oblesa_01(self):
-        bounds = np.asarray([[-3.0, 5.0], [-5.0, 3.0]])
-        population = init.oblesa(functions.sphere, bounds, n_pop=10)
-        self.assertEqual(utils.assert_bounds(population, bounds), True)
+        
+        self.assertTrue(utils.assert_bounds(population, bounds))
+        self.assertEqual(population.shape, (10, 2))
+
+    def test_oblesa_determinism(self):
+        """Verify that passing a seed produces identical results"""
+        bounds = np.asarray([[-10, 10], [-10, 10]])
+        
+        # Run 1
+        pop1 = init.oblesa(functions.sphere, bounds, n_pop=5, seed=12345, epochs=10)
+        # Run 2
+        pop2 = init.oblesa(functions.sphere, bounds, n_pop=5, seed=12345, epochs=10)
+        
+        np.testing.assert_array_almost_equal(pop1, pop2, decimal=6, 
+            err_msg="OBLESA should be deterministic when seed is provided")
+
+    def test_oblesa_polymorphism_sampler(self):
+        """Test OBLESA with a Sampler instance passed as population"""
+        bounds = np.asarray([[-5, 5]])
+        
+        # Create a specific sampler
+        my_sampler = utils.RandomSampler(np.random.default_rng(99))
+        
+        # Pass it to OBLESA
+        pop = init.oblesa(functions.sphere, bounds, population=my_sampler, n_pop=8, epochs=5)
+        
+        self.assertEqual(pop.shape, (8, 1))
+        self.assertTrue(utils.assert_bounds(pop, bounds))
+
+    def test_oblesa_polymorphism_array(self):
+        """Test OBLESA with an existing ndarray passed as population"""
+        bounds = np.asarray([[-10, 10]])
+        # User provides specific starting guesses
+        initial_guess = np.array([[0.5], [-0.5], [8.0]])
+        
+        # n_pop should adapt to input size (3)
+        pop = init.oblesa(functions.sphere, bounds, population=initial_guess, epochs=5)
+        
+        self.assertEqual(pop.shape, (3, 1))
+        self.assertTrue(utils.assert_bounds(pop, bounds))
+
+    def test_oblesa_metric_kwargs(self):
+        """Test passing custom metric parameters (e.g., sigma for gaussian)"""
+        bounds = np.asarray([[-5, 5], [-5, 5]])
+        
+        # Should run without error using gaussian metric and custom sigma
+        pop = init.oblesa(
+            functions.sphere, bounds, n_pop=5, epochs=5,
+            metric="gaussian", sigma=0.5
+        )
+        self.assertEqual(pop.shape, (5, 2))
 
 
 if __name__ == '__main__':

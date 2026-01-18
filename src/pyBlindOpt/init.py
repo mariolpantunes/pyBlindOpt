@@ -11,154 +11,128 @@ __version__ = '0.1'
 __email__ = 'mariolpantunes@gmail.com'
 __status__ = 'Development'
 
-
-import heapq
-import joblib
+import ess
 import logging
 import numpy as np
-import random as rnd
-import ess.ess as ess
 import pyBlindOpt.utils as utils
 
+import collections.abc
 
 logger = logging.getLogger(__name__)
 
 
-#TODO: replace lists with numpy arrays for improved speedup
-def random(bounds:np.ndarray, n_pop:int=30, seed:int=None) -> list:
-    '''
-    '''
-
-    # set the random seed
-    if seed is not None:
-        np.random.seed(seed)
-
-    # generate a random population with solutions within bounds
-    #return [utils.get_random_solution(bounds) for _ in range(n_pop)]
-    population = np.empty(shape=(n_pop, bounds.shape[0]))
-    for i in range(0, n_pop):
-        population[i] = utils.get_random_solution(bounds)
-    return population
+def get_initial_population(
+    n_pop: int, bounds: np.ndarray, sampler: utils.Sampler
+) -> np.ndarray:
+    """
+    Helper to generate the full population matrix (N_pop x D) at once.
+    """
+    return sampler.sample(n_pop, bounds)
 
 
-def opposition_based(objective:callable, bounds:np.ndarray,
-population:np.ndarray=None, n_pop:int=20,
-n_jobs:int=-1, seed:int=None) -> list:
-    '''
-    '''
+def opposition_based(objective:collections.abc.Callable, 
+    bounds:np.ndarray, population:np.ndarray|utils.Sampler|None = None,
+    n_pop:int=10, n_jobs:int=1, seed:int|np.random.Generator|None = 42) -> np.ndarray:
 
-    # set the random seed
-    if seed is not None:
-        np.random.seed(seed)
+    rng = np.random.default_rng(seed) if not isinstance(seed, np.random.Generator) else seed
 
-    # check if the initial population is given
-    if population is None:
-        # initial population of random bitstring
-        pop = [utils.get_random_solution(bounds) for _ in range(n_pop)]
+    if isinstance(population, utils.Sampler):
+        pop = get_initial_population(n_pop, bounds, population)
+    elif isinstance(population, np.ndarray):
+        pop = utils.check_bounds(population, bounds)
+        n_pop = pop.shape[0]
+    elif population is None:
+        sampler = utils.RandomSampler(rng)
+        pop = get_initial_population(n_pop, bounds, sampler)
     else:
-        # initialise population of candidate and validate the bounds
-        pop = [utils.check_bounds(p, bounds) for p in population]
-        # overwrite the n_pop with the length of the given population
-        n_pop = len(population)
+        raise ValueError("Population must be None, ndarray, or PopulationSampler.")
 
     # compute the fitness of the initial population
-    scores = joblib.Parallel(n_jobs=n_jobs)(joblib.delayed(objective)(c) for c in pop)
     scores = utils.compute_objective(pop, objective, n_jobs)
 
     # compute the opposition population
-    a = bounds[:,0]
-    b = bounds[:,1]
-    pop_opposition = [a+b-p for p in pop]
-
+    lower = bounds[:, 0]
+    upper = bounds[:, 1]
+    pop_opp = utils.check_bounds(lower + upper - pop, bounds)
+    
     # compute the fitness of the opposition population
-    #scores_opposition = joblib.Parallel(n_jobs=n_jobs)(joblib.delayed(objective)(c) for c in pop_opposition)
-    scores_opposition = utils.compute_objective(pop_opposition, objective, n_jobs)
+    scores_opp = utils.compute_objective(pop_opp, objective, n_jobs)
 
     # merge the results and filter
-    results = list(zip(scores, pop)) + list(zip(scores_opposition, pop_opposition))
-    results.sort(key=lambda x: x[0])
-
-    return [results[i][1] for i in range (n_pop)]
-
-
-def round_init(objective:callable, bounds:np.ndarray,
-n_pop:int=30, n_rounds:int=3, n_jobs:int=-1, seed:int=None) -> list:
-
-    # set the random seed
-    if seed is not None:
-        np.random.seed(seed)
-
-    # generate several possible solutions
-    samples = []
-    fitness = []
-    for i in range(n_rounds):
-        sample = [utils.get_random_solution(bounds) for _ in range(n_pop)]
-        #sample_fitness = joblib.Parallel(n_jobs=n_jobs)(joblib.delayed(objective)(c) for c in sample)
-        sample_fitness = utils.compute_objective(sample, objective, n_jobs)
-        samples.extend(sample)
-        fitness.extend(sample_fitness)
-    fitness = np.array(fitness)
-
-    # Additional code - get best n_pop points that are far away from each other
-    # Optimal solution with pareto front too slow, use a simple heuristic
-    # 1. Compute the global distance from one sample to all the others
-    distances = utils.global_distances(samples)
-
-    # 2. Invert the distance (since the want to maximize distance)
-    max_distances = max(distances)
-    inv_distances = max_distances - distances
-
-    # 3. Scale booth inv_distance and fitness (so the range have less impact on the selection)
-    scale_inv_dist, _, _ = utils.scale(inv_distances)
-    scale_fitness, _, _ = utils.scale(fitness)
-
-    # 4. Build a score metric that is the addition
-    scores = scale_inv_dist + scale_fitness
-
-    # 5. Random sample the population using the scores as weights
-    probs = utils.score_2_probs(scores)
-
-    return np.array(rnd.choices(population=samples, weights=probs, k=n_pop))
+    combined_pop = np.vstack((pop, pop_opp))
+    combined_scores = np.concatenate((scores, scores_opp))
+    top_k_indices = np.argpartition(combined_scores, n_pop)[:n_pop] 
+            
+    return combined_pop[top_k_indices]
 
 
-def oblesa(objective:callable, bounds:np.ndarray,
-n_pop:int=30, n_jobs:int=-1, epochs:int=64,
-lr:float=0.01, k='auto', seed:int|None=None):
+def round_init(objective:collections.abc.Callable, bounds:np.ndarray, 
+    sampler: utils.Sampler, n_pop:int=10, n_rounds:int=3, 
+    diversity_weight: float = 0.5, n_jobs:int=1) -> np.ndarray:
 
-    # set the random seed
-    if seed is not None:
-        np.random.seed(seed)
-        rnd.seed(seed)
+    total_candidates = n_pop * n_rounds
+    full_pool = sampler.sample(total_candidates, bounds)
+    
+    fitness = np.zeros(total_candidates)
+    for i in range(0, total_candidates, n_pop):
+        batch = full_pool[i : i + n_pop]
+        fitness[i : i + n_pop] = utils.compute_objective(batch, objective, n_jobs)
+    
+    prob_fitness = utils.score_2_probs(fitness)
+    
+    if diversity_weight > 0:
+        crowding = utils.compute_crowding_distance(full_pool)
+        prob_dist = utils.score_2_probs(-crowding)
+    else:
+        prob_dist = np.zeros_like(prob_fitness)
 
-    # get a initial random population
-    random_population = random(bounds=bounds, n_pop=n_pop, seed=seed)
+    final_probs = (1.0 - diversity_weight) * prob_fitness + diversity_weight * prob_dist
+    # Normalize (Floating point math might make sum slightly != 1.0)
+    final_probs /= np.sum(final_probs)
+    
+    selected_indices = sampler.rng.choice( total_candidates, 
+        size=n_pop, replace=False, p=final_probs)
+    
+    return full_pool[selected_indices]
 
-    # compute the fitness of the initial population
-    #random_scores = joblib.Parallel(n_jobs=n_jobs)(joblib.delayed(objective)(c) for c in random_population)
-    random_scores = utils.compute_objective(random_population, objective, n_jobs)
 
-    # compute the opposition population
-    a = bounds[:,0]
-    b = bounds[:,1]
-    opposition_population = [a+b-p for p in random_population]
+def oblesa(objective:collections.abc.Callable, bounds:np.ndarray,
+    population:np.ndarray|utils.Sampler|None = None, n_pop:int=10, n_jobs:int=1, 
+    epochs:int=1024, lr:float=0.01, search_mode: str = "radius", k:int|None=None, 
+    decay: float = 0.9, batch_size: int = 50, tol: float = 1e-3, radius: float | None = None,
+    border_strategy: str = "repulsive", metric: str | collections.abc.Callable = "softened_inverse",
+    seed:int|np.random.Generator|None = 42, **metric_kwargs) -> np.ndarray:
 
-    # compute the fitness of the opposition population
-    # opposition_scores = joblib.Parallel(n_jobs=n_jobs)(joblib.delayed(objective)(c) for c in opposition_population)
-    opposition_scores = utils.compute_objective(opposition_population, objective, n_jobs)
+    rng = np.random.default_rng(seed) if not isinstance(seed, np.random.Generator) else seed
 
-    # computes the empty space population
-    samples = np.concatenate((random_population, opposition_population), axis=0)
-    empty_population = ess.esa(samples, bounds, n=n_pop, epochs=epochs, lr=lr, k=k, seed=seed)
-    #empty_population = random_population
+    if isinstance(population, utils.Sampler):
+        ran_pop = get_initial_population(n_pop, bounds, population)
+    elif isinstance(population, np.ndarray):
+        ran_pop = utils.check_bounds(population, bounds)
+        n_pop = ran_pop.shape[0]
+    elif population is None:
+        sampler = utils.RandomSampler(rng)
+        ran_pop = get_initial_population(n_pop, bounds, sampler)
+    else:
+        raise ValueError("Population must be None, ndarray, or PopulationSampler.")
 
-    # compute the fitness of the empty population
-    # empty_scores = joblib.Parallel(n_jobs=n_jobs)(joblib.delayed(objective)(c) for c in empty_population)
-    empty_scores = utils.compute_objective(empty_population, objective, n_jobs)
+    lower, upper = bounds[:, 0], bounds[:, 1]
+    opp_pop = utils.check_bounds(lower + upper - ran_pop, bounds)
 
-    # merge all scores and populations
-    scores = random_scores + opposition_scores + empty_scores
-    population = np.concatenate((random_population, opposition_population, empty_population), axis=0)
+    combined_samples = np.vstack((ran_pop, opp_pop))
+    emp_pop = ess.esa(combined_samples, bounds, n=2*n_pop, epochs=epochs, lr=lr, k=k, 
+        decay=decay, batch_size=batch_size, radius=radius, search_mode=search_mode,
+        border_strategy=border_strategy, tol=tol, seed=rng, metric=metric, **metric_kwargs)
+    
+    population = np.vstack((ran_pop, opp_pop, emp_pop))
+    scores = np.zeros(population.shape[0])
+    
+    for i in range(0, population.shape[0], n_pop):
+        end = min(i + n_pop, population.shape[0])
+        batch = population[i : end]
+        scores[i : end] = utils.compute_objective(batch, objective, n_jobs)
 
     probs = utils.score_2_probs(scores)
+    idx = rng.choice(population.shape[0], size=n_pop, replace=False, p=probs)
 
-    return np.array(rnd.choices(population=population, weights=probs, k=n_pop))
+    return population[idx]
