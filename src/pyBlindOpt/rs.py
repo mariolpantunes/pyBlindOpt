@@ -1,137 +1,170 @@
 # coding: utf-8
 
-'''
-Random Search (RS) is a family of numerical optimization methods that do not require 
-the gradient of the problem to be optimized, and RS can hence be used on functions 
-that are not continuous or differentiable. Such methods are commonly known as 
-metaheuristics as they make few or no assumptions about the problem being optimized.
-'''
+"""
+Random Search (RS) optimization implementation.
 
+This module implements a memoryless metaheuristic that explores the search space purely
+stochastically. It serves as a baseline to benchmark the performance of "intelligent"
+optimizers.
 
-__author__ = 'Mário Antunes'
-__version__ = '0.1'
-__email__ = 'mariolpantunes@gmail.com'
-__status__ = 'Development'
+**Mathematical Formulation:**
+At every iteration $k$, the previous population is discarded, and a new set of solutions
+$X_k$ is drawn from the search space $\\Omega$ according to a sampling strategy (e.g., Uniform, LHS).
+$$ X_{k} \\sim \\text{Sampler}(\\Omega) $$
+$$ x_{best} = \\min(X_0 \\cup X_1 \\cup ... \\cup X_k) $$
 
+**Analogy:**
+Like paratroopers being dropped into a foggy landscape at completely random coordinates
+every hour. They report their altitude, and the mission control simply remembers the
+lowest point anyone has ever landed on. They do not learn from previous drops.
+"""
 
-import tqdm
-import joblib
+__author__ = "Mário Antunes"
+__license__ = "MIT"
+__version__ = "0.2"
+__email__ = "mario.antunes@ua.com"
+__url__ = "https://github.com/mariolpantunes/pyblindopt"
+__status__ = "Development"
+
+import collections.abc
 import logging
-import tempfile
-import statistics
+
 import numpy as np
+
+import pyBlindOpt.init as init  # Required for population generation
 import pyBlindOpt.utils as utils
-
-
-from collections.abc import Sequence
-
+from pyBlindOpt.optimizer import Optimizer
 
 logger = logging.getLogger(__name__)
 
 
-def random_search(objective:callable, bounds:np.ndarray, population:list=None, 
-callback:"Sequence[callable] | callable"=None, n_iter:int=100, n_pop:int=10, 
-n_jobs:int=-1, cached:bool=False, debug:bool=False, verbose:bool=False, 
-seed:int=42) -> tuple:
-    '''
-    Computes the Random Search optimization algorithm.
+class RandomSearch(Optimizer):
+    """
+    Random Search Optimizer.
+
+    Generates a completely new population at every iteration using a configured Sampler,
+    independent of previous results.
+    """
+
+    def _init_population(self, population, seed):
+        """
+        Initialization override.
+
+        Persists the `Sampler` instance derived from the seed to ensure consistent
+        sampling logic (e.g., Latin Hypercube) is used across all iterations,
+        not just the first one.
+        """
+        # 1. Store the sampler for reuse in _generate_offspring
+        if isinstance(seed, utils.Sampler):
+            self.sampler = seed
+        else:
+            # Default to RandomSampler using the optimizer's RNG
+            self.sampler = utils.RandomSampler(self.rng)
+
+        # 2. Call the Base class to actually generate the initial population
+        super()._init_population(population, seed)
+
+    def _initialize(self):
+        """
+        Initialization hook.
+
+        No internal state setup required for Random Search.
+        """
+        pass
+
+    def _update_iter_params(self, epoch: int):
+        """
+        Parameter update hook.
+
+        Random Search is memoryless and parameter-free; it does not change behavior over time.
+        """
+        pass
+
+    def _update_best(self, epoch: int):
+        """
+        Global best update.
+
+        Checks if the current random batch contains a solution better than the best
+        one seen so far across all previous batches.
+
+        Args:
+            epoch (int): Current iteration.
+        """
+        best_idx = np.argmin(self.scores)
+        if self.scores[best_idx] < self.best_score:
+            self.best_score = self.scores[best_idx]
+            self.best_pos = self.pop[best_idx].copy()
+
+    def _generate_offspring(self, epoch: int) -> np.ndarray:
+        """
+        Generates a new population.
+
+        Unlike other algorithms that perturb existing solutions, RS requests a
+        completely fresh batch from the sampler.
+
+        Returns:
+            np.ndarray: New random population.
+        """
+        return init.get_initial_population(self.n_pop, self.bounds, self.sampler)
+
+    def _selection(self, offspring: np.ndarray, offspring_scores: np.ndarray):
+        """
+        Unconditional Replacement.
+
+        The entire previous population is discarded and replaced by the new random batch.
+        No "survival of the fittest" logic applies between generations.
+
+        Args:
+            offspring (np.ndarray): New population.
+            offspring_scores (np.ndarray): Scores of new population.
+        """
+        self.pop = offspring
+        self.scores = offspring_scores
+
+
+def random_search(
+    objective: collections.abc.Callable,
+    bounds: np.ndarray,
+    population: np.ndarray | None = None,
+    callback: "list[collections.abc.Callable] | collections.abc.Callable | None" = None,
+    n_iter: int = 100,
+    n_pop: int = 10,
+    n_jobs: int = 1,
+    cached: bool = False,
+    debug: bool = False,
+    verbose: bool = False,
+    seed: int | np.random.Generator | utils.Sampler | None = None,
+) -> tuple:
+    """
+    Functional interface for Random Search.
 
     Args:
-        objective (callable): objective function used to evaluate the candidate solutions (lower is better)
-        bounds (np.ndarray): bounds that limit the search space
-        population (list): optional list of candidate solutions (default None)
-        callback (callable): callback function that is called at each epoch (deafult None)
-        n_iter (int): the number of iterations (default 100)
-        n_pop (int): the number of elements in the population (default 10)
-        n_jobs (int): number of concurrent jobs (default -1)
-        cached (bool): controls if the objective function is cached by joblib (default False)
-        debug (bool): controls if debug information is returned (default False)
-        verbose (bool): controls the usage of tqdm as a progress bar (default False)
-        seed (int): seed to init the random generator (default 42)
+        objective (Callable): Function to minimize.
+        bounds (np.ndarray): Search space bounds.
+        population (np.ndarray | None): Initial population (mostly unused except for shape inference).
+        callback (list | Callable | None): Callbacks.
+        n_iter (int): Number of iterations (drops).
+        n_pop (int): Number of samples per iteration.
+        n_jobs (int): Parallel jobs.
+        cached (bool): Enable caching.
+        debug (bool): Enable history.
+        verbose (bool): Show progress.
+        seed (int | Generator | Sampler | None): Sampling strategy.
 
     Returns:
-        tuple: the best solution
-    '''
-
-    # define the seed of the random generation
-    np.random.seed(seed)
-    
-    # cache the initial objective function
-    if cached:
-        # Cache from joblib
-        location = tempfile.gettempdir()
-        memory = joblib.Memory(location, verbose=0)
-        objective_cache = memory.cache(objective)
-    else:
-        objective_cache = objective
-    
-    # check if the initial population is given
-    if population is None:
-        # initialise population of candidate solutions randomly within the specified bounds
-        pop = [utils.get_random_solution(bounds) for _ in range(n_pop)]
-    else:
-        # initialise population of candidate and validate the bounds
-        pop = [utils.check_bounds(p, bounds) for p in population]
-        # overwrite the n_pop with the length of the given population
-        n_pop = len(population)
-    
-    # evaluate initial population of candidate solutions
-    obj_all = utils.compute_objective(pop, objective_cache, n_jobs)
-
-    # find the best performing vector of initial population
-    best_vector = pop[np.argmin(obj_all)]
-    best_obj = min(obj_all)
-    
-    # arrays to store the debug information
-    if debug:
-        obj_avg_iter = []
-        obj_best_iter = []
-        obj_worst_iter = []
-    
-    # run iterations of the algorithm
-    for epoch in tqdm.tqdm(range(n_iter), disable=not verbose):
-        # In Random Search, every iteration generates a completely new random population
-        # (excluding the global best if we wanted to be elitist, but pure RS is memoryless.
-        # However, to fit the framework, we generate n_pop new solutions every epoch).
-        pop = [utils.get_random_solution(bounds) for _ in range(n_pop)]
-        
-        # evaluate the new population
-        obj_all = utils.compute_objective(pop, objective_cache, n_jobs)
-
-        # find the best performing vector in this batch
-        current_best_obj = min(obj_all)
-        
-        # update global best if found
-        if current_best_obj < best_obj:
-            best_obj = current_best_obj
-            best_vector = pop[np.argmin(obj_all)]
-
-        ## Optional store the debug information
-        if debug:
-            # store best, worst and average cost for the current batch
-            obj_avg_iter.append(statistics.mean(obj_all))
-            # Note: For debug plots, we usually want the global best history, 
-            # but strictly this list tracks the "current iteration" stats. 
-            # We append the global best to keep consistency with other algos usually showing convergence.
-            obj_best_iter.append(best_obj) 
-            obj_worst_iter.append(max(obj_all))
-    
-        ## Optional execute the callback code
-        if callback is not None:
-            terminate = False
-            if isinstance(callback, Sequence):
-                terminate = any([c(epoch, obj_all, pop) for c in callback])
-            else:
-                terminate = callback(epoch, obj_all, pop)
-
-            if terminate:
-                break
-
-    # clean the cache
-    if cached:
-        memory.clear(warn=False)
-    
-    if debug:
-        return (best_vector, best_obj, (obj_best_iter, obj_avg_iter, obj_worst_iter))
-    else:
-        return (best_vector, best_obj)
+        tuple: (best_position, best_score).
+    """
+    optimizer = RandomSearch(
+        objective=objective,
+        bounds=bounds,
+        population=population,
+        callback=callback,
+        n_iter=n_iter,
+        n_pop=n_pop,
+        n_jobs=n_jobs,
+        cached=cached,
+        debug=debug,
+        verbose=verbose,
+        seed=seed,
+    )
+    return optimizer.optimize()

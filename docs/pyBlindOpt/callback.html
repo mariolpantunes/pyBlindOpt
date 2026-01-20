@@ -73,6 +73,33 @@
 
             </li>
             <li>
+                    <a class="class" href="#PatienceStopping">PatienceStopping</a>
+                            <ul class="memberlist">
+                        <li>
+                                <a class="function" href="#PatienceStopping.__init__">PatienceStopping</a>
+                        </li>
+                        <li>
+                                <a class="variable" href="#PatienceStopping.patience">patience</a>
+                        </li>
+                        <li>
+                                <a class="variable" href="#PatienceStopping.min_delta">min_delta</a>
+                        </li>
+                        <li>
+                                <a class="variable" href="#PatienceStopping.wait">wait</a>
+                        </li>
+                        <li>
+                                <a class="variable" href="#PatienceStopping.best_score">best_score</a>
+                        </li>
+                        <li>
+                                <a class="variable" href="#PatienceStopping.epoch">epoch</a>
+                        </li>
+                        <li>
+                                <a class="function" href="#PatienceStopping.callback">callback</a>
+                        </li>
+                </ul>
+
+            </li>
+            <li>
                     <a class="class" href="#CountEpochs">CountEpochs</a>
                             <ul class="memberlist">
                         <li>
@@ -80,6 +107,21 @@
                         </li>
                         <li>
                                 <a class="function" href="#CountEpochs.callback">callback</a>
+                        </li>
+                </ul>
+
+            </li>
+            <li>
+                    <a class="class" href="#ClampBounds">ClampBounds</a>
+                            <ul class="memberlist">
+                        <li>
+                                <a class="function" href="#ClampBounds.__init__">ClampBounds</a>
+                        </li>
+                        <li>
+                                <a class="variable" href="#ClampBounds.bounds">bounds</a>
+                        </li>
+                        <li>
+                                <a class="function" href="#ClampBounds.callback">callback</a>
                         </li>
                 </ul>
 
@@ -100,51 +142,163 @@
                     <h1 class="modulename">
 <a href="./../pyBlindOpt.html">pyBlindOpt</a><wbr>.callback    </h1>
 
-                        <div class="docstring"><p>Ready to use callbacks.</p>
+                        <div class="docstring"><p>Optimization Callback Utilities.</p>
+
+<p>Provides ready-to-use callbacks that can be injected into the <code>Optimizer</code> loop
+to modify behavior (e.g., Early Stopping) or inspect state (e.g., Logging).</p>
 </div>
 
                         <input id="mod-callback-view-source" class="view-source-toggle-state" type="checkbox" aria-hidden="true" tabindex="-1">
 
                         <label class="view-source-button" for="mod-callback-view-source"><span>View Source</span></label>
 
-                        <div class="pdoc-code codehilite"><pre><span></span><span id="L-1"><a href="#L-1"><span class="linenos"> 1</span></a><span class="c1"># coding: utf-8</span>
-</span><span id="L-2"><a href="#L-2"><span class="linenos"> 2</span></a>
-</span><span id="L-3"><a href="#L-3"><span class="linenos"> 3</span></a>
-</span><span id="L-4"><a href="#L-4"><span class="linenos"> 4</span></a><span class="sd">&#39;&#39;&#39;</span>
-</span><span id="L-5"><a href="#L-5"><span class="linenos"> 5</span></a><span class="sd">Ready to use callbacks.</span>
-</span><span id="L-6"><a href="#L-6"><span class="linenos"> 6</span></a><span class="sd">&#39;&#39;&#39;</span>
-</span><span id="L-7"><a href="#L-7"><span class="linenos"> 7</span></a>
-</span><span id="L-8"><a href="#L-8"><span class="linenos"> 8</span></a>
-</span><span id="L-9"><a href="#L-9"><span class="linenos"> 9</span></a><span class="n">__version__</span> <span class="o">=</span> <span class="s1">&#39;0.1&#39;</span>
-</span><span id="L-10"><a href="#L-10"><span class="linenos">10</span></a><span class="n">__email__</span> <span class="o">=</span> <span class="s1">&#39;mariolpantunes@gmail.com&#39;</span>
-</span><span id="L-11"><a href="#L-11"><span class="linenos">11</span></a><span class="n">__status__</span> <span class="o">=</span> <span class="s1">&#39;Development&#39;</span>
-</span><span id="L-12"><a href="#L-12"><span class="linenos">12</span></a>
-</span><span id="L-13"><a href="#L-13"><span class="linenos">13</span></a>
-</span><span id="L-14"><a href="#L-14"><span class="linenos">14</span></a><span class="k">class</span><span class="w"> </span><span class="nc">EarlyStopping</span><span class="p">:</span>
-</span><span id="L-15"><a href="#L-15"><span class="linenos">15</span></a>    
-</span><span id="L-16"><a href="#L-16"><span class="linenos">16</span></a>    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">threshold</span><span class="p">:</span><span class="nb">float</span><span class="o">=</span><span class="mf">0.0</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-</span><span id="L-17"><a href="#L-17"><span class="linenos">17</span></a>        <span class="bp">self</span><span class="o">.</span><span class="n">epoch</span> <span class="o">=</span> <span class="mi">0</span>
-</span><span id="L-18"><a href="#L-18"><span class="linenos">18</span></a>        <span class="bp">self</span><span class="o">.</span><span class="n">threshold</span> <span class="o">=</span> <span class="n">threshold</span>
-</span><span id="L-19"><a href="#L-19"><span class="linenos">19</span></a>    
-</span><span id="L-20"><a href="#L-20"><span class="linenos">20</span></a>    <span class="k">def</span><span class="w"> </span><span class="nf">callback</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">epoch</span><span class="p">:</span><span class="nb">int</span><span class="p">,</span> <span class="n">fitness</span><span class="p">:</span><span class="nb">list</span><span class="p">,</span> <span class="n">population</span><span class="p">:</span><span class="nb">list</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
-</span><span id="L-21"><a href="#L-21"><span class="linenos">21</span></a>        <span class="bp">self</span><span class="o">.</span><span class="n">epoch</span> <span class="o">=</span> <span class="n">epoch</span>
-</span><span id="L-22"><a href="#L-22"><span class="linenos">22</span></a>        
-</span><span id="L-23"><a href="#L-23"><span class="linenos">23</span></a>        <span class="n">best_fitness</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="n">fitness</span><span class="p">)</span>
-</span><span id="L-24"><a href="#L-24"><span class="linenos">24</span></a>        
-</span><span id="L-25"><a href="#L-25"><span class="linenos">25</span></a>        <span class="k">if</span> <span class="n">best_fitness</span> <span class="o">&lt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">threshold</span><span class="p">:</span>
-</span><span id="L-26"><a href="#L-26"><span class="linenos">26</span></a>            <span class="k">return</span> <span class="kc">True</span>
-</span><span id="L-27"><a href="#L-27"><span class="linenos">27</span></a>        <span class="k">else</span><span class="p">:</span>
-</span><span id="L-28"><a href="#L-28"><span class="linenos">28</span></a>            <span class="k">return</span> <span class="kc">False</span>
-</span><span id="L-29"><a href="#L-29"><span class="linenos">29</span></a>
-</span><span id="L-30"><a href="#L-30"><span class="linenos">30</span></a>
-</span><span id="L-31"><a href="#L-31"><span class="linenos">31</span></a><span class="k">class</span><span class="w"> </span><span class="nc">CountEpochs</span><span class="p">:</span>
-</span><span id="L-32"><a href="#L-32"><span class="linenos">32</span></a>    
-</span><span id="L-33"><a href="#L-33"><span class="linenos">33</span></a>    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-</span><span id="L-34"><a href="#L-34"><span class="linenos">34</span></a>        <span class="bp">self</span><span class="o">.</span><span class="n">epoch</span> <span class="o">=</span> <span class="mi">0</span>
-</span><span id="L-35"><a href="#L-35"><span class="linenos">35</span></a>        
-</span><span id="L-36"><a href="#L-36"><span class="linenos">36</span></a>    <span class="k">def</span><span class="w"> </span><span class="nf">callback</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">epoch</span><span class="p">:</span><span class="nb">int</span><span class="p">,</span> <span class="n">fitness</span><span class="p">:</span><span class="nb">list</span><span class="p">,</span> <span class="n">population</span><span class="p">:</span><span class="nb">list</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
-</span><span id="L-37"><a href="#L-37"><span class="linenos">37</span></a>        <span class="bp">self</span><span class="o">.</span><span class="n">epoch</span> <span class="o">+=</span> <span class="mi">1</span>
-</span><span id="L-38"><a href="#L-38"><span class="linenos">38</span></a>        <span class="k">return</span> <span class="kc">False</span>
+                        <div class="pdoc-code codehilite"><pre><span></span><span id="L-1"><a href="#L-1"><span class="linenos">  1</span></a><span class="c1"># coding: utf-8</span>
+</span><span id="L-2"><a href="#L-2"><span class="linenos">  2</span></a>
+</span><span id="L-3"><a href="#L-3"><span class="linenos">  3</span></a><span class="sd">&quot;&quot;&quot;</span>
+</span><span id="L-4"><a href="#L-4"><span class="linenos">  4</span></a><span class="sd">Optimization Callback Utilities.</span>
+</span><span id="L-5"><a href="#L-5"><span class="linenos">  5</span></a>
+</span><span id="L-6"><a href="#L-6"><span class="linenos">  6</span></a><span class="sd">Provides ready-to-use callbacks that can be injected into the `Optimizer` loop</span>
+</span><span id="L-7"><a href="#L-7"><span class="linenos">  7</span></a><span class="sd">to modify behavior (e.g., Early Stopping) or inspect state (e.g., Logging).</span>
+</span><span id="L-8"><a href="#L-8"><span class="linenos">  8</span></a><span class="sd">&quot;&quot;&quot;</span>
+</span><span id="L-9"><a href="#L-9"><span class="linenos">  9</span></a>
+</span><span id="L-10"><a href="#L-10"><span class="linenos"> 10</span></a><span class="n">__author__</span> <span class="o">=</span> <span class="s2">&quot;Mário Antunes&quot;</span>
+</span><span id="L-11"><a href="#L-11"><span class="linenos"> 11</span></a><span class="n">__license__</span> <span class="o">=</span> <span class="s2">&quot;MIT&quot;</span>
+</span><span id="L-12"><a href="#L-12"><span class="linenos"> 12</span></a><span class="n">__version__</span> <span class="o">=</span> <span class="s2">&quot;0.2&quot;</span>
+</span><span id="L-13"><a href="#L-13"><span class="linenos"> 13</span></a><span class="n">__email__</span> <span class="o">=</span> <span class="s2">&quot;mario.antunes@ua.com&quot;</span>
+</span><span id="L-14"><a href="#L-14"><span class="linenos"> 14</span></a><span class="n">__url__</span> <span class="o">=</span> <span class="s2">&quot;https://github.com/mariolpantunes/pyblindopt&quot;</span>
+</span><span id="L-15"><a href="#L-15"><span class="linenos"> 15</span></a><span class="n">__status__</span> <span class="o">=</span> <span class="s2">&quot;Development&quot;</span>
+</span><span id="L-16"><a href="#L-16"><span class="linenos"> 16</span></a>
+</span><span id="L-17"><a href="#L-17"><span class="linenos"> 17</span></a><span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+</span><span id="L-18"><a href="#L-18"><span class="linenos"> 18</span></a>
+</span><span id="L-19"><a href="#L-19"><span class="linenos"> 19</span></a>
+</span><span id="L-20"><a href="#L-20"><span class="linenos"> 20</span></a><span class="k">class</span><span class="w"> </span><span class="nc">EarlyStopping</span><span class="p">:</span>
+</span><span id="L-21"><a href="#L-21"><span class="linenos"> 21</span></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+</span><span id="L-22"><a href="#L-22"><span class="linenos"> 22</span></a><span class="sd">    Target-based Early Stopping.</span>
+</span><span id="L-23"><a href="#L-23"><span class="linenos"> 23</span></a>
+</span><span id="L-24"><a href="#L-24"><span class="linenos"> 24</span></a><span class="sd">    Stops the optimization process immediately once a solution with fitness</span>
+</span><span id="L-25"><a href="#L-25"><span class="linenos"> 25</span></a><span class="sd">    below a specific `threshold` is found.</span>
+</span><span id="L-26"><a href="#L-26"><span class="linenos"> 26</span></a>
+</span><span id="L-27"><a href="#L-27"><span class="linenos"> 27</span></a><span class="sd">    **Condition:**</span>
+</span><span id="L-28"><a href="#L-28"><span class="linenos"> 28</span></a><span class="sd">    $$ f(x_{best}) &lt; \\text{threshold} $$</span>
+</span><span id="L-29"><a href="#L-29"><span class="linenos"> 29</span></a><span class="sd">    &quot;&quot;&quot;</span>
+</span><span id="L-30"><a href="#L-30"><span class="linenos"> 30</span></a>
+</span><span id="L-31"><a href="#L-31"><span class="linenos"> 31</span></a>    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">threshold</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.0</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+</span><span id="L-32"><a href="#L-32"><span class="linenos"> 32</span></a><span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+</span><span id="L-33"><a href="#L-33"><span class="linenos"> 33</span></a><span class="sd">        Args:</span>
+</span><span id="L-34"><a href="#L-34"><span class="linenos"> 34</span></a><span class="sd">            threshold (float): The target fitness value.</span>
+</span><span id="L-35"><a href="#L-35"><span class="linenos"> 35</span></a><span class="sd">        &quot;&quot;&quot;</span>
+</span><span id="L-36"><a href="#L-36"><span class="linenos"> 36</span></a>        <span class="bp">self</span><span class="o">.</span><span class="n">epoch</span> <span class="o">=</span> <span class="mi">0</span>
+</span><span id="L-37"><a href="#L-37"><span class="linenos"> 37</span></a>        <span class="bp">self</span><span class="o">.</span><span class="n">threshold</span> <span class="o">=</span> <span class="n">threshold</span>
+</span><span id="L-38"><a href="#L-38"><span class="linenos"> 38</span></a>
+</span><span id="L-39"><a href="#L-39"><span class="linenos"> 39</span></a>    <span class="k">def</span><span class="w"> </span><span class="nf">callback</span><span class="p">(</span>
+</span><span id="L-40"><a href="#L-40"><span class="linenos"> 40</span></a>        <span class="bp">self</span><span class="p">,</span> <span class="n">epoch</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">fitness</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">population</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span>
+</span><span id="L-41"><a href="#L-41"><span class="linenos"> 41</span></a>    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span> <span class="o">|</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+</span><span id="L-42"><a href="#L-42"><span class="linenos"> 42</span></a><span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+</span><span id="L-43"><a href="#L-43"><span class="linenos"> 43</span></a><span class="sd">        Checks the stop condition.</span>
+</span><span id="L-44"><a href="#L-44"><span class="linenos"> 44</span></a>
+</span><span id="L-45"><a href="#L-45"><span class="linenos"> 45</span></a><span class="sd">        Returns:</span>
+</span><span id="L-46"><a href="#L-46"><span class="linenos"> 46</span></a><span class="sd">            bool: True if stop condition is met, False otherwise.</span>
+</span><span id="L-47"><a href="#L-47"><span class="linenos"> 47</span></a><span class="sd">        &quot;&quot;&quot;</span>
+</span><span id="L-48"><a href="#L-48"><span class="linenos"> 48</span></a>        <span class="bp">self</span><span class="o">.</span><span class="n">epoch</span> <span class="o">=</span> <span class="n">epoch</span>
+</span><span id="L-49"><a href="#L-49"><span class="linenos"> 49</span></a>        <span class="n">best_fitness</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">min</span><span class="p">(</span><span class="n">fitness</span><span class="p">)</span>
+</span><span id="L-50"><a href="#L-50"><span class="linenos"> 50</span></a>        <span class="k">if</span> <span class="n">best_fitness</span> <span class="o">&lt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">threshold</span><span class="p">:</span>
+</span><span id="L-51"><a href="#L-51"><span class="linenos"> 51</span></a>            <span class="k">return</span> <span class="kc">True</span>
+</span><span id="L-52"><a href="#L-52"><span class="linenos"> 52</span></a>        <span class="k">return</span> <span class="kc">False</span>
+</span><span id="L-53"><a href="#L-53"><span class="linenos"> 53</span></a>
+</span><span id="L-54"><a href="#L-54"><span class="linenos"> 54</span></a>
+</span><span id="L-55"><a href="#L-55"><span class="linenos"> 55</span></a><span class="k">class</span><span class="w"> </span><span class="nc">PatienceStopping</span><span class="p">:</span>
+</span><span id="L-56"><a href="#L-56"><span class="linenos"> 56</span></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+</span><span id="L-57"><a href="#L-57"><span class="linenos"> 57</span></a><span class="sd">    Stagnation-based Early Stopping.</span>
+</span><span id="L-58"><a href="#L-58"><span class="linenos"> 58</span></a>
+</span><span id="L-59"><a href="#L-59"><span class="linenos"> 59</span></a><span class="sd">    Stops the optimization if the global best score does not improve by at least</span>
+</span><span id="L-60"><a href="#L-60"><span class="linenos"> 60</span></a><span class="sd">    `min_delta` for `patience` consecutive epochs.</span>
+</span><span id="L-61"><a href="#L-61"><span class="linenos"> 61</span></a>
+</span><span id="L-62"><a href="#L-62"><span class="linenos"> 62</span></a><span class="sd">    **Analogy:**</span>
+</span><span id="L-63"><a href="#L-63"><span class="linenos"> 63</span></a><span class="sd">    Giving up after trying for N days without making any meaningful progress.</span>
+</span><span id="L-64"><a href="#L-64"><span class="linenos"> 64</span></a><span class="sd">    &quot;&quot;&quot;</span>
+</span><span id="L-65"><a href="#L-65"><span class="linenos"> 65</span></a>
+</span><span id="L-66"><a href="#L-66"><span class="linenos"> 66</span></a>    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">patience</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">10</span><span class="p">,</span> <span class="n">min_delta</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1e-6</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+</span><span id="L-67"><a href="#L-67"><span class="linenos"> 67</span></a><span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+</span><span id="L-68"><a href="#L-68"><span class="linenos"> 68</span></a><span class="sd">        Args:</span>
+</span><span id="L-69"><a href="#L-69"><span class="linenos"> 69</span></a><span class="sd">            patience (int): Number of epochs to wait.</span>
+</span><span id="L-70"><a href="#L-70"><span class="linenos"> 70</span></a><span class="sd">            min_delta (float): Minimum change to qualify as an improvement.</span>
+</span><span id="L-71"><a href="#L-71"><span class="linenos"> 71</span></a><span class="sd">        &quot;&quot;&quot;</span>
+</span><span id="L-72"><a href="#L-72"><span class="linenos"> 72</span></a>        <span class="bp">self</span><span class="o">.</span><span class="n">patience</span> <span class="o">=</span> <span class="n">patience</span>
+</span><span id="L-73"><a href="#L-73"><span class="linenos"> 73</span></a>        <span class="bp">self</span><span class="o">.</span><span class="n">min_delta</span> <span class="o">=</span> <span class="n">min_delta</span>
+</span><span id="L-74"><a href="#L-74"><span class="linenos"> 74</span></a>        <span class="bp">self</span><span class="o">.</span><span class="n">wait</span> <span class="o">=</span> <span class="mi">0</span>
+</span><span id="L-75"><a href="#L-75"><span class="linenos"> 75</span></a>        <span class="bp">self</span><span class="o">.</span><span class="n">best_score</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">inf</span>
+</span><span id="L-76"><a href="#L-76"><span class="linenos"> 76</span></a>        <span class="bp">self</span><span class="o">.</span><span class="n">epoch</span> <span class="o">=</span> <span class="mi">0</span>
+</span><span id="L-77"><a href="#L-77"><span class="linenos"> 77</span></a>
+</span><span id="L-78"><a href="#L-78"><span class="linenos"> 78</span></a>    <span class="k">def</span><span class="w"> </span><span class="nf">callback</span><span class="p">(</span>
+</span><span id="L-79"><a href="#L-79"><span class="linenos"> 79</span></a>        <span class="bp">self</span><span class="p">,</span> <span class="n">epoch</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">fitness</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">population</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span>
+</span><span id="L-80"><a href="#L-80"><span class="linenos"> 80</span></a>    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span> <span class="o">|</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+</span><span id="L-81"><a href="#L-81"><span class="linenos"> 81</span></a><span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+</span><span id="L-82"><a href="#L-82"><span class="linenos"> 82</span></a><span class="sd">        Updates internal counter and checks stop condition.</span>
+</span><span id="L-83"><a href="#L-83"><span class="linenos"> 83</span></a>
+</span><span id="L-84"><a href="#L-84"><span class="linenos"> 84</span></a><span class="sd">        Returns:</span>
+</span><span id="L-85"><a href="#L-85"><span class="linenos"> 85</span></a><span class="sd">            bool: True if patience is exhausted.</span>
+</span><span id="L-86"><a href="#L-86"><span class="linenos"> 86</span></a><span class="sd">        &quot;&quot;&quot;</span>
+</span><span id="L-87"><a href="#L-87"><span class="linenos"> 87</span></a>        <span class="bp">self</span><span class="o">.</span><span class="n">epoch</span> <span class="o">=</span> <span class="n">epoch</span>
+</span><span id="L-88"><a href="#L-88"><span class="linenos"> 88</span></a>        <span class="n">current_best</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">min</span><span class="p">(</span><span class="n">fitness</span><span class="p">)</span>
+</span><span id="L-89"><a href="#L-89"><span class="linenos"> 89</span></a>        <span class="k">if</span> <span class="n">current_best</span> <span class="o">&lt;</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">best_score</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">min_delta</span><span class="p">):</span>
+</span><span id="L-90"><a href="#L-90"><span class="linenos"> 90</span></a>            <span class="bp">self</span><span class="o">.</span><span class="n">best_score</span> <span class="o">=</span> <span class="n">current_best</span>
+</span><span id="L-91"><a href="#L-91"><span class="linenos"> 91</span></a>            <span class="bp">self</span><span class="o">.</span><span class="n">wait</span> <span class="o">=</span> <span class="mi">0</span>  <span class="c1"># Reset patience</span>
+</span><span id="L-92"><a href="#L-92"><span class="linenos"> 92</span></a>        <span class="k">else</span><span class="p">:</span>
+</span><span id="L-93"><a href="#L-93"><span class="linenos"> 93</span></a>            <span class="bp">self</span><span class="o">.</span><span class="n">wait</span> <span class="o">+=</span> <span class="mi">1</span>
+</span><span id="L-94"><a href="#L-94"><span class="linenos"> 94</span></a>            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">wait</span> <span class="o">&gt;=</span> <span class="bp">self</span><span class="o">.</span><span class="n">patience</span><span class="p">:</span>
+</span><span id="L-95"><a href="#L-95"><span class="linenos"> 95</span></a>                <span class="k">return</span> <span class="kc">True</span>
+</span><span id="L-96"><a href="#L-96"><span class="linenos"> 96</span></a>        <span class="k">return</span> <span class="kc">False</span>
+</span><span id="L-97"><a href="#L-97"><span class="linenos"> 97</span></a>
+</span><span id="L-98"><a href="#L-98"><span class="linenos"> 98</span></a>
+</span><span id="L-99"><a href="#L-99"><span class="linenos"> 99</span></a><span class="k">class</span><span class="w"> </span><span class="nc">CountEpochs</span><span class="p">:</span>
+</span><span id="L-100"><a href="#L-100"><span class="linenos">100</span></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+</span><span id="L-101"><a href="#L-101"><span class="linenos">101</span></a><span class="sd">    Epoch Counter.</span>
+</span><span id="L-102"><a href="#L-102"><span class="linenos">102</span></a>
+</span><span id="L-103"><a href="#L-103"><span class="linenos">103</span></a><span class="sd">    A simple utility to track the actual number of epochs executed (useful when</span>
+</span><span id="L-104"><a href="#L-104"><span class="linenos">104</span></a><span class="sd">    early stopping is involved).</span>
+</span><span id="L-105"><a href="#L-105"><span class="linenos">105</span></a><span class="sd">    &quot;&quot;&quot;</span>
+</span><span id="L-106"><a href="#L-106"><span class="linenos">106</span></a>
+</span><span id="L-107"><a href="#L-107"><span class="linenos">107</span></a>    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+</span><span id="L-108"><a href="#L-108"><span class="linenos">108</span></a>        <span class="bp">self</span><span class="o">.</span><span class="n">epoch</span> <span class="o">=</span> <span class="mi">0</span>
+</span><span id="L-109"><a href="#L-109"><span class="linenos">109</span></a>
+</span><span id="L-110"><a href="#L-110"><span class="linenos">110</span></a>    <span class="k">def</span><span class="w"> </span><span class="nf">callback</span><span class="p">(</span>
+</span><span id="L-111"><a href="#L-111"><span class="linenos">111</span></a>        <span class="bp">self</span><span class="p">,</span> <span class="n">epoch</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">fitness</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">population</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span>
+</span><span id="L-112"><a href="#L-112"><span class="linenos">112</span></a>    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span> <span class="o">|</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+</span><span id="L-113"><a href="#L-113"><span class="linenos">113</span></a><span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+</span><span id="L-114"><a href="#L-114"><span class="linenos">114</span></a><span class="sd">        Increments internal epoch counter.</span>
+</span><span id="L-115"><a href="#L-115"><span class="linenos">115</span></a><span class="sd">        &quot;&quot;&quot;</span>
+</span><span id="L-116"><a href="#L-116"><span class="linenos">116</span></a>        <span class="bp">self</span><span class="o">.</span><span class="n">epoch</span> <span class="o">=</span> <span class="n">epoch</span> <span class="o">+</span> <span class="mi">1</span>
+</span><span id="L-117"><a href="#L-117"><span class="linenos">117</span></a>        <span class="k">return</span> <span class="kc">None</span>
+</span><span id="L-118"><a href="#L-118"><span class="linenos">118</span></a>
+</span><span id="L-119"><a href="#L-119"><span class="linenos">119</span></a>
+</span><span id="L-120"><a href="#L-120"><span class="linenos">120</span></a><span class="k">class</span><span class="w"> </span><span class="nc">ClampBounds</span><span class="p">:</span>
+</span><span id="L-121"><a href="#L-121"><span class="linenos">121</span></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+</span><span id="L-122"><a href="#L-122"><span class="linenos">122</span></a><span class="sd">    Population Constraint Callback.</span>
+</span><span id="L-123"><a href="#L-123"><span class="linenos">123</span></a>
+</span><span id="L-124"><a href="#L-124"><span class="linenos">124</span></a><span class="sd">    A population modification callback that forcibly clips all particles to</span>
+</span><span id="L-125"><a href="#L-125"><span class="linenos">125</span></a><span class="sd">    stay within the defined search bounds at the end of every epoch.</span>
+</span><span id="L-126"><a href="#L-126"><span class="linenos">126</span></a>
+</span><span id="L-127"><a href="#L-127"><span class="linenos">127</span></a><span class="sd">    **Action:**</span>
+</span><span id="L-128"><a href="#L-128"><span class="linenos">128</span></a><span class="sd">    $$ x_{i,d} = \\max(\\min(x_{i,d}, upper_d), lower_d) $$</span>
+</span><span id="L-129"><a href="#L-129"><span class="linenos">129</span></a><span class="sd">    &quot;&quot;&quot;</span>
+</span><span id="L-130"><a href="#L-130"><span class="linenos">130</span></a>
+</span><span id="L-131"><a href="#L-131"><span class="linenos">131</span></a>    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">bounds</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+</span><span id="L-132"><a href="#L-132"><span class="linenos">132</span></a><span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+</span><span id="L-133"><a href="#L-133"><span class="linenos">133</span></a><span class="sd">        Args:</span>
+</span><span id="L-134"><a href="#L-134"><span class="linenos">134</span></a><span class="sd">            bounds (np.ndarray): The min/max bounds matrix.</span>
+</span><span id="L-135"><a href="#L-135"><span class="linenos">135</span></a><span class="sd">        &quot;&quot;&quot;</span>
+</span><span id="L-136"><a href="#L-136"><span class="linenos">136</span></a>        <span class="bp">self</span><span class="o">.</span><span class="n">bounds</span> <span class="o">=</span> <span class="n">bounds</span>
+</span><span id="L-137"><a href="#L-137"><span class="linenos">137</span></a>
+</span><span id="L-138"><a href="#L-138"><span class="linenos">138</span></a>    <span class="k">def</span><span class="w"> </span><span class="nf">callback</span><span class="p">(</span>
+</span><span id="L-139"><a href="#L-139"><span class="linenos">139</span></a>        <span class="bp">self</span><span class="p">,</span> <span class="n">epoch</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">fitness</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">population</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span>
+</span><span id="L-140"><a href="#L-140"><span class="linenos">140</span></a>    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span> <span class="o">|</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+</span><span id="L-141"><a href="#L-141"><span class="linenos">141</span></a><span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+</span><span id="L-142"><a href="#L-142"><span class="linenos">142</span></a><span class="sd">        Modifies the population in-place (or returns new array).</span>
+</span><span id="L-143"><a href="#L-143"><span class="linenos">143</span></a>
+</span><span id="L-144"><a href="#L-144"><span class="linenos">144</span></a><span class="sd">        Returns:</span>
+</span><span id="L-145"><a href="#L-145"><span class="linenos">145</span></a><span class="sd">            np.ndarray: The clipped population.</span>
+</span><span id="L-146"><a href="#L-146"><span class="linenos">146</span></a><span class="sd">        &quot;&quot;&quot;</span>
+</span><span id="L-147"><a href="#L-147"><span class="linenos">147</span></a>        <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">clip</span><span class="p">(</span><span class="n">population</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">bounds</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">],</span> <span class="bp">self</span><span class="o">.</span><span class="n">bounds</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">])</span>
 </span></pre></div>
 
 
@@ -160,25 +314,51 @@
 
     </div>
     <a class="headerlink" href="#EarlyStopping"></a>
-            <div class="pdoc-code codehilite"><pre><span></span><span id="EarlyStopping-15"><a href="#EarlyStopping-15"><span class="linenos">15</span></a><span class="k">class</span><span class="w"> </span><span class="nc">EarlyStopping</span><span class="p">:</span>
-</span><span id="EarlyStopping-16"><a href="#EarlyStopping-16"><span class="linenos">16</span></a>    
-</span><span id="EarlyStopping-17"><a href="#EarlyStopping-17"><span class="linenos">17</span></a>    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">threshold</span><span class="p">:</span><span class="nb">float</span><span class="o">=</span><span class="mf">0.0</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-</span><span id="EarlyStopping-18"><a href="#EarlyStopping-18"><span class="linenos">18</span></a>        <span class="bp">self</span><span class="o">.</span><span class="n">epoch</span> <span class="o">=</span> <span class="mi">0</span>
-</span><span id="EarlyStopping-19"><a href="#EarlyStopping-19"><span class="linenos">19</span></a>        <span class="bp">self</span><span class="o">.</span><span class="n">threshold</span> <span class="o">=</span> <span class="n">threshold</span>
-</span><span id="EarlyStopping-20"><a href="#EarlyStopping-20"><span class="linenos">20</span></a>    
-</span><span id="EarlyStopping-21"><a href="#EarlyStopping-21"><span class="linenos">21</span></a>    <span class="k">def</span><span class="w"> </span><span class="nf">callback</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">epoch</span><span class="p">:</span><span class="nb">int</span><span class="p">,</span> <span class="n">fitness</span><span class="p">:</span><span class="nb">list</span><span class="p">,</span> <span class="n">population</span><span class="p">:</span><span class="nb">list</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
-</span><span id="EarlyStopping-22"><a href="#EarlyStopping-22"><span class="linenos">22</span></a>        <span class="bp">self</span><span class="o">.</span><span class="n">epoch</span> <span class="o">=</span> <span class="n">epoch</span>
-</span><span id="EarlyStopping-23"><a href="#EarlyStopping-23"><span class="linenos">23</span></a>        
-</span><span id="EarlyStopping-24"><a href="#EarlyStopping-24"><span class="linenos">24</span></a>        <span class="n">best_fitness</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="n">fitness</span><span class="p">)</span>
-</span><span id="EarlyStopping-25"><a href="#EarlyStopping-25"><span class="linenos">25</span></a>        
-</span><span id="EarlyStopping-26"><a href="#EarlyStopping-26"><span class="linenos">26</span></a>        <span class="k">if</span> <span class="n">best_fitness</span> <span class="o">&lt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">threshold</span><span class="p">:</span>
-</span><span id="EarlyStopping-27"><a href="#EarlyStopping-27"><span class="linenos">27</span></a>            <span class="k">return</span> <span class="kc">True</span>
-</span><span id="EarlyStopping-28"><a href="#EarlyStopping-28"><span class="linenos">28</span></a>        <span class="k">else</span><span class="p">:</span>
-</span><span id="EarlyStopping-29"><a href="#EarlyStopping-29"><span class="linenos">29</span></a>            <span class="k">return</span> <span class="kc">False</span>
+            <div class="pdoc-code codehilite"><pre><span></span><span id="EarlyStopping-21"><a href="#EarlyStopping-21"><span class="linenos">21</span></a><span class="k">class</span><span class="w"> </span><span class="nc">EarlyStopping</span><span class="p">:</span>
+</span><span id="EarlyStopping-22"><a href="#EarlyStopping-22"><span class="linenos">22</span></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+</span><span id="EarlyStopping-23"><a href="#EarlyStopping-23"><span class="linenos">23</span></a><span class="sd">    Target-based Early Stopping.</span>
+</span><span id="EarlyStopping-24"><a href="#EarlyStopping-24"><span class="linenos">24</span></a>
+</span><span id="EarlyStopping-25"><a href="#EarlyStopping-25"><span class="linenos">25</span></a><span class="sd">    Stops the optimization process immediately once a solution with fitness</span>
+</span><span id="EarlyStopping-26"><a href="#EarlyStopping-26"><span class="linenos">26</span></a><span class="sd">    below a specific `threshold` is found.</span>
+</span><span id="EarlyStopping-27"><a href="#EarlyStopping-27"><span class="linenos">27</span></a>
+</span><span id="EarlyStopping-28"><a href="#EarlyStopping-28"><span class="linenos">28</span></a><span class="sd">    **Condition:**</span>
+</span><span id="EarlyStopping-29"><a href="#EarlyStopping-29"><span class="linenos">29</span></a><span class="sd">    $$ f(x_{best}) &lt; \\text{threshold} $$</span>
+</span><span id="EarlyStopping-30"><a href="#EarlyStopping-30"><span class="linenos">30</span></a><span class="sd">    &quot;&quot;&quot;</span>
+</span><span id="EarlyStopping-31"><a href="#EarlyStopping-31"><span class="linenos">31</span></a>
+</span><span id="EarlyStopping-32"><a href="#EarlyStopping-32"><span class="linenos">32</span></a>    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">threshold</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.0</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+</span><span id="EarlyStopping-33"><a href="#EarlyStopping-33"><span class="linenos">33</span></a><span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+</span><span id="EarlyStopping-34"><a href="#EarlyStopping-34"><span class="linenos">34</span></a><span class="sd">        Args:</span>
+</span><span id="EarlyStopping-35"><a href="#EarlyStopping-35"><span class="linenos">35</span></a><span class="sd">            threshold (float): The target fitness value.</span>
+</span><span id="EarlyStopping-36"><a href="#EarlyStopping-36"><span class="linenos">36</span></a><span class="sd">        &quot;&quot;&quot;</span>
+</span><span id="EarlyStopping-37"><a href="#EarlyStopping-37"><span class="linenos">37</span></a>        <span class="bp">self</span><span class="o">.</span><span class="n">epoch</span> <span class="o">=</span> <span class="mi">0</span>
+</span><span id="EarlyStopping-38"><a href="#EarlyStopping-38"><span class="linenos">38</span></a>        <span class="bp">self</span><span class="o">.</span><span class="n">threshold</span> <span class="o">=</span> <span class="n">threshold</span>
+</span><span id="EarlyStopping-39"><a href="#EarlyStopping-39"><span class="linenos">39</span></a>
+</span><span id="EarlyStopping-40"><a href="#EarlyStopping-40"><span class="linenos">40</span></a>    <span class="k">def</span><span class="w"> </span><span class="nf">callback</span><span class="p">(</span>
+</span><span id="EarlyStopping-41"><a href="#EarlyStopping-41"><span class="linenos">41</span></a>        <span class="bp">self</span><span class="p">,</span> <span class="n">epoch</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">fitness</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">population</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span>
+</span><span id="EarlyStopping-42"><a href="#EarlyStopping-42"><span class="linenos">42</span></a>    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span> <span class="o">|</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+</span><span id="EarlyStopping-43"><a href="#EarlyStopping-43"><span class="linenos">43</span></a><span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+</span><span id="EarlyStopping-44"><a href="#EarlyStopping-44"><span class="linenos">44</span></a><span class="sd">        Checks the stop condition.</span>
+</span><span id="EarlyStopping-45"><a href="#EarlyStopping-45"><span class="linenos">45</span></a>
+</span><span id="EarlyStopping-46"><a href="#EarlyStopping-46"><span class="linenos">46</span></a><span class="sd">        Returns:</span>
+</span><span id="EarlyStopping-47"><a href="#EarlyStopping-47"><span class="linenos">47</span></a><span class="sd">            bool: True if stop condition is met, False otherwise.</span>
+</span><span id="EarlyStopping-48"><a href="#EarlyStopping-48"><span class="linenos">48</span></a><span class="sd">        &quot;&quot;&quot;</span>
+</span><span id="EarlyStopping-49"><a href="#EarlyStopping-49"><span class="linenos">49</span></a>        <span class="bp">self</span><span class="o">.</span><span class="n">epoch</span> <span class="o">=</span> <span class="n">epoch</span>
+</span><span id="EarlyStopping-50"><a href="#EarlyStopping-50"><span class="linenos">50</span></a>        <span class="n">best_fitness</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">min</span><span class="p">(</span><span class="n">fitness</span><span class="p">)</span>
+</span><span id="EarlyStopping-51"><a href="#EarlyStopping-51"><span class="linenos">51</span></a>        <span class="k">if</span> <span class="n">best_fitness</span> <span class="o">&lt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">threshold</span><span class="p">:</span>
+</span><span id="EarlyStopping-52"><a href="#EarlyStopping-52"><span class="linenos">52</span></a>            <span class="k">return</span> <span class="kc">True</span>
+</span><span id="EarlyStopping-53"><a href="#EarlyStopping-53"><span class="linenos">53</span></a>        <span class="k">return</span> <span class="kc">False</span>
 </span></pre></div>
 
 
-    
+            <div class="docstring"><p>Target-based Early Stopping.</p>
+
+<p>Stops the optimization process immediately once a solution with fitness
+below a specific <code><a href="#EarlyStopping.threshold">threshold</a></code> is found.</p>
+
+<p><strong>Condition:</strong>
+$$ f(x_{best}) &lt; \text{threshold} $$</p>
+</div>
+
 
                             <div id="EarlyStopping.__init__" class="classattr">
                                         <input id="EarlyStopping.__init__-view-source" class="view-source-toggle-state" type="checkbox" aria-hidden="true" tabindex="-1">
@@ -190,13 +370,23 @@
 
     </div>
     <a class="headerlink" href="#EarlyStopping.__init__"></a>
-            <div class="pdoc-code codehilite"><pre><span></span><span id="EarlyStopping.__init__-17"><a href="#EarlyStopping.__init__-17"><span class="linenos">17</span></a>    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">threshold</span><span class="p">:</span><span class="nb">float</span><span class="o">=</span><span class="mf">0.0</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-</span><span id="EarlyStopping.__init__-18"><a href="#EarlyStopping.__init__-18"><span class="linenos">18</span></a>        <span class="bp">self</span><span class="o">.</span><span class="n">epoch</span> <span class="o">=</span> <span class="mi">0</span>
-</span><span id="EarlyStopping.__init__-19"><a href="#EarlyStopping.__init__-19"><span class="linenos">19</span></a>        <span class="bp">self</span><span class="o">.</span><span class="n">threshold</span> <span class="o">=</span> <span class="n">threshold</span>
+            <div class="pdoc-code codehilite"><pre><span></span><span id="EarlyStopping.__init__-32"><a href="#EarlyStopping.__init__-32"><span class="linenos">32</span></a>    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">threshold</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.0</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+</span><span id="EarlyStopping.__init__-33"><a href="#EarlyStopping.__init__-33"><span class="linenos">33</span></a><span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+</span><span id="EarlyStopping.__init__-34"><a href="#EarlyStopping.__init__-34"><span class="linenos">34</span></a><span class="sd">        Args:</span>
+</span><span id="EarlyStopping.__init__-35"><a href="#EarlyStopping.__init__-35"><span class="linenos">35</span></a><span class="sd">            threshold (float): The target fitness value.</span>
+</span><span id="EarlyStopping.__init__-36"><a href="#EarlyStopping.__init__-36"><span class="linenos">36</span></a><span class="sd">        &quot;&quot;&quot;</span>
+</span><span id="EarlyStopping.__init__-37"><a href="#EarlyStopping.__init__-37"><span class="linenos">37</span></a>        <span class="bp">self</span><span class="o">.</span><span class="n">epoch</span> <span class="o">=</span> <span class="mi">0</span>
+</span><span id="EarlyStopping.__init__-38"><a href="#EarlyStopping.__init__-38"><span class="linenos">38</span></a>        <span class="bp">self</span><span class="o">.</span><span class="n">threshold</span> <span class="o">=</span> <span class="n">threshold</span>
 </span></pre></div>
 
 
-    
+            <div class="docstring"><h6 id="arguments">Arguments:</h6>
+
+<ul>
+<li><strong>threshold (float):</strong>  The target fitness value.</li>
+</ul>
+</div>
+
 
                             </div>
                             <div id="EarlyStopping.epoch" class="classattr">
@@ -226,25 +416,238 @@
 <div class="attr function">
             
         <span class="def">def</span>
-        <span class="name">callback</span><span class="signature pdoc-code condensed">(<span class="param"><span class="bp">self</span>, </span><span class="param"><span class="n">epoch</span><span class="p">:</span> <span class="nb">int</span>, </span><span class="param"><span class="n">fitness</span><span class="p">:</span> <span class="nb">list</span>, </span><span class="param"><span class="n">population</span><span class="p">:</span> <span class="nb">list</span></span><span class="return-annotation">) -> <span class="nb">bool</span>:</span></span>
+        <span class="name">callback</span><span class="signature pdoc-code multiline">(<span class="param">	<span class="bp">self</span>,</span><span class="param">	<span class="n">epoch</span><span class="p">:</span> <span class="nb">int</span>,</span><span class="param">	<span class="n">fitness</span><span class="p">:</span> <span class="n">numpy</span><span class="o">.</span><span class="n">ndarray</span>,</span><span class="param">	<span class="n">population</span><span class="p">:</span> <span class="n">numpy</span><span class="o">.</span><span class="n">ndarray</span></span><span class="return-annotation">) -> <span class="nb">bool</span> <span class="o">|</span> <span class="n">numpy</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">|</span> <span class="kc">None</span>:</span></span>
 
                 <label class="view-source-button" for="EarlyStopping.callback-view-source"><span>View Source</span></label>
 
     </div>
     <a class="headerlink" href="#EarlyStopping.callback"></a>
-            <div class="pdoc-code codehilite"><pre><span></span><span id="EarlyStopping.callback-21"><a href="#EarlyStopping.callback-21"><span class="linenos">21</span></a>    <span class="k">def</span><span class="w"> </span><span class="nf">callback</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">epoch</span><span class="p">:</span><span class="nb">int</span><span class="p">,</span> <span class="n">fitness</span><span class="p">:</span><span class="nb">list</span><span class="p">,</span> <span class="n">population</span><span class="p">:</span><span class="nb">list</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
-</span><span id="EarlyStopping.callback-22"><a href="#EarlyStopping.callback-22"><span class="linenos">22</span></a>        <span class="bp">self</span><span class="o">.</span><span class="n">epoch</span> <span class="o">=</span> <span class="n">epoch</span>
-</span><span id="EarlyStopping.callback-23"><a href="#EarlyStopping.callback-23"><span class="linenos">23</span></a>        
-</span><span id="EarlyStopping.callback-24"><a href="#EarlyStopping.callback-24"><span class="linenos">24</span></a>        <span class="n">best_fitness</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="n">fitness</span><span class="p">)</span>
-</span><span id="EarlyStopping.callback-25"><a href="#EarlyStopping.callback-25"><span class="linenos">25</span></a>        
-</span><span id="EarlyStopping.callback-26"><a href="#EarlyStopping.callback-26"><span class="linenos">26</span></a>        <span class="k">if</span> <span class="n">best_fitness</span> <span class="o">&lt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">threshold</span><span class="p">:</span>
-</span><span id="EarlyStopping.callback-27"><a href="#EarlyStopping.callback-27"><span class="linenos">27</span></a>            <span class="k">return</span> <span class="kc">True</span>
-</span><span id="EarlyStopping.callback-28"><a href="#EarlyStopping.callback-28"><span class="linenos">28</span></a>        <span class="k">else</span><span class="p">:</span>
-</span><span id="EarlyStopping.callback-29"><a href="#EarlyStopping.callback-29"><span class="linenos">29</span></a>            <span class="k">return</span> <span class="kc">False</span>
+            <div class="pdoc-code codehilite"><pre><span></span><span id="EarlyStopping.callback-40"><a href="#EarlyStopping.callback-40"><span class="linenos">40</span></a>    <span class="k">def</span><span class="w"> </span><span class="nf">callback</span><span class="p">(</span>
+</span><span id="EarlyStopping.callback-41"><a href="#EarlyStopping.callback-41"><span class="linenos">41</span></a>        <span class="bp">self</span><span class="p">,</span> <span class="n">epoch</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">fitness</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">population</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span>
+</span><span id="EarlyStopping.callback-42"><a href="#EarlyStopping.callback-42"><span class="linenos">42</span></a>    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span> <span class="o">|</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+</span><span id="EarlyStopping.callback-43"><a href="#EarlyStopping.callback-43"><span class="linenos">43</span></a><span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+</span><span id="EarlyStopping.callback-44"><a href="#EarlyStopping.callback-44"><span class="linenos">44</span></a><span class="sd">        Checks the stop condition.</span>
+</span><span id="EarlyStopping.callback-45"><a href="#EarlyStopping.callback-45"><span class="linenos">45</span></a>
+</span><span id="EarlyStopping.callback-46"><a href="#EarlyStopping.callback-46"><span class="linenos">46</span></a><span class="sd">        Returns:</span>
+</span><span id="EarlyStopping.callback-47"><a href="#EarlyStopping.callback-47"><span class="linenos">47</span></a><span class="sd">            bool: True if stop condition is met, False otherwise.</span>
+</span><span id="EarlyStopping.callback-48"><a href="#EarlyStopping.callback-48"><span class="linenos">48</span></a><span class="sd">        &quot;&quot;&quot;</span>
+</span><span id="EarlyStopping.callback-49"><a href="#EarlyStopping.callback-49"><span class="linenos">49</span></a>        <span class="bp">self</span><span class="o">.</span><span class="n">epoch</span> <span class="o">=</span> <span class="n">epoch</span>
+</span><span id="EarlyStopping.callback-50"><a href="#EarlyStopping.callback-50"><span class="linenos">50</span></a>        <span class="n">best_fitness</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">min</span><span class="p">(</span><span class="n">fitness</span><span class="p">)</span>
+</span><span id="EarlyStopping.callback-51"><a href="#EarlyStopping.callback-51"><span class="linenos">51</span></a>        <span class="k">if</span> <span class="n">best_fitness</span> <span class="o">&lt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">threshold</span><span class="p">:</span>
+</span><span id="EarlyStopping.callback-52"><a href="#EarlyStopping.callback-52"><span class="linenos">52</span></a>            <span class="k">return</span> <span class="kc">True</span>
+</span><span id="EarlyStopping.callback-53"><a href="#EarlyStopping.callback-53"><span class="linenos">53</span></a>        <span class="k">return</span> <span class="kc">False</span>
 </span></pre></div>
 
 
+            <div class="docstring"><p>Checks the stop condition.</p>
+
+<h6 id="returns">Returns:</h6>
+
+<blockquote>
+  <p>bool: True if stop condition is met, False otherwise.</p>
+</blockquote>
+</div>
+
+
+                            </div>
+                </section>
+                <section id="PatienceStopping">
+                            <input id="PatienceStopping-view-source" class="view-source-toggle-state" type="checkbox" aria-hidden="true" tabindex="-1">
+<div class="attr class">
+            
+    <span class="def">class</span>
+    <span class="name">PatienceStopping</span>:
+
+                <label class="view-source-button" for="PatienceStopping-view-source"><span>View Source</span></label>
+
+    </div>
+    <a class="headerlink" href="#PatienceStopping"></a>
+            <div class="pdoc-code codehilite"><pre><span></span><span id="PatienceStopping-56"><a href="#PatienceStopping-56"><span class="linenos">56</span></a><span class="k">class</span><span class="w"> </span><span class="nc">PatienceStopping</span><span class="p">:</span>
+</span><span id="PatienceStopping-57"><a href="#PatienceStopping-57"><span class="linenos">57</span></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+</span><span id="PatienceStopping-58"><a href="#PatienceStopping-58"><span class="linenos">58</span></a><span class="sd">    Stagnation-based Early Stopping.</span>
+</span><span id="PatienceStopping-59"><a href="#PatienceStopping-59"><span class="linenos">59</span></a>
+</span><span id="PatienceStopping-60"><a href="#PatienceStopping-60"><span class="linenos">60</span></a><span class="sd">    Stops the optimization if the global best score does not improve by at least</span>
+</span><span id="PatienceStopping-61"><a href="#PatienceStopping-61"><span class="linenos">61</span></a><span class="sd">    `min_delta` for `patience` consecutive epochs.</span>
+</span><span id="PatienceStopping-62"><a href="#PatienceStopping-62"><span class="linenos">62</span></a>
+</span><span id="PatienceStopping-63"><a href="#PatienceStopping-63"><span class="linenos">63</span></a><span class="sd">    **Analogy:**</span>
+</span><span id="PatienceStopping-64"><a href="#PatienceStopping-64"><span class="linenos">64</span></a><span class="sd">    Giving up after trying for N days without making any meaningful progress.</span>
+</span><span id="PatienceStopping-65"><a href="#PatienceStopping-65"><span class="linenos">65</span></a><span class="sd">    &quot;&quot;&quot;</span>
+</span><span id="PatienceStopping-66"><a href="#PatienceStopping-66"><span class="linenos">66</span></a>
+</span><span id="PatienceStopping-67"><a href="#PatienceStopping-67"><span class="linenos">67</span></a>    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">patience</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">10</span><span class="p">,</span> <span class="n">min_delta</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1e-6</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+</span><span id="PatienceStopping-68"><a href="#PatienceStopping-68"><span class="linenos">68</span></a><span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+</span><span id="PatienceStopping-69"><a href="#PatienceStopping-69"><span class="linenos">69</span></a><span class="sd">        Args:</span>
+</span><span id="PatienceStopping-70"><a href="#PatienceStopping-70"><span class="linenos">70</span></a><span class="sd">            patience (int): Number of epochs to wait.</span>
+</span><span id="PatienceStopping-71"><a href="#PatienceStopping-71"><span class="linenos">71</span></a><span class="sd">            min_delta (float): Minimum change to qualify as an improvement.</span>
+</span><span id="PatienceStopping-72"><a href="#PatienceStopping-72"><span class="linenos">72</span></a><span class="sd">        &quot;&quot;&quot;</span>
+</span><span id="PatienceStopping-73"><a href="#PatienceStopping-73"><span class="linenos">73</span></a>        <span class="bp">self</span><span class="o">.</span><span class="n">patience</span> <span class="o">=</span> <span class="n">patience</span>
+</span><span id="PatienceStopping-74"><a href="#PatienceStopping-74"><span class="linenos">74</span></a>        <span class="bp">self</span><span class="o">.</span><span class="n">min_delta</span> <span class="o">=</span> <span class="n">min_delta</span>
+</span><span id="PatienceStopping-75"><a href="#PatienceStopping-75"><span class="linenos">75</span></a>        <span class="bp">self</span><span class="o">.</span><span class="n">wait</span> <span class="o">=</span> <span class="mi">0</span>
+</span><span id="PatienceStopping-76"><a href="#PatienceStopping-76"><span class="linenos">76</span></a>        <span class="bp">self</span><span class="o">.</span><span class="n">best_score</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">inf</span>
+</span><span id="PatienceStopping-77"><a href="#PatienceStopping-77"><span class="linenos">77</span></a>        <span class="bp">self</span><span class="o">.</span><span class="n">epoch</span> <span class="o">=</span> <span class="mi">0</span>
+</span><span id="PatienceStopping-78"><a href="#PatienceStopping-78"><span class="linenos">78</span></a>
+</span><span id="PatienceStopping-79"><a href="#PatienceStopping-79"><span class="linenos">79</span></a>    <span class="k">def</span><span class="w"> </span><span class="nf">callback</span><span class="p">(</span>
+</span><span id="PatienceStopping-80"><a href="#PatienceStopping-80"><span class="linenos">80</span></a>        <span class="bp">self</span><span class="p">,</span> <span class="n">epoch</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">fitness</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">population</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span>
+</span><span id="PatienceStopping-81"><a href="#PatienceStopping-81"><span class="linenos">81</span></a>    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span> <span class="o">|</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+</span><span id="PatienceStopping-82"><a href="#PatienceStopping-82"><span class="linenos">82</span></a><span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+</span><span id="PatienceStopping-83"><a href="#PatienceStopping-83"><span class="linenos">83</span></a><span class="sd">        Updates internal counter and checks stop condition.</span>
+</span><span id="PatienceStopping-84"><a href="#PatienceStopping-84"><span class="linenos">84</span></a>
+</span><span id="PatienceStopping-85"><a href="#PatienceStopping-85"><span class="linenos">85</span></a><span class="sd">        Returns:</span>
+</span><span id="PatienceStopping-86"><a href="#PatienceStopping-86"><span class="linenos">86</span></a><span class="sd">            bool: True if patience is exhausted.</span>
+</span><span id="PatienceStopping-87"><a href="#PatienceStopping-87"><span class="linenos">87</span></a><span class="sd">        &quot;&quot;&quot;</span>
+</span><span id="PatienceStopping-88"><a href="#PatienceStopping-88"><span class="linenos">88</span></a>        <span class="bp">self</span><span class="o">.</span><span class="n">epoch</span> <span class="o">=</span> <span class="n">epoch</span>
+</span><span id="PatienceStopping-89"><a href="#PatienceStopping-89"><span class="linenos">89</span></a>        <span class="n">current_best</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">min</span><span class="p">(</span><span class="n">fitness</span><span class="p">)</span>
+</span><span id="PatienceStopping-90"><a href="#PatienceStopping-90"><span class="linenos">90</span></a>        <span class="k">if</span> <span class="n">current_best</span> <span class="o">&lt;</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">best_score</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">min_delta</span><span class="p">):</span>
+</span><span id="PatienceStopping-91"><a href="#PatienceStopping-91"><span class="linenos">91</span></a>            <span class="bp">self</span><span class="o">.</span><span class="n">best_score</span> <span class="o">=</span> <span class="n">current_best</span>
+</span><span id="PatienceStopping-92"><a href="#PatienceStopping-92"><span class="linenos">92</span></a>            <span class="bp">self</span><span class="o">.</span><span class="n">wait</span> <span class="o">=</span> <span class="mi">0</span>  <span class="c1"># Reset patience</span>
+</span><span id="PatienceStopping-93"><a href="#PatienceStopping-93"><span class="linenos">93</span></a>        <span class="k">else</span><span class="p">:</span>
+</span><span id="PatienceStopping-94"><a href="#PatienceStopping-94"><span class="linenos">94</span></a>            <span class="bp">self</span><span class="o">.</span><span class="n">wait</span> <span class="o">+=</span> <span class="mi">1</span>
+</span><span id="PatienceStopping-95"><a href="#PatienceStopping-95"><span class="linenos">95</span></a>            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">wait</span> <span class="o">&gt;=</span> <span class="bp">self</span><span class="o">.</span><span class="n">patience</span><span class="p">:</span>
+</span><span id="PatienceStopping-96"><a href="#PatienceStopping-96"><span class="linenos">96</span></a>                <span class="k">return</span> <span class="kc">True</span>
+</span><span id="PatienceStopping-97"><a href="#PatienceStopping-97"><span class="linenos">97</span></a>        <span class="k">return</span> <span class="kc">False</span>
+</span></pre></div>
+
+
+            <div class="docstring"><p>Stagnation-based Early Stopping.</p>
+
+<p>Stops the optimization if the global best score does not improve by at least
+<code><a href="#PatienceStopping.min_delta">min_delta</a></code> for <code><a href="#PatienceStopping.patience">patience</a></code> consecutive epochs.</p>
+
+<p><strong>Analogy:</strong>
+Giving up after trying for N days without making any meaningful progress.</p>
+</div>
+
+
+                            <div id="PatienceStopping.__init__" class="classattr">
+                                        <input id="PatienceStopping.__init__-view-source" class="view-source-toggle-state" type="checkbox" aria-hidden="true" tabindex="-1">
+<div class="attr function">
+            
+        <span class="name">PatienceStopping</span><span class="signature pdoc-code condensed">(<span class="param"><span class="n">patience</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">10</span>, </span><span class="param"><span class="n">min_delta</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1e-06</span></span>)</span>
+
+                <label class="view-source-button" for="PatienceStopping.__init__-view-source"><span>View Source</span></label>
+
+    </div>
+    <a class="headerlink" href="#PatienceStopping.__init__"></a>
+            <div class="pdoc-code codehilite"><pre><span></span><span id="PatienceStopping.__init__-67"><a href="#PatienceStopping.__init__-67"><span class="linenos">67</span></a>    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">patience</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">10</span><span class="p">,</span> <span class="n">min_delta</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1e-6</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+</span><span id="PatienceStopping.__init__-68"><a href="#PatienceStopping.__init__-68"><span class="linenos">68</span></a><span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+</span><span id="PatienceStopping.__init__-69"><a href="#PatienceStopping.__init__-69"><span class="linenos">69</span></a><span class="sd">        Args:</span>
+</span><span id="PatienceStopping.__init__-70"><a href="#PatienceStopping.__init__-70"><span class="linenos">70</span></a><span class="sd">            patience (int): Number of epochs to wait.</span>
+</span><span id="PatienceStopping.__init__-71"><a href="#PatienceStopping.__init__-71"><span class="linenos">71</span></a><span class="sd">            min_delta (float): Minimum change to qualify as an improvement.</span>
+</span><span id="PatienceStopping.__init__-72"><a href="#PatienceStopping.__init__-72"><span class="linenos">72</span></a><span class="sd">        &quot;&quot;&quot;</span>
+</span><span id="PatienceStopping.__init__-73"><a href="#PatienceStopping.__init__-73"><span class="linenos">73</span></a>        <span class="bp">self</span><span class="o">.</span><span class="n">patience</span> <span class="o">=</span> <span class="n">patience</span>
+</span><span id="PatienceStopping.__init__-74"><a href="#PatienceStopping.__init__-74"><span class="linenos">74</span></a>        <span class="bp">self</span><span class="o">.</span><span class="n">min_delta</span> <span class="o">=</span> <span class="n">min_delta</span>
+</span><span id="PatienceStopping.__init__-75"><a href="#PatienceStopping.__init__-75"><span class="linenos">75</span></a>        <span class="bp">self</span><span class="o">.</span><span class="n">wait</span> <span class="o">=</span> <span class="mi">0</span>
+</span><span id="PatienceStopping.__init__-76"><a href="#PatienceStopping.__init__-76"><span class="linenos">76</span></a>        <span class="bp">self</span><span class="o">.</span><span class="n">best_score</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">inf</span>
+</span><span id="PatienceStopping.__init__-77"><a href="#PatienceStopping.__init__-77"><span class="linenos">77</span></a>        <span class="bp">self</span><span class="o">.</span><span class="n">epoch</span> <span class="o">=</span> <span class="mi">0</span>
+</span></pre></div>
+
+
+            <div class="docstring"><h6 id="arguments">Arguments:</h6>
+
+<ul>
+<li><strong>patience (int):</strong>  Number of epochs to wait.</li>
+<li><strong>min_delta (float):</strong>  Minimum change to qualify as an improvement.</li>
+</ul>
+</div>
+
+
+                            </div>
+                            <div id="PatienceStopping.patience" class="classattr">
+                                <div class="attr variable">
+            <span class="name">patience</span>
+
+        
+    </div>
+    <a class="headerlink" href="#PatienceStopping.patience"></a>
     
+    
+
+                            </div>
+                            <div id="PatienceStopping.min_delta" class="classattr">
+                                <div class="attr variable">
+            <span class="name">min_delta</span>
+
+        
+    </div>
+    <a class="headerlink" href="#PatienceStopping.min_delta"></a>
+    
+    
+
+                            </div>
+                            <div id="PatienceStopping.wait" class="classattr">
+                                <div class="attr variable">
+            <span class="name">wait</span>
+
+        
+    </div>
+    <a class="headerlink" href="#PatienceStopping.wait"></a>
+    
+    
+
+                            </div>
+                            <div id="PatienceStopping.best_score" class="classattr">
+                                <div class="attr variable">
+            <span class="name">best_score</span>
+
+        
+    </div>
+    <a class="headerlink" href="#PatienceStopping.best_score"></a>
+    
+    
+
+                            </div>
+                            <div id="PatienceStopping.epoch" class="classattr">
+                                <div class="attr variable">
+            <span class="name">epoch</span>
+
+        
+    </div>
+    <a class="headerlink" href="#PatienceStopping.epoch"></a>
+    
+    
+
+                            </div>
+                            <div id="PatienceStopping.callback" class="classattr">
+                                        <input id="PatienceStopping.callback-view-source" class="view-source-toggle-state" type="checkbox" aria-hidden="true" tabindex="-1">
+<div class="attr function">
+            
+        <span class="def">def</span>
+        <span class="name">callback</span><span class="signature pdoc-code multiline">(<span class="param">	<span class="bp">self</span>,</span><span class="param">	<span class="n">epoch</span><span class="p">:</span> <span class="nb">int</span>,</span><span class="param">	<span class="n">fitness</span><span class="p">:</span> <span class="n">numpy</span><span class="o">.</span><span class="n">ndarray</span>,</span><span class="param">	<span class="n">population</span><span class="p">:</span> <span class="n">numpy</span><span class="o">.</span><span class="n">ndarray</span></span><span class="return-annotation">) -> <span class="nb">bool</span> <span class="o">|</span> <span class="n">numpy</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">|</span> <span class="kc">None</span>:</span></span>
+
+                <label class="view-source-button" for="PatienceStopping.callback-view-source"><span>View Source</span></label>
+
+    </div>
+    <a class="headerlink" href="#PatienceStopping.callback"></a>
+            <div class="pdoc-code codehilite"><pre><span></span><span id="PatienceStopping.callback-79"><a href="#PatienceStopping.callback-79"><span class="linenos">79</span></a>    <span class="k">def</span><span class="w"> </span><span class="nf">callback</span><span class="p">(</span>
+</span><span id="PatienceStopping.callback-80"><a href="#PatienceStopping.callback-80"><span class="linenos">80</span></a>        <span class="bp">self</span><span class="p">,</span> <span class="n">epoch</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">fitness</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">population</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span>
+</span><span id="PatienceStopping.callback-81"><a href="#PatienceStopping.callback-81"><span class="linenos">81</span></a>    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span> <span class="o">|</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+</span><span id="PatienceStopping.callback-82"><a href="#PatienceStopping.callback-82"><span class="linenos">82</span></a><span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+</span><span id="PatienceStopping.callback-83"><a href="#PatienceStopping.callback-83"><span class="linenos">83</span></a><span class="sd">        Updates internal counter and checks stop condition.</span>
+</span><span id="PatienceStopping.callback-84"><a href="#PatienceStopping.callback-84"><span class="linenos">84</span></a>
+</span><span id="PatienceStopping.callback-85"><a href="#PatienceStopping.callback-85"><span class="linenos">85</span></a><span class="sd">        Returns:</span>
+</span><span id="PatienceStopping.callback-86"><a href="#PatienceStopping.callback-86"><span class="linenos">86</span></a><span class="sd">            bool: True if patience is exhausted.</span>
+</span><span id="PatienceStopping.callback-87"><a href="#PatienceStopping.callback-87"><span class="linenos">87</span></a><span class="sd">        &quot;&quot;&quot;</span>
+</span><span id="PatienceStopping.callback-88"><a href="#PatienceStopping.callback-88"><span class="linenos">88</span></a>        <span class="bp">self</span><span class="o">.</span><span class="n">epoch</span> <span class="o">=</span> <span class="n">epoch</span>
+</span><span id="PatienceStopping.callback-89"><a href="#PatienceStopping.callback-89"><span class="linenos">89</span></a>        <span class="n">current_best</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">min</span><span class="p">(</span><span class="n">fitness</span><span class="p">)</span>
+</span><span id="PatienceStopping.callback-90"><a href="#PatienceStopping.callback-90"><span class="linenos">90</span></a>        <span class="k">if</span> <span class="n">current_best</span> <span class="o">&lt;</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">best_score</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">min_delta</span><span class="p">):</span>
+</span><span id="PatienceStopping.callback-91"><a href="#PatienceStopping.callback-91"><span class="linenos">91</span></a>            <span class="bp">self</span><span class="o">.</span><span class="n">best_score</span> <span class="o">=</span> <span class="n">current_best</span>
+</span><span id="PatienceStopping.callback-92"><a href="#PatienceStopping.callback-92"><span class="linenos">92</span></a>            <span class="bp">self</span><span class="o">.</span><span class="n">wait</span> <span class="o">=</span> <span class="mi">0</span>  <span class="c1"># Reset patience</span>
+</span><span id="PatienceStopping.callback-93"><a href="#PatienceStopping.callback-93"><span class="linenos">93</span></a>        <span class="k">else</span><span class="p">:</span>
+</span><span id="PatienceStopping.callback-94"><a href="#PatienceStopping.callback-94"><span class="linenos">94</span></a>            <span class="bp">self</span><span class="o">.</span><span class="n">wait</span> <span class="o">+=</span> <span class="mi">1</span>
+</span><span id="PatienceStopping.callback-95"><a href="#PatienceStopping.callback-95"><span class="linenos">95</span></a>            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">wait</span> <span class="o">&gt;=</span> <span class="bp">self</span><span class="o">.</span><span class="n">patience</span><span class="p">:</span>
+</span><span id="PatienceStopping.callback-96"><a href="#PatienceStopping.callback-96"><span class="linenos">96</span></a>                <span class="k">return</span> <span class="kc">True</span>
+</span><span id="PatienceStopping.callback-97"><a href="#PatienceStopping.callback-97"><span class="linenos">97</span></a>        <span class="k">return</span> <span class="kc">False</span>
+</span></pre></div>
+
+
+            <div class="docstring"><p>Updates internal counter and checks stop condition.</p>
+
+<h6 id="returns">Returns:</h6>
+
+<blockquote>
+  <p>bool: True if patience is exhausted.</p>
+</blockquote>
+</div>
+
 
                             </div>
                 </section>
@@ -259,18 +662,34 @@
 
     </div>
     <a class="headerlink" href="#CountEpochs"></a>
-            <div class="pdoc-code codehilite"><pre><span></span><span id="CountEpochs-32"><a href="#CountEpochs-32"><span class="linenos">32</span></a><span class="k">class</span><span class="w"> </span><span class="nc">CountEpochs</span><span class="p">:</span>
-</span><span id="CountEpochs-33"><a href="#CountEpochs-33"><span class="linenos">33</span></a>    
-</span><span id="CountEpochs-34"><a href="#CountEpochs-34"><span class="linenos">34</span></a>    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-</span><span id="CountEpochs-35"><a href="#CountEpochs-35"><span class="linenos">35</span></a>        <span class="bp">self</span><span class="o">.</span><span class="n">epoch</span> <span class="o">=</span> <span class="mi">0</span>
-</span><span id="CountEpochs-36"><a href="#CountEpochs-36"><span class="linenos">36</span></a>        
-</span><span id="CountEpochs-37"><a href="#CountEpochs-37"><span class="linenos">37</span></a>    <span class="k">def</span><span class="w"> </span><span class="nf">callback</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">epoch</span><span class="p">:</span><span class="nb">int</span><span class="p">,</span> <span class="n">fitness</span><span class="p">:</span><span class="nb">list</span><span class="p">,</span> <span class="n">population</span><span class="p">:</span><span class="nb">list</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
-</span><span id="CountEpochs-38"><a href="#CountEpochs-38"><span class="linenos">38</span></a>        <span class="bp">self</span><span class="o">.</span><span class="n">epoch</span> <span class="o">+=</span> <span class="mi">1</span>
-</span><span id="CountEpochs-39"><a href="#CountEpochs-39"><span class="linenos">39</span></a>        <span class="k">return</span> <span class="kc">False</span>
+            <div class="pdoc-code codehilite"><pre><span></span><span id="CountEpochs-100"><a href="#CountEpochs-100"><span class="linenos">100</span></a><span class="k">class</span><span class="w"> </span><span class="nc">CountEpochs</span><span class="p">:</span>
+</span><span id="CountEpochs-101"><a href="#CountEpochs-101"><span class="linenos">101</span></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+</span><span id="CountEpochs-102"><a href="#CountEpochs-102"><span class="linenos">102</span></a><span class="sd">    Epoch Counter.</span>
+</span><span id="CountEpochs-103"><a href="#CountEpochs-103"><span class="linenos">103</span></a>
+</span><span id="CountEpochs-104"><a href="#CountEpochs-104"><span class="linenos">104</span></a><span class="sd">    A simple utility to track the actual number of epochs executed (useful when</span>
+</span><span id="CountEpochs-105"><a href="#CountEpochs-105"><span class="linenos">105</span></a><span class="sd">    early stopping is involved).</span>
+</span><span id="CountEpochs-106"><a href="#CountEpochs-106"><span class="linenos">106</span></a><span class="sd">    &quot;&quot;&quot;</span>
+</span><span id="CountEpochs-107"><a href="#CountEpochs-107"><span class="linenos">107</span></a>
+</span><span id="CountEpochs-108"><a href="#CountEpochs-108"><span class="linenos">108</span></a>    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+</span><span id="CountEpochs-109"><a href="#CountEpochs-109"><span class="linenos">109</span></a>        <span class="bp">self</span><span class="o">.</span><span class="n">epoch</span> <span class="o">=</span> <span class="mi">0</span>
+</span><span id="CountEpochs-110"><a href="#CountEpochs-110"><span class="linenos">110</span></a>
+</span><span id="CountEpochs-111"><a href="#CountEpochs-111"><span class="linenos">111</span></a>    <span class="k">def</span><span class="w"> </span><span class="nf">callback</span><span class="p">(</span>
+</span><span id="CountEpochs-112"><a href="#CountEpochs-112"><span class="linenos">112</span></a>        <span class="bp">self</span><span class="p">,</span> <span class="n">epoch</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">fitness</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">population</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span>
+</span><span id="CountEpochs-113"><a href="#CountEpochs-113"><span class="linenos">113</span></a>    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span> <span class="o">|</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+</span><span id="CountEpochs-114"><a href="#CountEpochs-114"><span class="linenos">114</span></a><span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+</span><span id="CountEpochs-115"><a href="#CountEpochs-115"><span class="linenos">115</span></a><span class="sd">        Increments internal epoch counter.</span>
+</span><span id="CountEpochs-116"><a href="#CountEpochs-116"><span class="linenos">116</span></a><span class="sd">        &quot;&quot;&quot;</span>
+</span><span id="CountEpochs-117"><a href="#CountEpochs-117"><span class="linenos">117</span></a>        <span class="bp">self</span><span class="o">.</span><span class="n">epoch</span> <span class="o">=</span> <span class="n">epoch</span> <span class="o">+</span> <span class="mi">1</span>
+</span><span id="CountEpochs-118"><a href="#CountEpochs-118"><span class="linenos">118</span></a>        <span class="k">return</span> <span class="kc">None</span>
 </span></pre></div>
 
 
-    
+            <div class="docstring"><p>Epoch Counter.</p>
+
+<p>A simple utility to track the actual number of epochs executed (useful when
+early stopping is involved).</p>
+</div>
+
 
                             <div id="CountEpochs.epoch" class="classattr">
                                 <div class="attr variable">
@@ -288,19 +707,153 @@
 <div class="attr function">
             
         <span class="def">def</span>
-        <span class="name">callback</span><span class="signature pdoc-code condensed">(<span class="param"><span class="bp">self</span>, </span><span class="param"><span class="n">epoch</span><span class="p">:</span> <span class="nb">int</span>, </span><span class="param"><span class="n">fitness</span><span class="p">:</span> <span class="nb">list</span>, </span><span class="param"><span class="n">population</span><span class="p">:</span> <span class="nb">list</span></span><span class="return-annotation">) -> <span class="nb">bool</span>:</span></span>
+        <span class="name">callback</span><span class="signature pdoc-code multiline">(<span class="param">	<span class="bp">self</span>,</span><span class="param">	<span class="n">epoch</span><span class="p">:</span> <span class="nb">int</span>,</span><span class="param">	<span class="n">fitness</span><span class="p">:</span> <span class="n">numpy</span><span class="o">.</span><span class="n">ndarray</span>,</span><span class="param">	<span class="n">population</span><span class="p">:</span> <span class="n">numpy</span><span class="o">.</span><span class="n">ndarray</span></span><span class="return-annotation">) -> <span class="nb">bool</span> <span class="o">|</span> <span class="n">numpy</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">|</span> <span class="kc">None</span>:</span></span>
 
                 <label class="view-source-button" for="CountEpochs.callback-view-source"><span>View Source</span></label>
 
     </div>
     <a class="headerlink" href="#CountEpochs.callback"></a>
-            <div class="pdoc-code codehilite"><pre><span></span><span id="CountEpochs.callback-37"><a href="#CountEpochs.callback-37"><span class="linenos">37</span></a>    <span class="k">def</span><span class="w"> </span><span class="nf">callback</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">epoch</span><span class="p">:</span><span class="nb">int</span><span class="p">,</span> <span class="n">fitness</span><span class="p">:</span><span class="nb">list</span><span class="p">,</span> <span class="n">population</span><span class="p">:</span><span class="nb">list</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
-</span><span id="CountEpochs.callback-38"><a href="#CountEpochs.callback-38"><span class="linenos">38</span></a>        <span class="bp">self</span><span class="o">.</span><span class="n">epoch</span> <span class="o">+=</span> <span class="mi">1</span>
-</span><span id="CountEpochs.callback-39"><a href="#CountEpochs.callback-39"><span class="linenos">39</span></a>        <span class="k">return</span> <span class="kc">False</span>
+            <div class="pdoc-code codehilite"><pre><span></span><span id="CountEpochs.callback-111"><a href="#CountEpochs.callback-111"><span class="linenos">111</span></a>    <span class="k">def</span><span class="w"> </span><span class="nf">callback</span><span class="p">(</span>
+</span><span id="CountEpochs.callback-112"><a href="#CountEpochs.callback-112"><span class="linenos">112</span></a>        <span class="bp">self</span><span class="p">,</span> <span class="n">epoch</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">fitness</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">population</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span>
+</span><span id="CountEpochs.callback-113"><a href="#CountEpochs.callback-113"><span class="linenos">113</span></a>    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span> <span class="o">|</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+</span><span id="CountEpochs.callback-114"><a href="#CountEpochs.callback-114"><span class="linenos">114</span></a><span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+</span><span id="CountEpochs.callback-115"><a href="#CountEpochs.callback-115"><span class="linenos">115</span></a><span class="sd">        Increments internal epoch counter.</span>
+</span><span id="CountEpochs.callback-116"><a href="#CountEpochs.callback-116"><span class="linenos">116</span></a><span class="sd">        &quot;&quot;&quot;</span>
+</span><span id="CountEpochs.callback-117"><a href="#CountEpochs.callback-117"><span class="linenos">117</span></a>        <span class="bp">self</span><span class="o">.</span><span class="n">epoch</span> <span class="o">=</span> <span class="n">epoch</span> <span class="o">+</span> <span class="mi">1</span>
+</span><span id="CountEpochs.callback-118"><a href="#CountEpochs.callback-118"><span class="linenos">118</span></a>        <span class="k">return</span> <span class="kc">None</span>
 </span></pre></div>
 
 
+            <div class="docstring"><p>Increments internal epoch counter.</p>
+</div>
+
+
+                            </div>
+                </section>
+                <section id="ClampBounds">
+                            <input id="ClampBounds-view-source" class="view-source-toggle-state" type="checkbox" aria-hidden="true" tabindex="-1">
+<div class="attr class">
+            
+    <span class="def">class</span>
+    <span class="name">ClampBounds</span>:
+
+                <label class="view-source-button" for="ClampBounds-view-source"><span>View Source</span></label>
+
+    </div>
+    <a class="headerlink" href="#ClampBounds"></a>
+            <div class="pdoc-code codehilite"><pre><span></span><span id="ClampBounds-121"><a href="#ClampBounds-121"><span class="linenos">121</span></a><span class="k">class</span><span class="w"> </span><span class="nc">ClampBounds</span><span class="p">:</span>
+</span><span id="ClampBounds-122"><a href="#ClampBounds-122"><span class="linenos">122</span></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+</span><span id="ClampBounds-123"><a href="#ClampBounds-123"><span class="linenos">123</span></a><span class="sd">    Population Constraint Callback.</span>
+</span><span id="ClampBounds-124"><a href="#ClampBounds-124"><span class="linenos">124</span></a>
+</span><span id="ClampBounds-125"><a href="#ClampBounds-125"><span class="linenos">125</span></a><span class="sd">    A population modification callback that forcibly clips all particles to</span>
+</span><span id="ClampBounds-126"><a href="#ClampBounds-126"><span class="linenos">126</span></a><span class="sd">    stay within the defined search bounds at the end of every epoch.</span>
+</span><span id="ClampBounds-127"><a href="#ClampBounds-127"><span class="linenos">127</span></a>
+</span><span id="ClampBounds-128"><a href="#ClampBounds-128"><span class="linenos">128</span></a><span class="sd">    **Action:**</span>
+</span><span id="ClampBounds-129"><a href="#ClampBounds-129"><span class="linenos">129</span></a><span class="sd">    $$ x_{i,d} = \\max(\\min(x_{i,d}, upper_d), lower_d) $$</span>
+</span><span id="ClampBounds-130"><a href="#ClampBounds-130"><span class="linenos">130</span></a><span class="sd">    &quot;&quot;&quot;</span>
+</span><span id="ClampBounds-131"><a href="#ClampBounds-131"><span class="linenos">131</span></a>
+</span><span id="ClampBounds-132"><a href="#ClampBounds-132"><span class="linenos">132</span></a>    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">bounds</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+</span><span id="ClampBounds-133"><a href="#ClampBounds-133"><span class="linenos">133</span></a><span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+</span><span id="ClampBounds-134"><a href="#ClampBounds-134"><span class="linenos">134</span></a><span class="sd">        Args:</span>
+</span><span id="ClampBounds-135"><a href="#ClampBounds-135"><span class="linenos">135</span></a><span class="sd">            bounds (np.ndarray): The min/max bounds matrix.</span>
+</span><span id="ClampBounds-136"><a href="#ClampBounds-136"><span class="linenos">136</span></a><span class="sd">        &quot;&quot;&quot;</span>
+</span><span id="ClampBounds-137"><a href="#ClampBounds-137"><span class="linenos">137</span></a>        <span class="bp">self</span><span class="o">.</span><span class="n">bounds</span> <span class="o">=</span> <span class="n">bounds</span>
+</span><span id="ClampBounds-138"><a href="#ClampBounds-138"><span class="linenos">138</span></a>
+</span><span id="ClampBounds-139"><a href="#ClampBounds-139"><span class="linenos">139</span></a>    <span class="k">def</span><span class="w"> </span><span class="nf">callback</span><span class="p">(</span>
+</span><span id="ClampBounds-140"><a href="#ClampBounds-140"><span class="linenos">140</span></a>        <span class="bp">self</span><span class="p">,</span> <span class="n">epoch</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">fitness</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">population</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span>
+</span><span id="ClampBounds-141"><a href="#ClampBounds-141"><span class="linenos">141</span></a>    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span> <span class="o">|</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+</span><span id="ClampBounds-142"><a href="#ClampBounds-142"><span class="linenos">142</span></a><span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+</span><span id="ClampBounds-143"><a href="#ClampBounds-143"><span class="linenos">143</span></a><span class="sd">        Modifies the population in-place (or returns new array).</span>
+</span><span id="ClampBounds-144"><a href="#ClampBounds-144"><span class="linenos">144</span></a>
+</span><span id="ClampBounds-145"><a href="#ClampBounds-145"><span class="linenos">145</span></a><span class="sd">        Returns:</span>
+</span><span id="ClampBounds-146"><a href="#ClampBounds-146"><span class="linenos">146</span></a><span class="sd">            np.ndarray: The clipped population.</span>
+</span><span id="ClampBounds-147"><a href="#ClampBounds-147"><span class="linenos">147</span></a><span class="sd">        &quot;&quot;&quot;</span>
+</span><span id="ClampBounds-148"><a href="#ClampBounds-148"><span class="linenos">148</span></a>        <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">clip</span><span class="p">(</span><span class="n">population</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">bounds</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">],</span> <span class="bp">self</span><span class="o">.</span><span class="n">bounds</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">])</span>
+</span></pre></div>
+
+
+            <div class="docstring"><p>Population Constraint Callback.</p>
+
+<p>A population modification callback that forcibly clips all particles to
+stay within the defined search bounds at the end of every epoch.</p>
+
+<p><strong>Action:</strong>
+$$ x_{i,d} = \max(\min(x_{i,d}, upper_d), lower_d) $$</p>
+</div>
+
+
+                            <div id="ClampBounds.__init__" class="classattr">
+                                        <input id="ClampBounds.__init__-view-source" class="view-source-toggle-state" type="checkbox" aria-hidden="true" tabindex="-1">
+<div class="attr function">
+            
+        <span class="name">ClampBounds</span><span class="signature pdoc-code condensed">(<span class="param"><span class="n">bounds</span><span class="p">:</span> <span class="n">numpy</span><span class="o">.</span><span class="n">ndarray</span></span>)</span>
+
+                <label class="view-source-button" for="ClampBounds.__init__-view-source"><span>View Source</span></label>
+
+    </div>
+    <a class="headerlink" href="#ClampBounds.__init__"></a>
+            <div class="pdoc-code codehilite"><pre><span></span><span id="ClampBounds.__init__-132"><a href="#ClampBounds.__init__-132"><span class="linenos">132</span></a>    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">bounds</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+</span><span id="ClampBounds.__init__-133"><a href="#ClampBounds.__init__-133"><span class="linenos">133</span></a><span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+</span><span id="ClampBounds.__init__-134"><a href="#ClampBounds.__init__-134"><span class="linenos">134</span></a><span class="sd">        Args:</span>
+</span><span id="ClampBounds.__init__-135"><a href="#ClampBounds.__init__-135"><span class="linenos">135</span></a><span class="sd">            bounds (np.ndarray): The min/max bounds matrix.</span>
+</span><span id="ClampBounds.__init__-136"><a href="#ClampBounds.__init__-136"><span class="linenos">136</span></a><span class="sd">        &quot;&quot;&quot;</span>
+</span><span id="ClampBounds.__init__-137"><a href="#ClampBounds.__init__-137"><span class="linenos">137</span></a>        <span class="bp">self</span><span class="o">.</span><span class="n">bounds</span> <span class="o">=</span> <span class="n">bounds</span>
+</span></pre></div>
+
+
+            <div class="docstring"><h6 id="arguments">Arguments:</h6>
+
+<ul>
+<li><strong>bounds (np.ndarray):</strong>  The min/max bounds matrix.</li>
+</ul>
+</div>
+
+
+                            </div>
+                            <div id="ClampBounds.bounds" class="classattr">
+                                <div class="attr variable">
+            <span class="name">bounds</span>
+
+        
+    </div>
+    <a class="headerlink" href="#ClampBounds.bounds"></a>
     
+    
+
+                            </div>
+                            <div id="ClampBounds.callback" class="classattr">
+                                        <input id="ClampBounds.callback-view-source" class="view-source-toggle-state" type="checkbox" aria-hidden="true" tabindex="-1">
+<div class="attr function">
+            
+        <span class="def">def</span>
+        <span class="name">callback</span><span class="signature pdoc-code multiline">(<span class="param">	<span class="bp">self</span>,</span><span class="param">	<span class="n">epoch</span><span class="p">:</span> <span class="nb">int</span>,</span><span class="param">	<span class="n">fitness</span><span class="p">:</span> <span class="n">numpy</span><span class="o">.</span><span class="n">ndarray</span>,</span><span class="param">	<span class="n">population</span><span class="p">:</span> <span class="n">numpy</span><span class="o">.</span><span class="n">ndarray</span></span><span class="return-annotation">) -> <span class="nb">bool</span> <span class="o">|</span> <span class="n">numpy</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">|</span> <span class="kc">None</span>:</span></span>
+
+                <label class="view-source-button" for="ClampBounds.callback-view-source"><span>View Source</span></label>
+
+    </div>
+    <a class="headerlink" href="#ClampBounds.callback"></a>
+            <div class="pdoc-code codehilite"><pre><span></span><span id="ClampBounds.callback-139"><a href="#ClampBounds.callback-139"><span class="linenos">139</span></a>    <span class="k">def</span><span class="w"> </span><span class="nf">callback</span><span class="p">(</span>
+</span><span id="ClampBounds.callback-140"><a href="#ClampBounds.callback-140"><span class="linenos">140</span></a>        <span class="bp">self</span><span class="p">,</span> <span class="n">epoch</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">fitness</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">population</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span>
+</span><span id="ClampBounds.callback-141"><a href="#ClampBounds.callback-141"><span class="linenos">141</span></a>    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span> <span class="o">|</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+</span><span id="ClampBounds.callback-142"><a href="#ClampBounds.callback-142"><span class="linenos">142</span></a><span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+</span><span id="ClampBounds.callback-143"><a href="#ClampBounds.callback-143"><span class="linenos">143</span></a><span class="sd">        Modifies the population in-place (or returns new array).</span>
+</span><span id="ClampBounds.callback-144"><a href="#ClampBounds.callback-144"><span class="linenos">144</span></a>
+</span><span id="ClampBounds.callback-145"><a href="#ClampBounds.callback-145"><span class="linenos">145</span></a><span class="sd">        Returns:</span>
+</span><span id="ClampBounds.callback-146"><a href="#ClampBounds.callback-146"><span class="linenos">146</span></a><span class="sd">            np.ndarray: The clipped population.</span>
+</span><span id="ClampBounds.callback-147"><a href="#ClampBounds.callback-147"><span class="linenos">147</span></a><span class="sd">        &quot;&quot;&quot;</span>
+</span><span id="ClampBounds.callback-148"><a href="#ClampBounds.callback-148"><span class="linenos">148</span></a>        <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">clip</span><span class="p">(</span><span class="n">population</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">bounds</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">],</span> <span class="bp">self</span><span class="o">.</span><span class="n">bounds</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">])</span>
+</span></pre></div>
+
+
+            <div class="docstring"><p>Modifies the population in-place (or returns new array).</p>
+
+<h6 id="returns">Returns:</h6>
+
+<blockquote>
+  <p>np.ndarray: The clipped population.</p>
+</blockquote>
+</div>
+
 
                             </div>
                 </section>

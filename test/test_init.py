@@ -146,5 +146,71 @@ class TestInit(unittest.TestCase):
         self.assertEqual(pop.shape, (5, 2))
 
 
+    def test_quasi_opposition_execution(self):
+        """Test Quasi-Opposition Based Learning execution"""
+        
+        bounds = np.asarray([[-5.0, 5.0], [-5.0, 5.0]])
+        
+        # QOBL should return n_pop individuals
+        population = init.quasi_opposition_based(
+            functions.sphere, bounds, population=self.sampler, n_pop=10, seed=42
+        )
+        
+        self.assertEqual(population.shape, (10, 2))
+        self.assertTrue(utils.assert_bounds(population, bounds))
+
+    def test_quasi_opposition_logic(self):
+        """
+        Verify QOBL logic: It should sample between Center and Opposite.
+        """
+
+        # 1D Bound: [0, 10]. Center = 5.
+        bounds = np.asarray([[0.0, 10.0]])
+        
+        # Specific Population Input: [1.0] (Fitness 1.0 using Sphere)
+        # Opposite = 0 + 10 - 1 = 9.
+        # Center = 5.
+        # QOBL range for this point: [5, 9] (since 5 < 9)
+        
+        # We mock the RNG to control the "Uniform" sample inside QOBL
+        # We want to ensure the generated point is indeed within [5, 9]
+        # However, since we can't easily mock the internal RNG call without patching,
+        # we check the bounds of the output over multiple runs or simply check constraints.
+        
+        population_in = np.array([[1.0]])
+        
+        # Run QOBL
+        result = init.quasi_opposition_based(
+            functions.sphere, bounds, population=population_in, n_pop=1, seed=42
+        )
+        
+        res_val = result[0, 0]
+        
+        # The result must be either the original (1.0) or the quasi-opposite.
+        # If it selected the quasi-opposite, it MUST be in [5, 9].
+        # Sphere minimizes: 
+        # Orig (1.0) -> Cost 1.0
+        # Quasi in [5, 9] -> Cost > 25.0
+        # Therefore, QOBL should strictly prefer the Original (1.0) because it's better.
+        
+        self.assertAlmostEqual(res_val, 1.0)
+        
+        # Now let's try a case where Quasi is better.
+        # Point = 9.0 (Cost 81). Opposite = 1.0. Center = 5.
+        # Quasi Range: [1, 5].
+        # Any point in [1, 5] has Cost < 25, which is better than 81.
+        # So it should ALWAYS pick the Quasi point.
+        
+        population_bad = np.array([[9.0]])
+        result_quasi = init.quasi_opposition_based(
+            functions.sphere, bounds, population=population_bad, n_pop=1, seed=42
+        )
+        
+        # The result must NOT be 9.0
+        self.assertNotAlmostEqual(result_quasi[0, 0], 9.0)
+        # It must be within [1, 5]
+        self.assertTrue(1.0 <= result_quasi[0, 0] <= 5.0)
+
+
 if __name__ == '__main__':
     unittest.main()

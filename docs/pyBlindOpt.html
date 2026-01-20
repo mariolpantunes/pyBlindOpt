@@ -48,19 +48,29 @@
 
             <h2>Submodules</h2>
             <ul>
+                    <li><a href="pyBlindOpt/abc_opt.html">abc_opt</a></li>
                     <li><a href="pyBlindOpt/callback.html">callback</a></li>
+                    <li><a href="pyBlindOpt/cs.html">cs</a></li>
                     <li><a href="pyBlindOpt/de.html">de</a></li>
                     <li><a href="pyBlindOpt/egwo.html">egwo</a></li>
+                    <li><a href="pyBlindOpt/fa.html">fa</a></li>
                     <li><a href="pyBlindOpt/functions.html">functions</a></li>
                     <li><a href="pyBlindOpt/ga.html">ga</a></li>
                     <li><a href="pyBlindOpt/gwo.html">gwo</a></li>
+                    <li><a href="pyBlindOpt/hba.html">hba</a></li>
                     <li><a href="pyBlindOpt/hc.html">hc</a></li>
+                    <li><a href="pyBlindOpt/hho.html">hho</a></li>
                     <li><a href="pyBlindOpt/init.html">init</a></li>
+                    <li><a href="pyBlindOpt/optimizer.html">optimizer</a></li>
                     <li><a href="pyBlindOpt/pso.html">pso</a></li>
                     <li><a href="pyBlindOpt/rs.html">rs</a></li>
                     <li><a href="pyBlindOpt/sa.html">sa</a></li>
                     <li><a href="pyBlindOpt/utils.html">utils</a></li>
             </ul>
+
+            <h2>API Documentation</h2>
+                <ul class="memberlist">
+    </ul>
 
 
 
@@ -98,7 +108,7 @@ Note: The code has been optimized to a certain degree but was primarily created 
 
                         <label class="view-source-button" for="mod-pyBlindOpt-view-source"><span>View Source</span></label>
 
-                        <div class="pdoc-code codehilite"><pre><span></span><span id="L-1"><a href="#L-1"><span class="linenos"> 1</span></a><span class="sd">&#39;&#39;&#39;</span>
+                        <div class="pdoc-code codehilite"><pre><span></span><span id="L-1"><a href="#L-1"><span class="linenos"> 1</span></a><span class="sd">&quot;&quot;&quot;</span>
 </span><span id="L-2"><a href="#L-2"><span class="linenos"> 2</span></a><span class="sd">pyBlindOpt is a library that implements several derivative-free optimization algorithms (including genetic and evolutionary methods).</span>
 </span><span id="L-3"><a href="#L-3"><span class="linenos"> 3</span></a><span class="sd">Currently, it implements eight different algorithms:</span>
 </span><span id="L-4"><a href="#L-4"><span class="linenos"> 4</span></a><span class="sd">1.  Random Search (RS): A baseline optimization method that iteratively generates candidate solutions from the search space according to a specified probability distribution (usually uniform) and records the best solution found. It serves as a benchmark for comparing the performance of more complex algorithms.</span>
@@ -112,19 +122,27 @@ Note: The code has been optimized to a certain degree but was primarily created 
 </span><span id="L-12"><a href="#L-12"><span class="linenos">12</span></a>
 </span><span id="L-13"><a href="#L-13"><span class="linenos">13</span></a><span class="sd">All algorithms take advantage of the joblib library to parallelize objective function evaluations and cache results for improved performance.</span>
 </span><span id="L-14"><a href="#L-14"><span class="linenos">14</span></a><span class="sd">Note: The code has been optimized to a certain degree but was primarily created for educational purposes. Please consider libraries like pymoo or SciPy if you require a production-grade implementation. Regardless, reported issues will be fixed whenever possible.</span>
-</span><span id="L-15"><a href="#L-15"><span class="linenos">15</span></a><span class="sd">&#39;&#39;&#39;</span>
-</span><span id="L-16"><a href="#L-16"><span class="linenos">16</span></a><span class="kn">import</span><span class="w"> </span><span class="nn">pyBlindOpt.callback</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">callback</span>
-</span><span id="L-17"><a href="#L-17"><span class="linenos">17</span></a><span class="kn">import</span><span class="w"> </span><span class="nn">pyBlindOpt.de</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">de</span>
-</span><span id="L-18"><a href="#L-18"><span class="linenos">18</span></a><span class="kn">import</span><span class="w"> </span><span class="nn">pyBlindOpt.egwo</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">egwo</span>
-</span><span id="L-19"><a href="#L-19"><span class="linenos">19</span></a><span class="kn">import</span><span class="w"> </span><span class="nn">pyBlindOpt.functions</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">functions</span>
-</span><span id="L-20"><a href="#L-20"><span class="linenos">20</span></a><span class="kn">import</span><span class="w"> </span><span class="nn">pyBlindOpt.ga</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">ga</span>
-</span><span id="L-21"><a href="#L-21"><span class="linenos">21</span></a><span class="kn">import</span><span class="w"> </span><span class="nn">pyBlindOpt.gwo</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">gwo</span>
-</span><span id="L-22"><a href="#L-22"><span class="linenos">22</span></a><span class="kn">import</span><span class="w"> </span><span class="nn">pyBlindOpt.hc</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">hc</span>
-</span><span id="L-23"><a href="#L-23"><span class="linenos">23</span></a><span class="kn">import</span><span class="w"> </span><span class="nn">pyBlindOpt.init</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">init</span>
-</span><span id="L-24"><a href="#L-24"><span class="linenos">24</span></a><span class="kn">import</span><span class="w"> </span><span class="nn">pyBlindOpt.pso</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pso</span>
-</span><span id="L-25"><a href="#L-25"><span class="linenos">25</span></a><span class="kn">import</span><span class="w"> </span><span class="nn">pyBlindOpt.rs</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">rs</span>
-</span><span id="L-26"><a href="#L-26"><span class="linenos">26</span></a><span class="kn">import</span><span class="w"> </span><span class="nn">pyBlindOpt.sa</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">sa</span>
-</span><span id="L-27"><a href="#L-27"><span class="linenos">27</span></a><span class="kn">import</span><span class="w"> </span><span class="nn">pyBlindOpt.utils</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">utils</span>
+</span><span id="L-15"><a href="#L-15"><span class="linenos">15</span></a><span class="sd">&quot;&quot;&quot;</span>
+</span><span id="L-16"><a href="#L-16"><span class="linenos">16</span></a>
+</span><span id="L-17"><a href="#L-17"><span class="linenos">17</span></a><span class="n">__author__</span> <span class="o">=</span> <span class="s2">&quot;Mário Antunes&quot;</span>
+</span><span id="L-18"><a href="#L-18"><span class="linenos">18</span></a><span class="n">__license__</span> <span class="o">=</span> <span class="s2">&quot;MIT&quot;</span>
+</span><span id="L-19"><a href="#L-19"><span class="linenos">19</span></a><span class="n">__version__</span> <span class="o">=</span> <span class="s2">&quot;0.2&quot;</span>
+</span><span id="L-20"><a href="#L-20"><span class="linenos">20</span></a><span class="n">__email__</span> <span class="o">=</span> <span class="s2">&quot;mario.antunes@ua.com&quot;</span>
+</span><span id="L-21"><a href="#L-21"><span class="linenos">21</span></a><span class="n">__url__</span> <span class="o">=</span> <span class="s2">&quot;https://github.com/mariolpantunes/pyblindopt&quot;</span>
+</span><span id="L-22"><a href="#L-22"><span class="linenos">22</span></a><span class="n">__status__</span> <span class="o">=</span> <span class="s2">&quot;Development&quot;</span>
+</span><span id="L-23"><a href="#L-23"><span class="linenos">23</span></a>
+</span><span id="L-24"><a href="#L-24"><span class="linenos">24</span></a><span class="kn">import</span><span class="w"> </span><span class="nn">pyBlindOpt.callback</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">callback</span>
+</span><span id="L-25"><a href="#L-25"><span class="linenos">25</span></a><span class="kn">import</span><span class="w"> </span><span class="nn">pyBlindOpt.de</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">de</span>
+</span><span id="L-26"><a href="#L-26"><span class="linenos">26</span></a><span class="kn">import</span><span class="w"> </span><span class="nn">pyBlindOpt.egwo</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">egwo</span>
+</span><span id="L-27"><a href="#L-27"><span class="linenos">27</span></a><span class="kn">import</span><span class="w"> </span><span class="nn">pyBlindOpt.functions</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">functions</span>
+</span><span id="L-28"><a href="#L-28"><span class="linenos">28</span></a><span class="kn">import</span><span class="w"> </span><span class="nn">pyBlindOpt.ga</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">ga</span>
+</span><span id="L-29"><a href="#L-29"><span class="linenos">29</span></a><span class="kn">import</span><span class="w"> </span><span class="nn">pyBlindOpt.gwo</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">gwo</span>
+</span><span id="L-30"><a href="#L-30"><span class="linenos">30</span></a><span class="kn">import</span><span class="w"> </span><span class="nn">pyBlindOpt.hc</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">hc</span>
+</span><span id="L-31"><a href="#L-31"><span class="linenos">31</span></a><span class="kn">import</span><span class="w"> </span><span class="nn">pyBlindOpt.init</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">init</span>
+</span><span id="L-32"><a href="#L-32"><span class="linenos">32</span></a><span class="kn">import</span><span class="w"> </span><span class="nn">pyBlindOpt.pso</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pso</span>
+</span><span id="L-33"><a href="#L-33"><span class="linenos">33</span></a><span class="kn">import</span><span class="w"> </span><span class="nn">pyBlindOpt.rs</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">rs</span>
+</span><span id="L-34"><a href="#L-34"><span class="linenos">34</span></a><span class="kn">import</span><span class="w"> </span><span class="nn">pyBlindOpt.sa</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">sa</span>
+</span><span id="L-35"><a href="#L-35"><span class="linenos">35</span></a><span class="kn">import</span><span class="w"> </span><span class="nn">pyBlindOpt.utils</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">utils</span>
 </span></pre></div>
 
 

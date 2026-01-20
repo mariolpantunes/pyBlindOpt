@@ -1,111 +1,212 @@
 # coding: utf-8
 
+"""
+Hill Climbing (HC) optimization algorithm.
 
-'''
-Hill climbing is a mathematical optimization technique that belongs to the 
-family of local search. It is an iterative algorithm that starts with an 
-arbitrary solution to a problem and then attempts to find a better solution 
-by making an incremental change to the solution.
-'''
+This module implements the Hill Climbing metaheuristic, a local search algorithm
+that continuously moves towards increasing value (or decreasing cost) to find a local optimum.
+It is a "greedy" approach that never accepts a move that worsens the objective function.
+
+**Mathematical Formulation:**
+Given a current solution $x_{curr}$, a candidate $x_{new}$ is generated.
+The selection criterion is:
+$$
+x_{next} =
+\\begin{cases}
+x_{new} & \\text{if } f(x_{new}) < f(x_{curr}) \\\\
+x_{curr} & \\text{otherwise}
+\\end{cases}
+$$
+
+**Analogy:**
+Imagine a climber in a thick fog who can only see one step ahead. They take a step;
+if it leads higher (for maximization) or lower (for minimization), they take it.
+If it doesn't, they stay put and try a different direction. They stop when no step
+leads to an improvement, possibly getting stuck on a small hill (local optimum)
+rather than the highest peak.
+
+**Parallel Execution:**
+If `n_pop > 1`, this runs as "Parallel Hill Climbing", maintaining multiple
+independent climbers starting from different locations to increase the chance of
+finding the global optimum.
+"""
+
+__author__ = "Mário Antunes"
+__license__ = "MIT"
+__version__ = "0.2"
+__email__ = "mario.antunes@ua.com"
+__url__ = "https://github.com/mariolpantunes/pyblindopt"
+__status__ = "Development"
 
 
-__author__ = 'Mário Antunes'
-__version__ = '0.1'
-__email__ = 'mariolpantunes@gmail.com'
-__status__ = 'Development'
-
-
-import math
-import tqdm
-import typing
-import joblib
+import collections.abc
 import logging
-import tempfile
+
 import numpy as np
+
 import pyBlindOpt.utils as utils
-
-
-from collections.abc import Sequence
-
+from pyBlindOpt.optimizer import Optimizer
 
 logger = logging.getLogger(__name__)
 
 
-def hillclimbing(objective:typing.Callable, bounds:list,
-callback:"Sequence[callable] | callable"=None, n_iter:int=200, step_size:float=.01,
-cached:bool=False, debug:bool=False, verbose:bool=False, seed:int=42) -> tuple:
+class HillClimbing(Optimizer):
     """
-    Hill climbing local search algorithm.
+    Hill Climbing Optimizer.
+
+    A local search algorithm that iteratively perturbs the solution and accepts
+    it only if it strictly improves the objective (Greedy).
+    """
+
+    def __init__(
+        self,
+        objective: collections.abc.Callable,
+        bounds: np.ndarray,
+        population: np.ndarray | None = None,
+        step_size: float = 0.01,
+        callback: list[collections.abc.Callable]
+        | collections.abc.Callable
+        | None = None,
+        n_iter: int = 200,
+        n_pop: int = 1,  # Default to 1 for standard Hill Climbing
+        n_jobs: int = 1,
+        cached: bool = False,
+        debug: bool = False,
+        verbose: bool = False,
+        seed: int | np.random.Generator | utils.Sampler | None = None,
+    ):
+        self.step_size = step_size
+        super().__init__(
+            objective=objective,
+            bounds=bounds,
+            population=population,
+            callback=callback,
+            n_iter=n_iter,
+            n_pop=n_pop,
+            n_jobs=n_jobs,
+            cached=cached,
+            debug=debug,
+            verbose=verbose,
+            seed=seed,
+        )
+
+    def _initialize(self):
+        """
+        Initialization hook.
+
+        No specific initialization is required for standard Hill Climbing beyond
+        population generation handled by the base class.
+        """
+        pass
+
+    def _update_iter_params(self, epoch: int):
+        """
+        Parameter update hook.
+
+        Hill Climbing is a stationary algorithm with no dynamic parameters
+        (like temperature or inertia) to update per epoch.
+        """
+        pass
+
+    def _update_best(self, epoch: int):
+        """
+        Updates the global best solution found by any of the climbers.
+
+        Scans the current population to see if any climber has found a spot
+        better than the historically stored `best_score`.
+
+        Args:
+            epoch (int): The current iteration index.
+        """
+        best_idx = np.argmin(self.scores)
+        if self.scores[best_idx] < self.best_score:
+            self.best_score = self.scores[best_idx]
+            self.best_pos = self.pop[best_idx].copy()
+
+    def _generate_offspring(self, epoch: int) -> np.ndarray:
+        """
+        Generates candidate solutions via Gaussian perturbation.
+
+        Creates a neighbor solution $x_{new}$ by adding normally distributed noise
+        to the current solution $x_{curr}$:
+        $$ x_{new} = x_{curr} + \\mathcal{N}(0, \\sigma^2) $$
+        where $\\sigma$ is the `step_size`.
+
+        Args:
+            epoch (int): The current iteration index.
+
+        Returns:
+            np.ndarray: The candidate solutions (offspring).
+        """
+        noise = self.rng.normal(loc=0.0, scale=self.step_size, size=self.pop.shape)
+        return self.pop + noise
+
+    def _selection(self, offspring: np.ndarray, offspring_scores: np.ndarray):
+        """
+        Greedy Selection (Local Search).
+
+        Accepts a new solution only if it is strictly better than the current one.
+
+        $$
+        x_{t+1} = \\text{argmin}(f(x_t), f(x_{new}))
+        $$
+
+        Args:
+            offspring (np.ndarray): The candidate solutions.
+            offspring_scores (np.ndarray): The objective values of the candidates.
+        """
+        improved_mask = offspring_scores < self.scores
+
+        self.pop[improved_mask] = offspring[improved_mask]
+        self.scores[improved_mask] = offspring_scores[improved_mask]
+
+
+def hill_climbing(
+    objective: collections.abc.Callable,
+    bounds: np.ndarray,
+    population: np.ndarray | None = None,
+    step_size: float = 0.01,
+    callback: list[collections.abc.Callable] | collections.abc.Callable | None = None,
+    n_iter: int = 200,
+    n_pop: int = 1,
+    n_jobs: int = 1,
+    cached: bool = False,
+    debug: bool = False,
+    verbose: bool = False,
+    seed: int | np.random.Generator | utils.Sampler | None = None,
+) -> tuple:
+    """
+    Functional interface for running Hill Climbing optimization.
 
     Args:
-        objective (typing.Callable): objective function used to evaluate the candidate solutions (lower is better)
-        bounds (list): bounds that limit the search space
-        callback (typing.Callable): callback function that is called at each epoch (deafult None)
-        n_iter (int): the number of iterations (default 200)
-        step_size (float): the step size (default 0.01)
-        cached (bool): controls if the objective function is cached by joblib (default False)
-        debug (bool): controls if debug information is returned (default False)
-        verbose (bool): controls the usage of tqdm as a progress bar (default False)
-        seed (int): seed to init the random generator (default 42)
+        objective (Callable): Function to minimize.
+        bounds (np.ndarray): Search space bounds.
+        population (np.ndarray | None): Initial population.
+        step_size (float): Standard deviation of perturbation noise.
+        callback (list | Callable | None): End-of-epoch callbacks.
+        n_iter (int): Number of iterations.
+        n_pop (int): Number of parallel climbers (Parallel HC).
+        n_jobs (int): Parallel jobs for evaluation.
+        cached (bool): Enable function caching.
+        debug (bool): Enable history tracking.
+        verbose (bool): Show progress bar.
+        seed (int | Generator | Sampler | None): Random seed/sampler.
 
     Returns:
-        tuple: the best solution
+        tuple: (best_position, best_score) or (best_pos, best_score, history) if debug=True.
     """
-    # define the seed of the random generation
-    np.random.seed(seed)
-
-    # cache the initial objective function
-    if cached:
-        # Cache from joblib
-        location = tempfile.gettempdir()
-        memory = joblib.Memory(location, verbose=0)
-        objective_cache = memory.cache(objective)
-    else:
-        objective_cache = objective
-
-    # generate an initial point
-    solution = utils.get_random_solution(bounds)
-    # evaluate the initial point
-    solution_cost = objective_cache(solution)
-    
-    # arrays to store the debug information
-    if debug:
-        obj_cost_iter = []
-    
-    # run the hill climb
-    for epoch in tqdm.tqdm(range(n_iter), disable=not verbose):
-		# take a step
-        candidate = solution + np.random.randn(len(bounds)) * step_size
-        # Fix out of bounds value
-        candidate = utils.check_bounds(candidate, bounds)
-        # evaluate candidate point
-        candidate_cost = objective_cache(candidate)
-		# check if we should keep the new point
-        
-        if candidate_cost < solution_cost:
-			# store the new point
-            solution, solution_cost = candidate, candidate_cost
-        
-        ## Optional store the debug information
-        if debug:
-            # store the best cost
-            obj_cost_iter.append(solution_cost)
-        
-        ## Optional execute the callback code
-        if callback is not None:
-            terminate = False
-            if isinstance(callback, Sequence):
-                terminate = any([c(epoch, [solution_cost, candidate_cost], [solution, candidate]) for c in callback])
-            else:
-                terminate = callback(epoch, [solution_cost, candidate_cost], [solution, candidate])
-
-            if terminate:
-                break
-    
-    if cached:
-        memory.clear(warn=False)
-
-    if debug:
-        return (solution, solution_cost, obj_cost_iter)
-    else:
-        return (solution, solution_cost)
+    optimizer = HillClimbing(
+        objective=objective,
+        bounds=bounds,
+        population=population,
+        step_size=step_size,
+        callback=callback,
+        n_iter=n_iter,
+        n_pop=n_pop,
+        n_jobs=n_jobs,
+        cached=cached,
+        debug=debug,
+        verbose=verbose,
+        seed=seed,
+    )
+    return optimizer.optimize()

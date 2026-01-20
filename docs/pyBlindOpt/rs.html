@@ -58,6 +58,12 @@
                     <a class="variable" href="#logger">logger</a>
             </li>
             <li>
+                    <a class="class" href="#RandomSearch">RandomSearch</a>
+                            <ul class="memberlist">
+                </ul>
+
+            </li>
+            <li>
                     <a class="function" href="#random_search">random_search</a>
             </li>
     </ul>
@@ -76,10 +82,22 @@
                     <h1 class="modulename">
 <a href="./../pyBlindOpt.html">pyBlindOpt</a><wbr>.rs    </h1>
 
-                        <div class="docstring"><p>Random Search (RS) is a family of numerical optimization methods that do not require 
-the gradient of the problem to be optimized, and RS can hence be used on functions 
-that are not continuous or differentiable. Such methods are commonly known as 
-metaheuristics as they make few or no assumptions about the problem being optimized.</p>
+                        <div class="docstring"><p>Random Search (RS) optimization implementation.</p>
+
+<p>This module implements a memoryless metaheuristic that explores the search space purely
+stochastically. It serves as a baseline to benchmark the performance of "intelligent"
+optimizers.</p>
+
+<p><strong>Mathematical Formulation:</strong>
+At every iteration $k$, the previous population is discarded, and a new set of solutions
+$X_k$ is drawn from the search space $\Omega$ according to a sampling strategy (e.g., Uniform, LHS).
+$$ X_{k} \sim \text{Sampler}(\Omega) $$
+$$ x_{best} = \min(X_0 \cup X_1 \cup ... \cup X_k) $$</p>
+
+<p><strong>Analogy:</strong>
+Like paratroopers being dropped into a foggy landscape at completely random coordinates
+every hour. They report their altitude, and the mission control simply remembers the
+lowest point anyone has ever landed on. They do not learn from previous drops.</p>
 </div>
 
                         <input id="mod-rs-view-source" class="view-source-toggle-state" type="checkbox" aria-hidden="true" tabindex="-1">
@@ -88,141 +106,174 @@ metaheuristics as they make few or no assumptions about the problem being optimi
 
                         <div class="pdoc-code codehilite"><pre><span></span><span id="L-1"><a href="#L-1"><span class="linenos">  1</span></a><span class="c1"># coding: utf-8</span>
 </span><span id="L-2"><a href="#L-2"><span class="linenos">  2</span></a>
-</span><span id="L-3"><a href="#L-3"><span class="linenos">  3</span></a><span class="sd">&#39;&#39;&#39;</span>
-</span><span id="L-4"><a href="#L-4"><span class="linenos">  4</span></a><span class="sd">Random Search (RS) is a family of numerical optimization methods that do not require </span>
-</span><span id="L-5"><a href="#L-5"><span class="linenos">  5</span></a><span class="sd">the gradient of the problem to be optimized, and RS can hence be used on functions </span>
-</span><span id="L-6"><a href="#L-6"><span class="linenos">  6</span></a><span class="sd">that are not continuous or differentiable. Such methods are commonly known as </span>
-</span><span id="L-7"><a href="#L-7"><span class="linenos">  7</span></a><span class="sd">metaheuristics as they make few or no assumptions about the problem being optimized.</span>
-</span><span id="L-8"><a href="#L-8"><span class="linenos">  8</span></a><span class="sd">&#39;&#39;&#39;</span>
+</span><span id="L-3"><a href="#L-3"><span class="linenos">  3</span></a><span class="sd">&quot;&quot;&quot;</span>
+</span><span id="L-4"><a href="#L-4"><span class="linenos">  4</span></a><span class="sd">Random Search (RS) optimization implementation.</span>
+</span><span id="L-5"><a href="#L-5"><span class="linenos">  5</span></a>
+</span><span id="L-6"><a href="#L-6"><span class="linenos">  6</span></a><span class="sd">This module implements a memoryless metaheuristic that explores the search space purely</span>
+</span><span id="L-7"><a href="#L-7"><span class="linenos">  7</span></a><span class="sd">stochastically. It serves as a baseline to benchmark the performance of &quot;intelligent&quot;</span>
+</span><span id="L-8"><a href="#L-8"><span class="linenos">  8</span></a><span class="sd">optimizers.</span>
 </span><span id="L-9"><a href="#L-9"><span class="linenos">  9</span></a>
-</span><span id="L-10"><a href="#L-10"><span class="linenos"> 10</span></a>
-</span><span id="L-11"><a href="#L-11"><span class="linenos"> 11</span></a><span class="n">__author__</span> <span class="o">=</span> <span class="s1">&#39;Mário Antunes&#39;</span>
-</span><span id="L-12"><a href="#L-12"><span class="linenos"> 12</span></a><span class="n">__version__</span> <span class="o">=</span> <span class="s1">&#39;0.1&#39;</span>
-</span><span id="L-13"><a href="#L-13"><span class="linenos"> 13</span></a><span class="n">__email__</span> <span class="o">=</span> <span class="s1">&#39;mariolpantunes@gmail.com&#39;</span>
-</span><span id="L-14"><a href="#L-14"><span class="linenos"> 14</span></a><span class="n">__status__</span> <span class="o">=</span> <span class="s1">&#39;Development&#39;</span>
+</span><span id="L-10"><a href="#L-10"><span class="linenos"> 10</span></a><span class="sd">**Mathematical Formulation:**</span>
+</span><span id="L-11"><a href="#L-11"><span class="linenos"> 11</span></a><span class="sd">At every iteration $k$, the previous population is discarded, and a new set of solutions</span>
+</span><span id="L-12"><a href="#L-12"><span class="linenos"> 12</span></a><span class="sd">$X_k$ is drawn from the search space $\\Omega$ according to a sampling strategy (e.g., Uniform, LHS).</span>
+</span><span id="L-13"><a href="#L-13"><span class="linenos"> 13</span></a><span class="sd">$$ X_{k} \\sim \\text{Sampler}(\\Omega) $$</span>
+</span><span id="L-14"><a href="#L-14"><span class="linenos"> 14</span></a><span class="sd">$$ x_{best} = \\min(X_0 \\cup X_1 \\cup ... \\cup X_k) $$</span>
 </span><span id="L-15"><a href="#L-15"><span class="linenos"> 15</span></a>
-</span><span id="L-16"><a href="#L-16"><span class="linenos"> 16</span></a>
-</span><span id="L-17"><a href="#L-17"><span class="linenos"> 17</span></a><span class="kn">import</span><span class="w"> </span><span class="nn">tqdm</span>
-</span><span id="L-18"><a href="#L-18"><span class="linenos"> 18</span></a><span class="kn">import</span><span class="w"> </span><span class="nn">joblib</span>
-</span><span id="L-19"><a href="#L-19"><span class="linenos"> 19</span></a><span class="kn">import</span><span class="w"> </span><span class="nn">logging</span>
-</span><span id="L-20"><a href="#L-20"><span class="linenos"> 20</span></a><span class="kn">import</span><span class="w"> </span><span class="nn">tempfile</span>
-</span><span id="L-21"><a href="#L-21"><span class="linenos"> 21</span></a><span class="kn">import</span><span class="w"> </span><span class="nn">statistics</span>
-</span><span id="L-22"><a href="#L-22"><span class="linenos"> 22</span></a><span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
-</span><span id="L-23"><a href="#L-23"><span class="linenos"> 23</span></a><span class="kn">import</span><span class="w"> </span><span class="nn">pyBlindOpt.utils</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">utils</span>
-</span><span id="L-24"><a href="#L-24"><span class="linenos"> 24</span></a>
-</span><span id="L-25"><a href="#L-25"><span class="linenos"> 25</span></a>
-</span><span id="L-26"><a href="#L-26"><span class="linenos"> 26</span></a><span class="kn">from</span><span class="w"> </span><span class="nn">collections.abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">Sequence</span>
-</span><span id="L-27"><a href="#L-27"><span class="linenos"> 27</span></a>
+</span><span id="L-16"><a href="#L-16"><span class="linenos"> 16</span></a><span class="sd">**Analogy:**</span>
+</span><span id="L-17"><a href="#L-17"><span class="linenos"> 17</span></a><span class="sd">Like paratroopers being dropped into a foggy landscape at completely random coordinates</span>
+</span><span id="L-18"><a href="#L-18"><span class="linenos"> 18</span></a><span class="sd">every hour. They report their altitude, and the mission control simply remembers the</span>
+</span><span id="L-19"><a href="#L-19"><span class="linenos"> 19</span></a><span class="sd">lowest point anyone has ever landed on. They do not learn from previous drops.</span>
+</span><span id="L-20"><a href="#L-20"><span class="linenos"> 20</span></a><span class="sd">&quot;&quot;&quot;</span>
+</span><span id="L-21"><a href="#L-21"><span class="linenos"> 21</span></a>
+</span><span id="L-22"><a href="#L-22"><span class="linenos"> 22</span></a><span class="n">__author__</span> <span class="o">=</span> <span class="s2">&quot;Mário Antunes&quot;</span>
+</span><span id="L-23"><a href="#L-23"><span class="linenos"> 23</span></a><span class="n">__license__</span> <span class="o">=</span> <span class="s2">&quot;MIT&quot;</span>
+</span><span id="L-24"><a href="#L-24"><span class="linenos"> 24</span></a><span class="n">__version__</span> <span class="o">=</span> <span class="s2">&quot;0.2&quot;</span>
+</span><span id="L-25"><a href="#L-25"><span class="linenos"> 25</span></a><span class="n">__email__</span> <span class="o">=</span> <span class="s2">&quot;mario.antunes@ua.com&quot;</span>
+</span><span id="L-26"><a href="#L-26"><span class="linenos"> 26</span></a><span class="n">__url__</span> <span class="o">=</span> <span class="s2">&quot;https://github.com/mariolpantunes/pyblindopt&quot;</span>
+</span><span id="L-27"><a href="#L-27"><span class="linenos"> 27</span></a><span class="n">__status__</span> <span class="o">=</span> <span class="s2">&quot;Development&quot;</span>
 </span><span id="L-28"><a href="#L-28"><span class="linenos"> 28</span></a>
-</span><span id="L-29"><a href="#L-29"><span class="linenos"> 29</span></a><span class="n">logger</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="vm">__name__</span><span class="p">)</span>
-</span><span id="L-30"><a href="#L-30"><span class="linenos"> 30</span></a>
+</span><span id="L-29"><a href="#L-29"><span class="linenos"> 29</span></a><span class="kn">import</span><span class="w"> </span><span class="nn">collections.abc</span>
+</span><span id="L-30"><a href="#L-30"><span class="linenos"> 30</span></a><span class="kn">import</span><span class="w"> </span><span class="nn">logging</span>
 </span><span id="L-31"><a href="#L-31"><span class="linenos"> 31</span></a>
-</span><span id="L-32"><a href="#L-32"><span class="linenos"> 32</span></a><span class="k">def</span><span class="w"> </span><span class="nf">random_search</span><span class="p">(</span><span class="n">objective</span><span class="p">:</span><span class="nb">callable</span><span class="p">,</span> <span class="n">bounds</span><span class="p">:</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">population</span><span class="p">:</span><span class="nb">list</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> 
-</span><span id="L-33"><a href="#L-33"><span class="linenos"> 33</span></a><span class="n">callback</span><span class="p">:</span><span class="s2">&quot;Sequence[callable] | callable&quot;</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">n_iter</span><span class="p">:</span><span class="nb">int</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span> <span class="n">n_pop</span><span class="p">:</span><span class="nb">int</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span> 
-</span><span id="L-34"><a href="#L-34"><span class="linenos"> 34</span></a><span class="n">n_jobs</span><span class="p">:</span><span class="nb">int</span><span class="o">=-</span><span class="mi">1</span><span class="p">,</span> <span class="n">cached</span><span class="p">:</span><span class="nb">bool</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">debug</span><span class="p">:</span><span class="nb">bool</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">verbose</span><span class="p">:</span><span class="nb">bool</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> 
-</span><span id="L-35"><a href="#L-35"><span class="linenos"> 35</span></a><span class="n">seed</span><span class="p">:</span><span class="nb">int</span><span class="o">=</span><span class="mi">42</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">:</span>
-</span><span id="L-36"><a href="#L-36"><span class="linenos"> 36</span></a><span class="w">    </span><span class="sd">&#39;&#39;&#39;</span>
-</span><span id="L-37"><a href="#L-37"><span class="linenos"> 37</span></a><span class="sd">    Computes the Random Search optimization algorithm.</span>
-</span><span id="L-38"><a href="#L-38"><span class="linenos"> 38</span></a>
-</span><span id="L-39"><a href="#L-39"><span class="linenos"> 39</span></a><span class="sd">    Args:</span>
-</span><span id="L-40"><a href="#L-40"><span class="linenos"> 40</span></a><span class="sd">        objective (callable): objective function used to evaluate the candidate solutions (lower is better)</span>
-</span><span id="L-41"><a href="#L-41"><span class="linenos"> 41</span></a><span class="sd">        bounds (np.ndarray): bounds that limit the search space</span>
-</span><span id="L-42"><a href="#L-42"><span class="linenos"> 42</span></a><span class="sd">        population (list): optional list of candidate solutions (default None)</span>
-</span><span id="L-43"><a href="#L-43"><span class="linenos"> 43</span></a><span class="sd">        callback (callable): callback function that is called at each epoch (deafult None)</span>
-</span><span id="L-44"><a href="#L-44"><span class="linenos"> 44</span></a><span class="sd">        n_iter (int): the number of iterations (default 100)</span>
-</span><span id="L-45"><a href="#L-45"><span class="linenos"> 45</span></a><span class="sd">        n_pop (int): the number of elements in the population (default 10)</span>
-</span><span id="L-46"><a href="#L-46"><span class="linenos"> 46</span></a><span class="sd">        n_jobs (int): number of concurrent jobs (default -1)</span>
-</span><span id="L-47"><a href="#L-47"><span class="linenos"> 47</span></a><span class="sd">        cached (bool): controls if the objective function is cached by joblib (default False)</span>
-</span><span id="L-48"><a href="#L-48"><span class="linenos"> 48</span></a><span class="sd">        debug (bool): controls if debug information is returned (default False)</span>
-</span><span id="L-49"><a href="#L-49"><span class="linenos"> 49</span></a><span class="sd">        verbose (bool): controls the usage of tqdm as a progress bar (default False)</span>
-</span><span id="L-50"><a href="#L-50"><span class="linenos"> 50</span></a><span class="sd">        seed (int): seed to init the random generator (default 42)</span>
-</span><span id="L-51"><a href="#L-51"><span class="linenos"> 51</span></a>
-</span><span id="L-52"><a href="#L-52"><span class="linenos"> 52</span></a><span class="sd">    Returns:</span>
-</span><span id="L-53"><a href="#L-53"><span class="linenos"> 53</span></a><span class="sd">        tuple: the best solution</span>
-</span><span id="L-54"><a href="#L-54"><span class="linenos"> 54</span></a><span class="sd">    &#39;&#39;&#39;</span>
-</span><span id="L-55"><a href="#L-55"><span class="linenos"> 55</span></a>
-</span><span id="L-56"><a href="#L-56"><span class="linenos"> 56</span></a>    <span class="c1"># define the seed of the random generation</span>
-</span><span id="L-57"><a href="#L-57"><span class="linenos"> 57</span></a>    <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">seed</span><span class="p">(</span><span class="n">seed</span><span class="p">)</span>
-</span><span id="L-58"><a href="#L-58"><span class="linenos"> 58</span></a>    
-</span><span id="L-59"><a href="#L-59"><span class="linenos"> 59</span></a>    <span class="c1"># cache the initial objective function</span>
-</span><span id="L-60"><a href="#L-60"><span class="linenos"> 60</span></a>    <span class="k">if</span> <span class="n">cached</span><span class="p">:</span>
-</span><span id="L-61"><a href="#L-61"><span class="linenos"> 61</span></a>        <span class="c1"># Cache from joblib</span>
-</span><span id="L-62"><a href="#L-62"><span class="linenos"> 62</span></a>        <span class="n">location</span> <span class="o">=</span> <span class="n">tempfile</span><span class="o">.</span><span class="n">gettempdir</span><span class="p">()</span>
-</span><span id="L-63"><a href="#L-63"><span class="linenos"> 63</span></a>        <span class="n">memory</span> <span class="o">=</span> <span class="n">joblib</span><span class="o">.</span><span class="n">Memory</span><span class="p">(</span><span class="n">location</span><span class="p">,</span> <span class="n">verbose</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
-</span><span id="L-64"><a href="#L-64"><span class="linenos"> 64</span></a>        <span class="n">objective_cache</span> <span class="o">=</span> <span class="n">memory</span><span class="o">.</span><span class="n">cache</span><span class="p">(</span><span class="n">objective</span><span class="p">)</span>
-</span><span id="L-65"><a href="#L-65"><span class="linenos"> 65</span></a>    <span class="k">else</span><span class="p">:</span>
-</span><span id="L-66"><a href="#L-66"><span class="linenos"> 66</span></a>        <span class="n">objective_cache</span> <span class="o">=</span> <span class="n">objective</span>
-</span><span id="L-67"><a href="#L-67"><span class="linenos"> 67</span></a>    
-</span><span id="L-68"><a href="#L-68"><span class="linenos"> 68</span></a>    <span class="c1"># check if the initial population is given</span>
-</span><span id="L-69"><a href="#L-69"><span class="linenos"> 69</span></a>    <span class="k">if</span> <span class="n">population</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-</span><span id="L-70"><a href="#L-70"><span class="linenos"> 70</span></a>        <span class="c1"># initialise population of candidate solutions randomly within the specified bounds</span>
-</span><span id="L-71"><a href="#L-71"><span class="linenos"> 71</span></a>        <span class="n">pop</span> <span class="o">=</span> <span class="p">[</span><span class="n">utils</span><span class="o">.</span><span class="n">get_random_solution</span><span class="p">(</span><span class="n">bounds</span><span class="p">)</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n_pop</span><span class="p">)]</span>
-</span><span id="L-72"><a href="#L-72"><span class="linenos"> 72</span></a>    <span class="k">else</span><span class="p">:</span>
-</span><span id="L-73"><a href="#L-73"><span class="linenos"> 73</span></a>        <span class="c1"># initialise population of candidate and validate the bounds</span>
-</span><span id="L-74"><a href="#L-74"><span class="linenos"> 74</span></a>        <span class="n">pop</span> <span class="o">=</span> <span class="p">[</span><span class="n">utils</span><span class="o">.</span><span class="n">check_bounds</span><span class="p">(</span><span class="n">p</span><span class="p">,</span> <span class="n">bounds</span><span class="p">)</span> <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">population</span><span class="p">]</span>
-</span><span id="L-75"><a href="#L-75"><span class="linenos"> 75</span></a>        <span class="c1"># overwrite the n_pop with the length of the given population</span>
-</span><span id="L-76"><a href="#L-76"><span class="linenos"> 76</span></a>        <span class="n">n_pop</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">population</span><span class="p">)</span>
-</span><span id="L-77"><a href="#L-77"><span class="linenos"> 77</span></a>    
-</span><span id="L-78"><a href="#L-78"><span class="linenos"> 78</span></a>    <span class="c1"># evaluate initial population of candidate solutions</span>
-</span><span id="L-79"><a href="#L-79"><span class="linenos"> 79</span></a>    <span class="n">obj_all</span> <span class="o">=</span> <span class="n">utils</span><span class="o">.</span><span class="n">compute_objective</span><span class="p">(</span><span class="n">pop</span><span class="p">,</span> <span class="n">objective_cache</span><span class="p">,</span> <span class="n">n_jobs</span><span class="p">)</span>
-</span><span id="L-80"><a href="#L-80"><span class="linenos"> 80</span></a>
-</span><span id="L-81"><a href="#L-81"><span class="linenos"> 81</span></a>    <span class="c1"># find the best performing vector of initial population</span>
-</span><span id="L-82"><a href="#L-82"><span class="linenos"> 82</span></a>    <span class="n">best_vector</span> <span class="o">=</span> <span class="n">pop</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">argmin</span><span class="p">(</span><span class="n">obj_all</span><span class="p">)]</span>
-</span><span id="L-83"><a href="#L-83"><span class="linenos"> 83</span></a>    <span class="n">best_obj</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="n">obj_all</span><span class="p">)</span>
-</span><span id="L-84"><a href="#L-84"><span class="linenos"> 84</span></a>    
-</span><span id="L-85"><a href="#L-85"><span class="linenos"> 85</span></a>    <span class="c1"># arrays to store the debug information</span>
-</span><span id="L-86"><a href="#L-86"><span class="linenos"> 86</span></a>    <span class="k">if</span> <span class="n">debug</span><span class="p">:</span>
-</span><span id="L-87"><a href="#L-87"><span class="linenos"> 87</span></a>        <span class="n">obj_avg_iter</span> <span class="o">=</span> <span class="p">[]</span>
-</span><span id="L-88"><a href="#L-88"><span class="linenos"> 88</span></a>        <span class="n">obj_best_iter</span> <span class="o">=</span> <span class="p">[]</span>
-</span><span id="L-89"><a href="#L-89"><span class="linenos"> 89</span></a>        <span class="n">obj_worst_iter</span> <span class="o">=</span> <span class="p">[]</span>
-</span><span id="L-90"><a href="#L-90"><span class="linenos"> 90</span></a>    
-</span><span id="L-91"><a href="#L-91"><span class="linenos"> 91</span></a>    <span class="c1"># run iterations of the algorithm</span>
-</span><span id="L-92"><a href="#L-92"><span class="linenos"> 92</span></a>    <span class="k">for</span> <span class="n">epoch</span> <span class="ow">in</span> <span class="n">tqdm</span><span class="o">.</span><span class="n">tqdm</span><span class="p">(</span><span class="nb">range</span><span class="p">(</span><span class="n">n_iter</span><span class="p">),</span> <span class="n">disable</span><span class="o">=</span><span class="ow">not</span> <span class="n">verbose</span><span class="p">):</span>
-</span><span id="L-93"><a href="#L-93"><span class="linenos"> 93</span></a>        <span class="c1"># In Random Search, every iteration generates a completely new random population</span>
-</span><span id="L-94"><a href="#L-94"><span class="linenos"> 94</span></a>        <span class="c1"># (excluding the global best if we wanted to be elitist, but pure RS is memoryless.</span>
-</span><span id="L-95"><a href="#L-95"><span class="linenos"> 95</span></a>        <span class="c1"># However, to fit the framework, we generate n_pop new solutions every epoch).</span>
-</span><span id="L-96"><a href="#L-96"><span class="linenos"> 96</span></a>        <span class="n">pop</span> <span class="o">=</span> <span class="p">[</span><span class="n">utils</span><span class="o">.</span><span class="n">get_random_solution</span><span class="p">(</span><span class="n">bounds</span><span class="p">)</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n_pop</span><span class="p">)]</span>
-</span><span id="L-97"><a href="#L-97"><span class="linenos"> 97</span></a>        
-</span><span id="L-98"><a href="#L-98"><span class="linenos"> 98</span></a>        <span class="c1"># evaluate the new population</span>
-</span><span id="L-99"><a href="#L-99"><span class="linenos"> 99</span></a>        <span class="n">obj_all</span> <span class="o">=</span> <span class="n">utils</span><span class="o">.</span><span class="n">compute_objective</span><span class="p">(</span><span class="n">pop</span><span class="p">,</span> <span class="n">objective_cache</span><span class="p">,</span> <span class="n">n_jobs</span><span class="p">)</span>
-</span><span id="L-100"><a href="#L-100"><span class="linenos">100</span></a>
-</span><span id="L-101"><a href="#L-101"><span class="linenos">101</span></a>        <span class="c1"># find the best performing vector in this batch</span>
-</span><span id="L-102"><a href="#L-102"><span class="linenos">102</span></a>        <span class="n">current_best_obj</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="n">obj_all</span><span class="p">)</span>
-</span><span id="L-103"><a href="#L-103"><span class="linenos">103</span></a>        
-</span><span id="L-104"><a href="#L-104"><span class="linenos">104</span></a>        <span class="c1"># update global best if found</span>
-</span><span id="L-105"><a href="#L-105"><span class="linenos">105</span></a>        <span class="k">if</span> <span class="n">current_best_obj</span> <span class="o">&lt;</span> <span class="n">best_obj</span><span class="p">:</span>
-</span><span id="L-106"><a href="#L-106"><span class="linenos">106</span></a>            <span class="n">best_obj</span> <span class="o">=</span> <span class="n">current_best_obj</span>
-</span><span id="L-107"><a href="#L-107"><span class="linenos">107</span></a>            <span class="n">best_vector</span> <span class="o">=</span> <span class="n">pop</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">argmin</span><span class="p">(</span><span class="n">obj_all</span><span class="p">)]</span>
-</span><span id="L-108"><a href="#L-108"><span class="linenos">108</span></a>
-</span><span id="L-109"><a href="#L-109"><span class="linenos">109</span></a>        <span class="c1">## Optional store the debug information</span>
-</span><span id="L-110"><a href="#L-110"><span class="linenos">110</span></a>        <span class="k">if</span> <span class="n">debug</span><span class="p">:</span>
-</span><span id="L-111"><a href="#L-111"><span class="linenos">111</span></a>            <span class="c1"># store best, worst and average cost for the current batch</span>
-</span><span id="L-112"><a href="#L-112"><span class="linenos">112</span></a>            <span class="n">obj_avg_iter</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">statistics</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">obj_all</span><span class="p">))</span>
-</span><span id="L-113"><a href="#L-113"><span class="linenos">113</span></a>            <span class="c1"># Note: For debug plots, we usually want the global best history, </span>
-</span><span id="L-114"><a href="#L-114"><span class="linenos">114</span></a>            <span class="c1"># but strictly this list tracks the &quot;current iteration&quot; stats. </span>
-</span><span id="L-115"><a href="#L-115"><span class="linenos">115</span></a>            <span class="c1"># We append the global best to keep consistency with other algos usually showing convergence.</span>
-</span><span id="L-116"><a href="#L-116"><span class="linenos">116</span></a>            <span class="n">obj_best_iter</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">best_obj</span><span class="p">)</span> 
-</span><span id="L-117"><a href="#L-117"><span class="linenos">117</span></a>            <span class="n">obj_worst_iter</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="nb">max</span><span class="p">(</span><span class="n">obj_all</span><span class="p">))</span>
-</span><span id="L-118"><a href="#L-118"><span class="linenos">118</span></a>    
-</span><span id="L-119"><a href="#L-119"><span class="linenos">119</span></a>        <span class="c1">## Optional execute the callback code</span>
-</span><span id="L-120"><a href="#L-120"><span class="linenos">120</span></a>        <span class="k">if</span> <span class="n">callback</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-</span><span id="L-121"><a href="#L-121"><span class="linenos">121</span></a>            <span class="n">terminate</span> <span class="o">=</span> <span class="kc">False</span>
-</span><span id="L-122"><a href="#L-122"><span class="linenos">122</span></a>            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">callback</span><span class="p">,</span> <span class="n">Sequence</span><span class="p">):</span>
-</span><span id="L-123"><a href="#L-123"><span class="linenos">123</span></a>                <span class="n">terminate</span> <span class="o">=</span> <span class="nb">any</span><span class="p">([</span><span class="n">c</span><span class="p">(</span><span class="n">epoch</span><span class="p">,</span> <span class="n">obj_all</span><span class="p">,</span> <span class="n">pop</span><span class="p">)</span> <span class="k">for</span> <span class="n">c</span> <span class="ow">in</span> <span class="n">callback</span><span class="p">])</span>
-</span><span id="L-124"><a href="#L-124"><span class="linenos">124</span></a>            <span class="k">else</span><span class="p">:</span>
-</span><span id="L-125"><a href="#L-125"><span class="linenos">125</span></a>                <span class="n">terminate</span> <span class="o">=</span> <span class="n">callback</span><span class="p">(</span><span class="n">epoch</span><span class="p">,</span> <span class="n">obj_all</span><span class="p">,</span> <span class="n">pop</span><span class="p">)</span>
-</span><span id="L-126"><a href="#L-126"><span class="linenos">126</span></a>
-</span><span id="L-127"><a href="#L-127"><span class="linenos">127</span></a>            <span class="k">if</span> <span class="n">terminate</span><span class="p">:</span>
-</span><span id="L-128"><a href="#L-128"><span class="linenos">128</span></a>                <span class="k">break</span>
-</span><span id="L-129"><a href="#L-129"><span class="linenos">129</span></a>
-</span><span id="L-130"><a href="#L-130"><span class="linenos">130</span></a>    <span class="c1"># clean the cache</span>
-</span><span id="L-131"><a href="#L-131"><span class="linenos">131</span></a>    <span class="k">if</span> <span class="n">cached</span><span class="p">:</span>
-</span><span id="L-132"><a href="#L-132"><span class="linenos">132</span></a>        <span class="n">memory</span><span class="o">.</span><span class="n">clear</span><span class="p">(</span><span class="n">warn</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
-</span><span id="L-133"><a href="#L-133"><span class="linenos">133</span></a>    
-</span><span id="L-134"><a href="#L-134"><span class="linenos">134</span></a>    <span class="k">if</span> <span class="n">debug</span><span class="p">:</span>
-</span><span id="L-135"><a href="#L-135"><span class="linenos">135</span></a>        <span class="k">return</span> <span class="p">(</span><span class="n">best_vector</span><span class="p">,</span> <span class="n">best_obj</span><span class="p">,</span> <span class="p">(</span><span class="n">obj_best_iter</span><span class="p">,</span> <span class="n">obj_avg_iter</span><span class="p">,</span> <span class="n">obj_worst_iter</span><span class="p">))</span>
-</span><span id="L-136"><a href="#L-136"><span class="linenos">136</span></a>    <span class="k">else</span><span class="p">:</span>
-</span><span id="L-137"><a href="#L-137"><span class="linenos">137</span></a>        <span class="k">return</span> <span class="p">(</span><span class="n">best_vector</span><span class="p">,</span> <span class="n">best_obj</span><span class="p">)</span>
+</span><span id="L-32"><a href="#L-32"><span class="linenos"> 32</span></a><span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+</span><span id="L-33"><a href="#L-33"><span class="linenos"> 33</span></a>
+</span><span id="L-34"><a href="#L-34"><span class="linenos"> 34</span></a><span class="kn">import</span><span class="w"> </span><span class="nn">pyBlindOpt.init</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">init</span>  <span class="c1"># Required for population generation</span>
+</span><span id="L-35"><a href="#L-35"><span class="linenos"> 35</span></a><span class="kn">import</span><span class="w"> </span><span class="nn">pyBlindOpt.utils</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">utils</span>
+</span><span id="L-36"><a href="#L-36"><span class="linenos"> 36</span></a><span class="kn">from</span><span class="w"> </span><span class="nn">pyBlindOpt.optimizer</span><span class="w"> </span><span class="kn">import</span> <span class="n">Optimizer</span>
+</span><span id="L-37"><a href="#L-37"><span class="linenos"> 37</span></a>
+</span><span id="L-38"><a href="#L-38"><span class="linenos"> 38</span></a><span class="n">logger</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="vm">__name__</span><span class="p">)</span>
+</span><span id="L-39"><a href="#L-39"><span class="linenos"> 39</span></a>
+</span><span id="L-40"><a href="#L-40"><span class="linenos"> 40</span></a>
+</span><span id="L-41"><a href="#L-41"><span class="linenos"> 41</span></a><span class="k">class</span><span class="w"> </span><span class="nc">RandomSearch</span><span class="p">(</span><span class="n">Optimizer</span><span class="p">):</span>
+</span><span id="L-42"><a href="#L-42"><span class="linenos"> 42</span></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+</span><span id="L-43"><a href="#L-43"><span class="linenos"> 43</span></a><span class="sd">    Random Search Optimizer.</span>
+</span><span id="L-44"><a href="#L-44"><span class="linenos"> 44</span></a>
+</span><span id="L-45"><a href="#L-45"><span class="linenos"> 45</span></a><span class="sd">    Generates a completely new population at every iteration using a configured Sampler,</span>
+</span><span id="L-46"><a href="#L-46"><span class="linenos"> 46</span></a><span class="sd">    independent of previous results.</span>
+</span><span id="L-47"><a href="#L-47"><span class="linenos"> 47</span></a><span class="sd">    &quot;&quot;&quot;</span>
+</span><span id="L-48"><a href="#L-48"><span class="linenos"> 48</span></a>
+</span><span id="L-49"><a href="#L-49"><span class="linenos"> 49</span></a>    <span class="k">def</span><span class="w"> </span><span class="nf">_init_population</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">population</span><span class="p">,</span> <span class="n">seed</span><span class="p">):</span>
+</span><span id="L-50"><a href="#L-50"><span class="linenos"> 50</span></a><span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+</span><span id="L-51"><a href="#L-51"><span class="linenos"> 51</span></a><span class="sd">        Initialization override.</span>
+</span><span id="L-52"><a href="#L-52"><span class="linenos"> 52</span></a>
+</span><span id="L-53"><a href="#L-53"><span class="linenos"> 53</span></a><span class="sd">        Persists the `Sampler` instance derived from the seed to ensure consistent</span>
+</span><span id="L-54"><a href="#L-54"><span class="linenos"> 54</span></a><span class="sd">        sampling logic (e.g., Latin Hypercube) is used across all iterations,</span>
+</span><span id="L-55"><a href="#L-55"><span class="linenos"> 55</span></a><span class="sd">        not just the first one.</span>
+</span><span id="L-56"><a href="#L-56"><span class="linenos"> 56</span></a><span class="sd">        &quot;&quot;&quot;</span>
+</span><span id="L-57"><a href="#L-57"><span class="linenos"> 57</span></a>        <span class="c1"># 1. Store the sampler for reuse in _generate_offspring</span>
+</span><span id="L-58"><a href="#L-58"><span class="linenos"> 58</span></a>        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">seed</span><span class="p">,</span> <span class="n">utils</span><span class="o">.</span><span class="n">Sampler</span><span class="p">):</span>
+</span><span id="L-59"><a href="#L-59"><span class="linenos"> 59</span></a>            <span class="bp">self</span><span class="o">.</span><span class="n">sampler</span> <span class="o">=</span> <span class="n">seed</span>
+</span><span id="L-60"><a href="#L-60"><span class="linenos"> 60</span></a>        <span class="k">else</span><span class="p">:</span>
+</span><span id="L-61"><a href="#L-61"><span class="linenos"> 61</span></a>            <span class="c1"># Default to RandomSampler using the optimizer&#39;s RNG</span>
+</span><span id="L-62"><a href="#L-62"><span class="linenos"> 62</span></a>            <span class="bp">self</span><span class="o">.</span><span class="n">sampler</span> <span class="o">=</span> <span class="n">utils</span><span class="o">.</span><span class="n">RandomSampler</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">rng</span><span class="p">)</span>
+</span><span id="L-63"><a href="#L-63"><span class="linenos"> 63</span></a>
+</span><span id="L-64"><a href="#L-64"><span class="linenos"> 64</span></a>        <span class="c1"># 2. Call the Base class to actually generate the initial population</span>
+</span><span id="L-65"><a href="#L-65"><span class="linenos"> 65</span></a>        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">_init_population</span><span class="p">(</span><span class="n">population</span><span class="p">,</span> <span class="n">seed</span><span class="p">)</span>
+</span><span id="L-66"><a href="#L-66"><span class="linenos"> 66</span></a>
+</span><span id="L-67"><a href="#L-67"><span class="linenos"> 67</span></a>    <span class="k">def</span><span class="w"> </span><span class="nf">_initialize</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+</span><span id="L-68"><a href="#L-68"><span class="linenos"> 68</span></a><span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+</span><span id="L-69"><a href="#L-69"><span class="linenos"> 69</span></a><span class="sd">        Initialization hook.</span>
+</span><span id="L-70"><a href="#L-70"><span class="linenos"> 70</span></a>
+</span><span id="L-71"><a href="#L-71"><span class="linenos"> 71</span></a><span class="sd">        No internal state setup required for Random Search.</span>
+</span><span id="L-72"><a href="#L-72"><span class="linenos"> 72</span></a><span class="sd">        &quot;&quot;&quot;</span>
+</span><span id="L-73"><a href="#L-73"><span class="linenos"> 73</span></a>        <span class="k">pass</span>
+</span><span id="L-74"><a href="#L-74"><span class="linenos"> 74</span></a>
+</span><span id="L-75"><a href="#L-75"><span class="linenos"> 75</span></a>    <span class="k">def</span><span class="w"> </span><span class="nf">_update_iter_params</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">epoch</span><span class="p">:</span> <span class="nb">int</span><span class="p">):</span>
+</span><span id="L-76"><a href="#L-76"><span class="linenos"> 76</span></a><span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+</span><span id="L-77"><a href="#L-77"><span class="linenos"> 77</span></a><span class="sd">        Parameter update hook.</span>
+</span><span id="L-78"><a href="#L-78"><span class="linenos"> 78</span></a>
+</span><span id="L-79"><a href="#L-79"><span class="linenos"> 79</span></a><span class="sd">        Random Search is memoryless and parameter-free; it does not change behavior over time.</span>
+</span><span id="L-80"><a href="#L-80"><span class="linenos"> 80</span></a><span class="sd">        &quot;&quot;&quot;</span>
+</span><span id="L-81"><a href="#L-81"><span class="linenos"> 81</span></a>        <span class="k">pass</span>
+</span><span id="L-82"><a href="#L-82"><span class="linenos"> 82</span></a>
+</span><span id="L-83"><a href="#L-83"><span class="linenos"> 83</span></a>    <span class="k">def</span><span class="w"> </span><span class="nf">_update_best</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">epoch</span><span class="p">:</span> <span class="nb">int</span><span class="p">):</span>
+</span><span id="L-84"><a href="#L-84"><span class="linenos"> 84</span></a><span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+</span><span id="L-85"><a href="#L-85"><span class="linenos"> 85</span></a><span class="sd">        Global best update.</span>
+</span><span id="L-86"><a href="#L-86"><span class="linenos"> 86</span></a>
+</span><span id="L-87"><a href="#L-87"><span class="linenos"> 87</span></a><span class="sd">        Checks if the current random batch contains a solution better than the best</span>
+</span><span id="L-88"><a href="#L-88"><span class="linenos"> 88</span></a><span class="sd">        one seen so far across all previous batches.</span>
+</span><span id="L-89"><a href="#L-89"><span class="linenos"> 89</span></a>
+</span><span id="L-90"><a href="#L-90"><span class="linenos"> 90</span></a><span class="sd">        Args:</span>
+</span><span id="L-91"><a href="#L-91"><span class="linenos"> 91</span></a><span class="sd">            epoch (int): Current iteration.</span>
+</span><span id="L-92"><a href="#L-92"><span class="linenos"> 92</span></a><span class="sd">        &quot;&quot;&quot;</span>
+</span><span id="L-93"><a href="#L-93"><span class="linenos"> 93</span></a>        <span class="n">best_idx</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">argmin</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">scores</span><span class="p">)</span>
+</span><span id="L-94"><a href="#L-94"><span class="linenos"> 94</span></a>        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">scores</span><span class="p">[</span><span class="n">best_idx</span><span class="p">]</span> <span class="o">&lt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">best_score</span><span class="p">:</span>
+</span><span id="L-95"><a href="#L-95"><span class="linenos"> 95</span></a>            <span class="bp">self</span><span class="o">.</span><span class="n">best_score</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">scores</span><span class="p">[</span><span class="n">best_idx</span><span class="p">]</span>
+</span><span id="L-96"><a href="#L-96"><span class="linenos"> 96</span></a>            <span class="bp">self</span><span class="o">.</span><span class="n">best_pos</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">pop</span><span class="p">[</span><span class="n">best_idx</span><span class="p">]</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+</span><span id="L-97"><a href="#L-97"><span class="linenos"> 97</span></a>
+</span><span id="L-98"><a href="#L-98"><span class="linenos"> 98</span></a>    <span class="k">def</span><span class="w"> </span><span class="nf">_generate_offspring</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">epoch</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+</span><span id="L-99"><a href="#L-99"><span class="linenos"> 99</span></a><span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+</span><span id="L-100"><a href="#L-100"><span class="linenos">100</span></a><span class="sd">        Generates a new population.</span>
+</span><span id="L-101"><a href="#L-101"><span class="linenos">101</span></a>
+</span><span id="L-102"><a href="#L-102"><span class="linenos">102</span></a><span class="sd">        Unlike other algorithms that perturb existing solutions, RS requests a</span>
+</span><span id="L-103"><a href="#L-103"><span class="linenos">103</span></a><span class="sd">        completely fresh batch from the sampler.</span>
+</span><span id="L-104"><a href="#L-104"><span class="linenos">104</span></a>
+</span><span id="L-105"><a href="#L-105"><span class="linenos">105</span></a><span class="sd">        Returns:</span>
+</span><span id="L-106"><a href="#L-106"><span class="linenos">106</span></a><span class="sd">            np.ndarray: New random population.</span>
+</span><span id="L-107"><a href="#L-107"><span class="linenos">107</span></a><span class="sd">        &quot;&quot;&quot;</span>
+</span><span id="L-108"><a href="#L-108"><span class="linenos">108</span></a>        <span class="k">return</span> <span class="n">init</span><span class="o">.</span><span class="n">get_initial_population</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">n_pop</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">bounds</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">sampler</span><span class="p">)</span>
+</span><span id="L-109"><a href="#L-109"><span class="linenos">109</span></a>
+</span><span id="L-110"><a href="#L-110"><span class="linenos">110</span></a>    <span class="k">def</span><span class="w"> </span><span class="nf">_selection</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">offspring</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">offspring_scores</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">):</span>
+</span><span id="L-111"><a href="#L-111"><span class="linenos">111</span></a><span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+</span><span id="L-112"><a href="#L-112"><span class="linenos">112</span></a><span class="sd">        Unconditional Replacement.</span>
+</span><span id="L-113"><a href="#L-113"><span class="linenos">113</span></a>
+</span><span id="L-114"><a href="#L-114"><span class="linenos">114</span></a><span class="sd">        The entire previous population is discarded and replaced by the new random batch.</span>
+</span><span id="L-115"><a href="#L-115"><span class="linenos">115</span></a><span class="sd">        No &quot;survival of the fittest&quot; logic applies between generations.</span>
+</span><span id="L-116"><a href="#L-116"><span class="linenos">116</span></a>
+</span><span id="L-117"><a href="#L-117"><span class="linenos">117</span></a><span class="sd">        Args:</span>
+</span><span id="L-118"><a href="#L-118"><span class="linenos">118</span></a><span class="sd">            offspring (np.ndarray): New population.</span>
+</span><span id="L-119"><a href="#L-119"><span class="linenos">119</span></a><span class="sd">            offspring_scores (np.ndarray): Scores of new population.</span>
+</span><span id="L-120"><a href="#L-120"><span class="linenos">120</span></a><span class="sd">        &quot;&quot;&quot;</span>
+</span><span id="L-121"><a href="#L-121"><span class="linenos">121</span></a>        <span class="bp">self</span><span class="o">.</span><span class="n">pop</span> <span class="o">=</span> <span class="n">offspring</span>
+</span><span id="L-122"><a href="#L-122"><span class="linenos">122</span></a>        <span class="bp">self</span><span class="o">.</span><span class="n">scores</span> <span class="o">=</span> <span class="n">offspring_scores</span>
+</span><span id="L-123"><a href="#L-123"><span class="linenos">123</span></a>
+</span><span id="L-124"><a href="#L-124"><span class="linenos">124</span></a>
+</span><span id="L-125"><a href="#L-125"><span class="linenos">125</span></a><span class="k">def</span><span class="w"> </span><span class="nf">random_search</span><span class="p">(</span>
+</span><span id="L-126"><a href="#L-126"><span class="linenos">126</span></a>    <span class="n">objective</span><span class="p">:</span> <span class="n">collections</span><span class="o">.</span><span class="n">abc</span><span class="o">.</span><span class="n">Callable</span><span class="p">,</span>
+</span><span id="L-127"><a href="#L-127"><span class="linenos">127</span></a>    <span class="n">bounds</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
+</span><span id="L-128"><a href="#L-128"><span class="linenos">128</span></a>    <span class="n">population</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+</span><span id="L-129"><a href="#L-129"><span class="linenos">129</span></a>    <span class="n">callback</span><span class="p">:</span> <span class="s2">&quot;list[collections.abc.Callable] | collections.abc.Callable | None&quot;</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+</span><span id="L-130"><a href="#L-130"><span class="linenos">130</span></a>    <span class="n">n_iter</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">100</span><span class="p">,</span>
+</span><span id="L-131"><a href="#L-131"><span class="linenos">131</span></a>    <span class="n">n_pop</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">10</span><span class="p">,</span>
+</span><span id="L-132"><a href="#L-132"><span class="linenos">132</span></a>    <span class="n">n_jobs</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span><span class="p">,</span>
+</span><span id="L-133"><a href="#L-133"><span class="linenos">133</span></a>    <span class="n">cached</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+</span><span id="L-134"><a href="#L-134"><span class="linenos">134</span></a>    <span class="n">debug</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+</span><span id="L-135"><a href="#L-135"><span class="linenos">135</span></a>    <span class="n">verbose</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+</span><span id="L-136"><a href="#L-136"><span class="linenos">136</span></a>    <span class="n">seed</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">Generator</span> <span class="o">|</span> <span class="n">utils</span><span class="o">.</span><span class="n">Sampler</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+</span><span id="L-137"><a href="#L-137"><span class="linenos">137</span></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">:</span>
+</span><span id="L-138"><a href="#L-138"><span class="linenos">138</span></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+</span><span id="L-139"><a href="#L-139"><span class="linenos">139</span></a><span class="sd">    Functional interface for Random Search.</span>
+</span><span id="L-140"><a href="#L-140"><span class="linenos">140</span></a>
+</span><span id="L-141"><a href="#L-141"><span class="linenos">141</span></a><span class="sd">    Args:</span>
+</span><span id="L-142"><a href="#L-142"><span class="linenos">142</span></a><span class="sd">        objective (Callable): Function to minimize.</span>
+</span><span id="L-143"><a href="#L-143"><span class="linenos">143</span></a><span class="sd">        bounds (np.ndarray): Search space bounds.</span>
+</span><span id="L-144"><a href="#L-144"><span class="linenos">144</span></a><span class="sd">        population (np.ndarray | None): Initial population (mostly unused except for shape inference).</span>
+</span><span id="L-145"><a href="#L-145"><span class="linenos">145</span></a><span class="sd">        callback (list | Callable | None): Callbacks.</span>
+</span><span id="L-146"><a href="#L-146"><span class="linenos">146</span></a><span class="sd">        n_iter (int): Number of iterations (drops).</span>
+</span><span id="L-147"><a href="#L-147"><span class="linenos">147</span></a><span class="sd">        n_pop (int): Number of samples per iteration.</span>
+</span><span id="L-148"><a href="#L-148"><span class="linenos">148</span></a><span class="sd">        n_jobs (int): Parallel jobs.</span>
+</span><span id="L-149"><a href="#L-149"><span class="linenos">149</span></a><span class="sd">        cached (bool): Enable caching.</span>
+</span><span id="L-150"><a href="#L-150"><span class="linenos">150</span></a><span class="sd">        debug (bool): Enable history.</span>
+</span><span id="L-151"><a href="#L-151"><span class="linenos">151</span></a><span class="sd">        verbose (bool): Show progress.</span>
+</span><span id="L-152"><a href="#L-152"><span class="linenos">152</span></a><span class="sd">        seed (int | Generator | Sampler | None): Sampling strategy.</span>
+</span><span id="L-153"><a href="#L-153"><span class="linenos">153</span></a>
+</span><span id="L-154"><a href="#L-154"><span class="linenos">154</span></a><span class="sd">    Returns:</span>
+</span><span id="L-155"><a href="#L-155"><span class="linenos">155</span></a><span class="sd">        tuple: (best_position, best_score).</span>
+</span><span id="L-156"><a href="#L-156"><span class="linenos">156</span></a><span class="sd">    &quot;&quot;&quot;</span>
+</span><span id="L-157"><a href="#L-157"><span class="linenos">157</span></a>    <span class="n">optimizer</span> <span class="o">=</span> <span class="n">RandomSearch</span><span class="p">(</span>
+</span><span id="L-158"><a href="#L-158"><span class="linenos">158</span></a>        <span class="n">objective</span><span class="o">=</span><span class="n">objective</span><span class="p">,</span>
+</span><span id="L-159"><a href="#L-159"><span class="linenos">159</span></a>        <span class="n">bounds</span><span class="o">=</span><span class="n">bounds</span><span class="p">,</span>
+</span><span id="L-160"><a href="#L-160"><span class="linenos">160</span></a>        <span class="n">population</span><span class="o">=</span><span class="n">population</span><span class="p">,</span>
+</span><span id="L-161"><a href="#L-161"><span class="linenos">161</span></a>        <span class="n">callback</span><span class="o">=</span><span class="n">callback</span><span class="p">,</span>
+</span><span id="L-162"><a href="#L-162"><span class="linenos">162</span></a>        <span class="n">n_iter</span><span class="o">=</span><span class="n">n_iter</span><span class="p">,</span>
+</span><span id="L-163"><a href="#L-163"><span class="linenos">163</span></a>        <span class="n">n_pop</span><span class="o">=</span><span class="n">n_pop</span><span class="p">,</span>
+</span><span id="L-164"><a href="#L-164"><span class="linenos">164</span></a>        <span class="n">n_jobs</span><span class="o">=</span><span class="n">n_jobs</span><span class="p">,</span>
+</span><span id="L-165"><a href="#L-165"><span class="linenos">165</span></a>        <span class="n">cached</span><span class="o">=</span><span class="n">cached</span><span class="p">,</span>
+</span><span id="L-166"><a href="#L-166"><span class="linenos">166</span></a>        <span class="n">debug</span><span class="o">=</span><span class="n">debug</span><span class="p">,</span>
+</span><span id="L-167"><a href="#L-167"><span class="linenos">167</span></a>        <span class="n">verbose</span><span class="o">=</span><span class="n">verbose</span><span class="p">,</span>
+</span><span id="L-168"><a href="#L-168"><span class="linenos">168</span></a>        <span class="n">seed</span><span class="o">=</span><span class="n">seed</span><span class="p">,</span>
+</span><span id="L-169"><a href="#L-169"><span class="linenos">169</span></a>    <span class="p">)</span>
+</span><span id="L-170"><a href="#L-170"><span class="linenos">170</span></a>    <span class="k">return</span> <span class="n">optimizer</span><span class="o">.</span><span class="n">optimize</span><span class="p">()</span>
 </span></pre></div>
 
 
@@ -239,148 +290,219 @@ metaheuristics as they make few or no assumptions about the problem being optimi
     
 
                 </section>
+                <section id="RandomSearch">
+                            <input id="RandomSearch-view-source" class="view-source-toggle-state" type="checkbox" aria-hidden="true" tabindex="-1">
+<div class="attr class">
+            
+    <span class="def">class</span>
+    <span class="name">RandomSearch</span><wbr>(<span class="base"><a href="optimizer.html#Optimizer">pyBlindOpt.optimizer.Optimizer</a></span>):
+
+                <label class="view-source-button" for="RandomSearch-view-source"><span>View Source</span></label>
+
+    </div>
+    <a class="headerlink" href="#RandomSearch"></a>
+            <div class="pdoc-code codehilite"><pre><span></span><span id="RandomSearch-42"><a href="#RandomSearch-42"><span class="linenos"> 42</span></a><span class="k">class</span><span class="w"> </span><span class="nc">RandomSearch</span><span class="p">(</span><span class="n">Optimizer</span><span class="p">):</span>
+</span><span id="RandomSearch-43"><a href="#RandomSearch-43"><span class="linenos"> 43</span></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+</span><span id="RandomSearch-44"><a href="#RandomSearch-44"><span class="linenos"> 44</span></a><span class="sd">    Random Search Optimizer.</span>
+</span><span id="RandomSearch-45"><a href="#RandomSearch-45"><span class="linenos"> 45</span></a>
+</span><span id="RandomSearch-46"><a href="#RandomSearch-46"><span class="linenos"> 46</span></a><span class="sd">    Generates a completely new population at every iteration using a configured Sampler,</span>
+</span><span id="RandomSearch-47"><a href="#RandomSearch-47"><span class="linenos"> 47</span></a><span class="sd">    independent of previous results.</span>
+</span><span id="RandomSearch-48"><a href="#RandomSearch-48"><span class="linenos"> 48</span></a><span class="sd">    &quot;&quot;&quot;</span>
+</span><span id="RandomSearch-49"><a href="#RandomSearch-49"><span class="linenos"> 49</span></a>
+</span><span id="RandomSearch-50"><a href="#RandomSearch-50"><span class="linenos"> 50</span></a>    <span class="k">def</span><span class="w"> </span><span class="nf">_init_population</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">population</span><span class="p">,</span> <span class="n">seed</span><span class="p">):</span>
+</span><span id="RandomSearch-51"><a href="#RandomSearch-51"><span class="linenos"> 51</span></a><span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+</span><span id="RandomSearch-52"><a href="#RandomSearch-52"><span class="linenos"> 52</span></a><span class="sd">        Initialization override.</span>
+</span><span id="RandomSearch-53"><a href="#RandomSearch-53"><span class="linenos"> 53</span></a>
+</span><span id="RandomSearch-54"><a href="#RandomSearch-54"><span class="linenos"> 54</span></a><span class="sd">        Persists the `Sampler` instance derived from the seed to ensure consistent</span>
+</span><span id="RandomSearch-55"><a href="#RandomSearch-55"><span class="linenos"> 55</span></a><span class="sd">        sampling logic (e.g., Latin Hypercube) is used across all iterations,</span>
+</span><span id="RandomSearch-56"><a href="#RandomSearch-56"><span class="linenos"> 56</span></a><span class="sd">        not just the first one.</span>
+</span><span id="RandomSearch-57"><a href="#RandomSearch-57"><span class="linenos"> 57</span></a><span class="sd">        &quot;&quot;&quot;</span>
+</span><span id="RandomSearch-58"><a href="#RandomSearch-58"><span class="linenos"> 58</span></a>        <span class="c1"># 1. Store the sampler for reuse in _generate_offspring</span>
+</span><span id="RandomSearch-59"><a href="#RandomSearch-59"><span class="linenos"> 59</span></a>        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">seed</span><span class="p">,</span> <span class="n">utils</span><span class="o">.</span><span class="n">Sampler</span><span class="p">):</span>
+</span><span id="RandomSearch-60"><a href="#RandomSearch-60"><span class="linenos"> 60</span></a>            <span class="bp">self</span><span class="o">.</span><span class="n">sampler</span> <span class="o">=</span> <span class="n">seed</span>
+</span><span id="RandomSearch-61"><a href="#RandomSearch-61"><span class="linenos"> 61</span></a>        <span class="k">else</span><span class="p">:</span>
+</span><span id="RandomSearch-62"><a href="#RandomSearch-62"><span class="linenos"> 62</span></a>            <span class="c1"># Default to RandomSampler using the optimizer&#39;s RNG</span>
+</span><span id="RandomSearch-63"><a href="#RandomSearch-63"><span class="linenos"> 63</span></a>            <span class="bp">self</span><span class="o">.</span><span class="n">sampler</span> <span class="o">=</span> <span class="n">utils</span><span class="o">.</span><span class="n">RandomSampler</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">rng</span><span class="p">)</span>
+</span><span id="RandomSearch-64"><a href="#RandomSearch-64"><span class="linenos"> 64</span></a>
+</span><span id="RandomSearch-65"><a href="#RandomSearch-65"><span class="linenos"> 65</span></a>        <span class="c1"># 2. Call the Base class to actually generate the initial population</span>
+</span><span id="RandomSearch-66"><a href="#RandomSearch-66"><span class="linenos"> 66</span></a>        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">_init_population</span><span class="p">(</span><span class="n">population</span><span class="p">,</span> <span class="n">seed</span><span class="p">)</span>
+</span><span id="RandomSearch-67"><a href="#RandomSearch-67"><span class="linenos"> 67</span></a>
+</span><span id="RandomSearch-68"><a href="#RandomSearch-68"><span class="linenos"> 68</span></a>    <span class="k">def</span><span class="w"> </span><span class="nf">_initialize</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+</span><span id="RandomSearch-69"><a href="#RandomSearch-69"><span class="linenos"> 69</span></a><span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+</span><span id="RandomSearch-70"><a href="#RandomSearch-70"><span class="linenos"> 70</span></a><span class="sd">        Initialization hook.</span>
+</span><span id="RandomSearch-71"><a href="#RandomSearch-71"><span class="linenos"> 71</span></a>
+</span><span id="RandomSearch-72"><a href="#RandomSearch-72"><span class="linenos"> 72</span></a><span class="sd">        No internal state setup required for Random Search.</span>
+</span><span id="RandomSearch-73"><a href="#RandomSearch-73"><span class="linenos"> 73</span></a><span class="sd">        &quot;&quot;&quot;</span>
+</span><span id="RandomSearch-74"><a href="#RandomSearch-74"><span class="linenos"> 74</span></a>        <span class="k">pass</span>
+</span><span id="RandomSearch-75"><a href="#RandomSearch-75"><span class="linenos"> 75</span></a>
+</span><span id="RandomSearch-76"><a href="#RandomSearch-76"><span class="linenos"> 76</span></a>    <span class="k">def</span><span class="w"> </span><span class="nf">_update_iter_params</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">epoch</span><span class="p">:</span> <span class="nb">int</span><span class="p">):</span>
+</span><span id="RandomSearch-77"><a href="#RandomSearch-77"><span class="linenos"> 77</span></a><span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+</span><span id="RandomSearch-78"><a href="#RandomSearch-78"><span class="linenos"> 78</span></a><span class="sd">        Parameter update hook.</span>
+</span><span id="RandomSearch-79"><a href="#RandomSearch-79"><span class="linenos"> 79</span></a>
+</span><span id="RandomSearch-80"><a href="#RandomSearch-80"><span class="linenos"> 80</span></a><span class="sd">        Random Search is memoryless and parameter-free; it does not change behavior over time.</span>
+</span><span id="RandomSearch-81"><a href="#RandomSearch-81"><span class="linenos"> 81</span></a><span class="sd">        &quot;&quot;&quot;</span>
+</span><span id="RandomSearch-82"><a href="#RandomSearch-82"><span class="linenos"> 82</span></a>        <span class="k">pass</span>
+</span><span id="RandomSearch-83"><a href="#RandomSearch-83"><span class="linenos"> 83</span></a>
+</span><span id="RandomSearch-84"><a href="#RandomSearch-84"><span class="linenos"> 84</span></a>    <span class="k">def</span><span class="w"> </span><span class="nf">_update_best</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">epoch</span><span class="p">:</span> <span class="nb">int</span><span class="p">):</span>
+</span><span id="RandomSearch-85"><a href="#RandomSearch-85"><span class="linenos"> 85</span></a><span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+</span><span id="RandomSearch-86"><a href="#RandomSearch-86"><span class="linenos"> 86</span></a><span class="sd">        Global best update.</span>
+</span><span id="RandomSearch-87"><a href="#RandomSearch-87"><span class="linenos"> 87</span></a>
+</span><span id="RandomSearch-88"><a href="#RandomSearch-88"><span class="linenos"> 88</span></a><span class="sd">        Checks if the current random batch contains a solution better than the best</span>
+</span><span id="RandomSearch-89"><a href="#RandomSearch-89"><span class="linenos"> 89</span></a><span class="sd">        one seen so far across all previous batches.</span>
+</span><span id="RandomSearch-90"><a href="#RandomSearch-90"><span class="linenos"> 90</span></a>
+</span><span id="RandomSearch-91"><a href="#RandomSearch-91"><span class="linenos"> 91</span></a><span class="sd">        Args:</span>
+</span><span id="RandomSearch-92"><a href="#RandomSearch-92"><span class="linenos"> 92</span></a><span class="sd">            epoch (int): Current iteration.</span>
+</span><span id="RandomSearch-93"><a href="#RandomSearch-93"><span class="linenos"> 93</span></a><span class="sd">        &quot;&quot;&quot;</span>
+</span><span id="RandomSearch-94"><a href="#RandomSearch-94"><span class="linenos"> 94</span></a>        <span class="n">best_idx</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">argmin</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">scores</span><span class="p">)</span>
+</span><span id="RandomSearch-95"><a href="#RandomSearch-95"><span class="linenos"> 95</span></a>        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">scores</span><span class="p">[</span><span class="n">best_idx</span><span class="p">]</span> <span class="o">&lt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">best_score</span><span class="p">:</span>
+</span><span id="RandomSearch-96"><a href="#RandomSearch-96"><span class="linenos"> 96</span></a>            <span class="bp">self</span><span class="o">.</span><span class="n">best_score</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">scores</span><span class="p">[</span><span class="n">best_idx</span><span class="p">]</span>
+</span><span id="RandomSearch-97"><a href="#RandomSearch-97"><span class="linenos"> 97</span></a>            <span class="bp">self</span><span class="o">.</span><span class="n">best_pos</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">pop</span><span class="p">[</span><span class="n">best_idx</span><span class="p">]</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+</span><span id="RandomSearch-98"><a href="#RandomSearch-98"><span class="linenos"> 98</span></a>
+</span><span id="RandomSearch-99"><a href="#RandomSearch-99"><span class="linenos"> 99</span></a>    <span class="k">def</span><span class="w"> </span><span class="nf">_generate_offspring</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">epoch</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+</span><span id="RandomSearch-100"><a href="#RandomSearch-100"><span class="linenos">100</span></a><span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+</span><span id="RandomSearch-101"><a href="#RandomSearch-101"><span class="linenos">101</span></a><span class="sd">        Generates a new population.</span>
+</span><span id="RandomSearch-102"><a href="#RandomSearch-102"><span class="linenos">102</span></a>
+</span><span id="RandomSearch-103"><a href="#RandomSearch-103"><span class="linenos">103</span></a><span class="sd">        Unlike other algorithms that perturb existing solutions, RS requests a</span>
+</span><span id="RandomSearch-104"><a href="#RandomSearch-104"><span class="linenos">104</span></a><span class="sd">        completely fresh batch from the sampler.</span>
+</span><span id="RandomSearch-105"><a href="#RandomSearch-105"><span class="linenos">105</span></a>
+</span><span id="RandomSearch-106"><a href="#RandomSearch-106"><span class="linenos">106</span></a><span class="sd">        Returns:</span>
+</span><span id="RandomSearch-107"><a href="#RandomSearch-107"><span class="linenos">107</span></a><span class="sd">            np.ndarray: New random population.</span>
+</span><span id="RandomSearch-108"><a href="#RandomSearch-108"><span class="linenos">108</span></a><span class="sd">        &quot;&quot;&quot;</span>
+</span><span id="RandomSearch-109"><a href="#RandomSearch-109"><span class="linenos">109</span></a>        <span class="k">return</span> <span class="n">init</span><span class="o">.</span><span class="n">get_initial_population</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">n_pop</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">bounds</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">sampler</span><span class="p">)</span>
+</span><span id="RandomSearch-110"><a href="#RandomSearch-110"><span class="linenos">110</span></a>
+</span><span id="RandomSearch-111"><a href="#RandomSearch-111"><span class="linenos">111</span></a>    <span class="k">def</span><span class="w"> </span><span class="nf">_selection</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">offspring</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">offspring_scores</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">):</span>
+</span><span id="RandomSearch-112"><a href="#RandomSearch-112"><span class="linenos">112</span></a><span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+</span><span id="RandomSearch-113"><a href="#RandomSearch-113"><span class="linenos">113</span></a><span class="sd">        Unconditional Replacement.</span>
+</span><span id="RandomSearch-114"><a href="#RandomSearch-114"><span class="linenos">114</span></a>
+</span><span id="RandomSearch-115"><a href="#RandomSearch-115"><span class="linenos">115</span></a><span class="sd">        The entire previous population is discarded and replaced by the new random batch.</span>
+</span><span id="RandomSearch-116"><a href="#RandomSearch-116"><span class="linenos">116</span></a><span class="sd">        No &quot;survival of the fittest&quot; logic applies between generations.</span>
+</span><span id="RandomSearch-117"><a href="#RandomSearch-117"><span class="linenos">117</span></a>
+</span><span id="RandomSearch-118"><a href="#RandomSearch-118"><span class="linenos">118</span></a><span class="sd">        Args:</span>
+</span><span id="RandomSearch-119"><a href="#RandomSearch-119"><span class="linenos">119</span></a><span class="sd">            offspring (np.ndarray): New population.</span>
+</span><span id="RandomSearch-120"><a href="#RandomSearch-120"><span class="linenos">120</span></a><span class="sd">            offspring_scores (np.ndarray): Scores of new population.</span>
+</span><span id="RandomSearch-121"><a href="#RandomSearch-121"><span class="linenos">121</span></a><span class="sd">        &quot;&quot;&quot;</span>
+</span><span id="RandomSearch-122"><a href="#RandomSearch-122"><span class="linenos">122</span></a>        <span class="bp">self</span><span class="o">.</span><span class="n">pop</span> <span class="o">=</span> <span class="n">offspring</span>
+</span><span id="RandomSearch-123"><a href="#RandomSearch-123"><span class="linenos">123</span></a>        <span class="bp">self</span><span class="o">.</span><span class="n">scores</span> <span class="o">=</span> <span class="n">offspring_scores</span>
+</span></pre></div>
+
+
+            <div class="docstring"><p>Random Search Optimizer.</p>
+
+<p>Generates a completely new population at every iteration using a configured Sampler,
+independent of previous results.</p>
+</div>
+
+
+                            <div class="inherited">
+                                <h5>Inherited Members</h5>
+                                <dl>
+                                    <div><dt><a href="optimizer.html#Optimizer">pyBlindOpt.optimizer.Optimizer</a></dt>
+                                <dd id="RandomSearch.__init__" class="function"><a href="optimizer.html#Optimizer.__init__">Optimizer</a></dd>
+                <dd id="RandomSearch.objective" class="variable"><a href="optimizer.html#Optimizer.objective">objective</a></dd>
+                <dd id="RandomSearch.bounds" class="variable"><a href="optimizer.html#Optimizer.bounds">bounds</a></dd>
+                <dd id="RandomSearch.n_iter" class="variable"><a href="optimizer.html#Optimizer.n_iter">n_iter</a></dd>
+                <dd id="RandomSearch.n_pop" class="variable"><a href="optimizer.html#Optimizer.n_pop">n_pop</a></dd>
+                <dd id="RandomSearch.n_jobs" class="variable"><a href="optimizer.html#Optimizer.n_jobs">n_jobs</a></dd>
+                <dd id="RandomSearch.cached" class="variable"><a href="optimizer.html#Optimizer.cached">cached</a></dd>
+                <dd id="RandomSearch.debug" class="variable"><a href="optimizer.html#Optimizer.debug">debug</a></dd>
+                <dd id="RandomSearch.verbose" class="variable"><a href="optimizer.html#Optimizer.verbose">verbose</a></dd>
+                <dd id="RandomSearch.rng" class="variable"><a href="optimizer.html#Optimizer.rng">rng</a></dd>
+                <dd id="RandomSearch.memory" class="variable"><a href="optimizer.html#Optimizer.memory">memory</a></dd>
+                <dd id="RandomSearch.objective_cache" class="variable"><a href="optimizer.html#Optimizer.objective_cache">objective_cache</a></dd>
+                <dd id="RandomSearch.scores" class="variable"><a href="optimizer.html#Optimizer.scores">scores</a></dd>
+                <dd id="RandomSearch.best_pos" class="variable"><a href="optimizer.html#Optimizer.best_pos">best_pos</a></dd>
+                <dd id="RandomSearch.best_score" class="variable"><a href="optimizer.html#Optimizer.best_score">best_score</a></dd>
+                <dd id="RandomSearch.history" class="variable"><a href="optimizer.html#Optimizer.history">history</a></dd>
+                <dd id="RandomSearch.evaluate" class="function"><a href="optimizer.html#Optimizer.evaluate">evaluate</a></dd>
+                <dd id="RandomSearch.cleanup" class="function"><a href="optimizer.html#Optimizer.cleanup">cleanup</a></dd>
+                <dd id="RandomSearch.optimize" class="function"><a href="optimizer.html#Optimizer.optimize">optimize</a></dd>
+
+            </div>
+                                </dl>
+                            </div>
+                </section>
                 <section id="random_search">
                             <input id="random_search-view-source" class="view-source-toggle-state" type="checkbox" aria-hidden="true" tabindex="-1">
 <div class="attr function">
             
         <span class="def">def</span>
-        <span class="name">random_search</span><span class="signature pdoc-code multiline">(<span class="param">	<span class="n">objective</span><span class="p">:</span> <span class="o">&lt;</span><span class="n">built</span><span class="o">-</span><span class="ow">in</span> <span class="n">function</span> <span class="nb">callable</span><span class="o">&gt;</span>,</span><span class="param">	<span class="n">bounds</span><span class="p">:</span> <span class="n">numpy</span><span class="o">.</span><span class="n">ndarray</span>,</span><span class="param">	<span class="n">population</span><span class="p">:</span> <span class="nb">list</span> <span class="o">=</span> <span class="kc">None</span>,</span><span class="param">	<span class="n">callback</span><span class="p">:</span> <span class="s1">&#39;Sequence[callable] | callable&#39;</span> <span class="o">=</span> <span class="kc">None</span>,</span><span class="param">	<span class="n">n_iter</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">100</span>,</span><span class="param">	<span class="n">n_pop</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">10</span>,</span><span class="param">	<span class="n">n_jobs</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="o">-</span><span class="mi">1</span>,</span><span class="param">	<span class="n">cached</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>,</span><span class="param">	<span class="n">debug</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>,</span><span class="param">	<span class="n">verbose</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>,</span><span class="param">	<span class="n">seed</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">42</span></span><span class="return-annotation">) -> <span class="nb">tuple</span>:</span></span>
+        <span class="name">random_search</span><span class="signature pdoc-code multiline">(<span class="param">	<span class="n">objective</span><span class="p">:</span> <span class="n">Callable</span>,</span><span class="param">	<span class="n">bounds</span><span class="p">:</span> <span class="n">numpy</span><span class="o">.</span><span class="n">ndarray</span>,</span><span class="param">	<span class="n">population</span><span class="p">:</span> <span class="n">numpy</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>,</span><span class="param">	<span class="n">callback</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">Callable</span><span class="p">]</span> <span class="o">|</span> <span class="n">Callable</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>,</span><span class="param">	<span class="n">n_iter</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">100</span>,</span><span class="param">	<span class="n">n_pop</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">10</span>,</span><span class="param">	<span class="n">n_jobs</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span>,</span><span class="param">	<span class="n">cached</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>,</span><span class="param">	<span class="n">debug</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>,</span><span class="param">	<span class="n">verbose</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>,</span><span class="param">	<span class="n">seed</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="n">numpy</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">_generator</span><span class="o">.</span><span class="n">Generator</span> <span class="o">|</span> <span class="n"><a href="utils.html#Sampler">pyBlindOpt.utils.Sampler</a></span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span></span><span class="return-annotation">) -> <span class="nb">tuple</span>:</span></span>
 
                 <label class="view-source-button" for="random_search-view-source"><span>View Source</span></label>
 
     </div>
     <a class="headerlink" href="#random_search"></a>
-            <div class="pdoc-code codehilite"><pre><span></span><span id="random_search-33"><a href="#random_search-33"><span class="linenos"> 33</span></a><span class="k">def</span><span class="w"> </span><span class="nf">random_search</span><span class="p">(</span><span class="n">objective</span><span class="p">:</span><span class="nb">callable</span><span class="p">,</span> <span class="n">bounds</span><span class="p">:</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">population</span><span class="p">:</span><span class="nb">list</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> 
-</span><span id="random_search-34"><a href="#random_search-34"><span class="linenos"> 34</span></a><span class="n">callback</span><span class="p">:</span><span class="s2">&quot;Sequence[callable] | callable&quot;</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">n_iter</span><span class="p">:</span><span class="nb">int</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span> <span class="n">n_pop</span><span class="p">:</span><span class="nb">int</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span> 
-</span><span id="random_search-35"><a href="#random_search-35"><span class="linenos"> 35</span></a><span class="n">n_jobs</span><span class="p">:</span><span class="nb">int</span><span class="o">=-</span><span class="mi">1</span><span class="p">,</span> <span class="n">cached</span><span class="p">:</span><span class="nb">bool</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">debug</span><span class="p">:</span><span class="nb">bool</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">verbose</span><span class="p">:</span><span class="nb">bool</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> 
-</span><span id="random_search-36"><a href="#random_search-36"><span class="linenos"> 36</span></a><span class="n">seed</span><span class="p">:</span><span class="nb">int</span><span class="o">=</span><span class="mi">42</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">:</span>
-</span><span id="random_search-37"><a href="#random_search-37"><span class="linenos"> 37</span></a><span class="w">    </span><span class="sd">&#39;&#39;&#39;</span>
-</span><span id="random_search-38"><a href="#random_search-38"><span class="linenos"> 38</span></a><span class="sd">    Computes the Random Search optimization algorithm.</span>
-</span><span id="random_search-39"><a href="#random_search-39"><span class="linenos"> 39</span></a>
-</span><span id="random_search-40"><a href="#random_search-40"><span class="linenos"> 40</span></a><span class="sd">    Args:</span>
-</span><span id="random_search-41"><a href="#random_search-41"><span class="linenos"> 41</span></a><span class="sd">        objective (callable): objective function used to evaluate the candidate solutions (lower is better)</span>
-</span><span id="random_search-42"><a href="#random_search-42"><span class="linenos"> 42</span></a><span class="sd">        bounds (np.ndarray): bounds that limit the search space</span>
-</span><span id="random_search-43"><a href="#random_search-43"><span class="linenos"> 43</span></a><span class="sd">        population (list): optional list of candidate solutions (default None)</span>
-</span><span id="random_search-44"><a href="#random_search-44"><span class="linenos"> 44</span></a><span class="sd">        callback (callable): callback function that is called at each epoch (deafult None)</span>
-</span><span id="random_search-45"><a href="#random_search-45"><span class="linenos"> 45</span></a><span class="sd">        n_iter (int): the number of iterations (default 100)</span>
-</span><span id="random_search-46"><a href="#random_search-46"><span class="linenos"> 46</span></a><span class="sd">        n_pop (int): the number of elements in the population (default 10)</span>
-</span><span id="random_search-47"><a href="#random_search-47"><span class="linenos"> 47</span></a><span class="sd">        n_jobs (int): number of concurrent jobs (default -1)</span>
-</span><span id="random_search-48"><a href="#random_search-48"><span class="linenos"> 48</span></a><span class="sd">        cached (bool): controls if the objective function is cached by joblib (default False)</span>
-</span><span id="random_search-49"><a href="#random_search-49"><span class="linenos"> 49</span></a><span class="sd">        debug (bool): controls if debug information is returned (default False)</span>
-</span><span id="random_search-50"><a href="#random_search-50"><span class="linenos"> 50</span></a><span class="sd">        verbose (bool): controls the usage of tqdm as a progress bar (default False)</span>
-</span><span id="random_search-51"><a href="#random_search-51"><span class="linenos"> 51</span></a><span class="sd">        seed (int): seed to init the random generator (default 42)</span>
-</span><span id="random_search-52"><a href="#random_search-52"><span class="linenos"> 52</span></a>
-</span><span id="random_search-53"><a href="#random_search-53"><span class="linenos"> 53</span></a><span class="sd">    Returns:</span>
-</span><span id="random_search-54"><a href="#random_search-54"><span class="linenos"> 54</span></a><span class="sd">        tuple: the best solution</span>
-</span><span id="random_search-55"><a href="#random_search-55"><span class="linenos"> 55</span></a><span class="sd">    &#39;&#39;&#39;</span>
-</span><span id="random_search-56"><a href="#random_search-56"><span class="linenos"> 56</span></a>
-</span><span id="random_search-57"><a href="#random_search-57"><span class="linenos"> 57</span></a>    <span class="c1"># define the seed of the random generation</span>
-</span><span id="random_search-58"><a href="#random_search-58"><span class="linenos"> 58</span></a>    <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">seed</span><span class="p">(</span><span class="n">seed</span><span class="p">)</span>
-</span><span id="random_search-59"><a href="#random_search-59"><span class="linenos"> 59</span></a>    
-</span><span id="random_search-60"><a href="#random_search-60"><span class="linenos"> 60</span></a>    <span class="c1"># cache the initial objective function</span>
-</span><span id="random_search-61"><a href="#random_search-61"><span class="linenos"> 61</span></a>    <span class="k">if</span> <span class="n">cached</span><span class="p">:</span>
-</span><span id="random_search-62"><a href="#random_search-62"><span class="linenos"> 62</span></a>        <span class="c1"># Cache from joblib</span>
-</span><span id="random_search-63"><a href="#random_search-63"><span class="linenos"> 63</span></a>        <span class="n">location</span> <span class="o">=</span> <span class="n">tempfile</span><span class="o">.</span><span class="n">gettempdir</span><span class="p">()</span>
-</span><span id="random_search-64"><a href="#random_search-64"><span class="linenos"> 64</span></a>        <span class="n">memory</span> <span class="o">=</span> <span class="n">joblib</span><span class="o">.</span><span class="n">Memory</span><span class="p">(</span><span class="n">location</span><span class="p">,</span> <span class="n">verbose</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
-</span><span id="random_search-65"><a href="#random_search-65"><span class="linenos"> 65</span></a>        <span class="n">objective_cache</span> <span class="o">=</span> <span class="n">memory</span><span class="o">.</span><span class="n">cache</span><span class="p">(</span><span class="n">objective</span><span class="p">)</span>
-</span><span id="random_search-66"><a href="#random_search-66"><span class="linenos"> 66</span></a>    <span class="k">else</span><span class="p">:</span>
-</span><span id="random_search-67"><a href="#random_search-67"><span class="linenos"> 67</span></a>        <span class="n">objective_cache</span> <span class="o">=</span> <span class="n">objective</span>
-</span><span id="random_search-68"><a href="#random_search-68"><span class="linenos"> 68</span></a>    
-</span><span id="random_search-69"><a href="#random_search-69"><span class="linenos"> 69</span></a>    <span class="c1"># check if the initial population is given</span>
-</span><span id="random_search-70"><a href="#random_search-70"><span class="linenos"> 70</span></a>    <span class="k">if</span> <span class="n">population</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-</span><span id="random_search-71"><a href="#random_search-71"><span class="linenos"> 71</span></a>        <span class="c1"># initialise population of candidate solutions randomly within the specified bounds</span>
-</span><span id="random_search-72"><a href="#random_search-72"><span class="linenos"> 72</span></a>        <span class="n">pop</span> <span class="o">=</span> <span class="p">[</span><span class="n">utils</span><span class="o">.</span><span class="n">get_random_solution</span><span class="p">(</span><span class="n">bounds</span><span class="p">)</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n_pop</span><span class="p">)]</span>
-</span><span id="random_search-73"><a href="#random_search-73"><span class="linenos"> 73</span></a>    <span class="k">else</span><span class="p">:</span>
-</span><span id="random_search-74"><a href="#random_search-74"><span class="linenos"> 74</span></a>        <span class="c1"># initialise population of candidate and validate the bounds</span>
-</span><span id="random_search-75"><a href="#random_search-75"><span class="linenos"> 75</span></a>        <span class="n">pop</span> <span class="o">=</span> <span class="p">[</span><span class="n">utils</span><span class="o">.</span><span class="n">check_bounds</span><span class="p">(</span><span class="n">p</span><span class="p">,</span> <span class="n">bounds</span><span class="p">)</span> <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">population</span><span class="p">]</span>
-</span><span id="random_search-76"><a href="#random_search-76"><span class="linenos"> 76</span></a>        <span class="c1"># overwrite the n_pop with the length of the given population</span>
-</span><span id="random_search-77"><a href="#random_search-77"><span class="linenos"> 77</span></a>        <span class="n">n_pop</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">population</span><span class="p">)</span>
-</span><span id="random_search-78"><a href="#random_search-78"><span class="linenos"> 78</span></a>    
-</span><span id="random_search-79"><a href="#random_search-79"><span class="linenos"> 79</span></a>    <span class="c1"># evaluate initial population of candidate solutions</span>
-</span><span id="random_search-80"><a href="#random_search-80"><span class="linenos"> 80</span></a>    <span class="n">obj_all</span> <span class="o">=</span> <span class="n">utils</span><span class="o">.</span><span class="n">compute_objective</span><span class="p">(</span><span class="n">pop</span><span class="p">,</span> <span class="n">objective_cache</span><span class="p">,</span> <span class="n">n_jobs</span><span class="p">)</span>
-</span><span id="random_search-81"><a href="#random_search-81"><span class="linenos"> 81</span></a>
-</span><span id="random_search-82"><a href="#random_search-82"><span class="linenos"> 82</span></a>    <span class="c1"># find the best performing vector of initial population</span>
-</span><span id="random_search-83"><a href="#random_search-83"><span class="linenos"> 83</span></a>    <span class="n">best_vector</span> <span class="o">=</span> <span class="n">pop</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">argmin</span><span class="p">(</span><span class="n">obj_all</span><span class="p">)]</span>
-</span><span id="random_search-84"><a href="#random_search-84"><span class="linenos"> 84</span></a>    <span class="n">best_obj</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="n">obj_all</span><span class="p">)</span>
-</span><span id="random_search-85"><a href="#random_search-85"><span class="linenos"> 85</span></a>    
-</span><span id="random_search-86"><a href="#random_search-86"><span class="linenos"> 86</span></a>    <span class="c1"># arrays to store the debug information</span>
-</span><span id="random_search-87"><a href="#random_search-87"><span class="linenos"> 87</span></a>    <span class="k">if</span> <span class="n">debug</span><span class="p">:</span>
-</span><span id="random_search-88"><a href="#random_search-88"><span class="linenos"> 88</span></a>        <span class="n">obj_avg_iter</span> <span class="o">=</span> <span class="p">[]</span>
-</span><span id="random_search-89"><a href="#random_search-89"><span class="linenos"> 89</span></a>        <span class="n">obj_best_iter</span> <span class="o">=</span> <span class="p">[]</span>
-</span><span id="random_search-90"><a href="#random_search-90"><span class="linenos"> 90</span></a>        <span class="n">obj_worst_iter</span> <span class="o">=</span> <span class="p">[]</span>
-</span><span id="random_search-91"><a href="#random_search-91"><span class="linenos"> 91</span></a>    
-</span><span id="random_search-92"><a href="#random_search-92"><span class="linenos"> 92</span></a>    <span class="c1"># run iterations of the algorithm</span>
-</span><span id="random_search-93"><a href="#random_search-93"><span class="linenos"> 93</span></a>    <span class="k">for</span> <span class="n">epoch</span> <span class="ow">in</span> <span class="n">tqdm</span><span class="o">.</span><span class="n">tqdm</span><span class="p">(</span><span class="nb">range</span><span class="p">(</span><span class="n">n_iter</span><span class="p">),</span> <span class="n">disable</span><span class="o">=</span><span class="ow">not</span> <span class="n">verbose</span><span class="p">):</span>
-</span><span id="random_search-94"><a href="#random_search-94"><span class="linenos"> 94</span></a>        <span class="c1"># In Random Search, every iteration generates a completely new random population</span>
-</span><span id="random_search-95"><a href="#random_search-95"><span class="linenos"> 95</span></a>        <span class="c1"># (excluding the global best if we wanted to be elitist, but pure RS is memoryless.</span>
-</span><span id="random_search-96"><a href="#random_search-96"><span class="linenos"> 96</span></a>        <span class="c1"># However, to fit the framework, we generate n_pop new solutions every epoch).</span>
-</span><span id="random_search-97"><a href="#random_search-97"><span class="linenos"> 97</span></a>        <span class="n">pop</span> <span class="o">=</span> <span class="p">[</span><span class="n">utils</span><span class="o">.</span><span class="n">get_random_solution</span><span class="p">(</span><span class="n">bounds</span><span class="p">)</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n_pop</span><span class="p">)]</span>
-</span><span id="random_search-98"><a href="#random_search-98"><span class="linenos"> 98</span></a>        
-</span><span id="random_search-99"><a href="#random_search-99"><span class="linenos"> 99</span></a>        <span class="c1"># evaluate the new population</span>
-</span><span id="random_search-100"><a href="#random_search-100"><span class="linenos">100</span></a>        <span class="n">obj_all</span> <span class="o">=</span> <span class="n">utils</span><span class="o">.</span><span class="n">compute_objective</span><span class="p">(</span><span class="n">pop</span><span class="p">,</span> <span class="n">objective_cache</span><span class="p">,</span> <span class="n">n_jobs</span><span class="p">)</span>
-</span><span id="random_search-101"><a href="#random_search-101"><span class="linenos">101</span></a>
-</span><span id="random_search-102"><a href="#random_search-102"><span class="linenos">102</span></a>        <span class="c1"># find the best performing vector in this batch</span>
-</span><span id="random_search-103"><a href="#random_search-103"><span class="linenos">103</span></a>        <span class="n">current_best_obj</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="n">obj_all</span><span class="p">)</span>
-</span><span id="random_search-104"><a href="#random_search-104"><span class="linenos">104</span></a>        
-</span><span id="random_search-105"><a href="#random_search-105"><span class="linenos">105</span></a>        <span class="c1"># update global best if found</span>
-</span><span id="random_search-106"><a href="#random_search-106"><span class="linenos">106</span></a>        <span class="k">if</span> <span class="n">current_best_obj</span> <span class="o">&lt;</span> <span class="n">best_obj</span><span class="p">:</span>
-</span><span id="random_search-107"><a href="#random_search-107"><span class="linenos">107</span></a>            <span class="n">best_obj</span> <span class="o">=</span> <span class="n">current_best_obj</span>
-</span><span id="random_search-108"><a href="#random_search-108"><span class="linenos">108</span></a>            <span class="n">best_vector</span> <span class="o">=</span> <span class="n">pop</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">argmin</span><span class="p">(</span><span class="n">obj_all</span><span class="p">)]</span>
-</span><span id="random_search-109"><a href="#random_search-109"><span class="linenos">109</span></a>
-</span><span id="random_search-110"><a href="#random_search-110"><span class="linenos">110</span></a>        <span class="c1">## Optional store the debug information</span>
-</span><span id="random_search-111"><a href="#random_search-111"><span class="linenos">111</span></a>        <span class="k">if</span> <span class="n">debug</span><span class="p">:</span>
-</span><span id="random_search-112"><a href="#random_search-112"><span class="linenos">112</span></a>            <span class="c1"># store best, worst and average cost for the current batch</span>
-</span><span id="random_search-113"><a href="#random_search-113"><span class="linenos">113</span></a>            <span class="n">obj_avg_iter</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">statistics</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">obj_all</span><span class="p">))</span>
-</span><span id="random_search-114"><a href="#random_search-114"><span class="linenos">114</span></a>            <span class="c1"># Note: For debug plots, we usually want the global best history, </span>
-</span><span id="random_search-115"><a href="#random_search-115"><span class="linenos">115</span></a>            <span class="c1"># but strictly this list tracks the &quot;current iteration&quot; stats. </span>
-</span><span id="random_search-116"><a href="#random_search-116"><span class="linenos">116</span></a>            <span class="c1"># We append the global best to keep consistency with other algos usually showing convergence.</span>
-</span><span id="random_search-117"><a href="#random_search-117"><span class="linenos">117</span></a>            <span class="n">obj_best_iter</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">best_obj</span><span class="p">)</span> 
-</span><span id="random_search-118"><a href="#random_search-118"><span class="linenos">118</span></a>            <span class="n">obj_worst_iter</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="nb">max</span><span class="p">(</span><span class="n">obj_all</span><span class="p">))</span>
-</span><span id="random_search-119"><a href="#random_search-119"><span class="linenos">119</span></a>    
-</span><span id="random_search-120"><a href="#random_search-120"><span class="linenos">120</span></a>        <span class="c1">## Optional execute the callback code</span>
-</span><span id="random_search-121"><a href="#random_search-121"><span class="linenos">121</span></a>        <span class="k">if</span> <span class="n">callback</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-</span><span id="random_search-122"><a href="#random_search-122"><span class="linenos">122</span></a>            <span class="n">terminate</span> <span class="o">=</span> <span class="kc">False</span>
-</span><span id="random_search-123"><a href="#random_search-123"><span class="linenos">123</span></a>            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">callback</span><span class="p">,</span> <span class="n">Sequence</span><span class="p">):</span>
-</span><span id="random_search-124"><a href="#random_search-124"><span class="linenos">124</span></a>                <span class="n">terminate</span> <span class="o">=</span> <span class="nb">any</span><span class="p">([</span><span class="n">c</span><span class="p">(</span><span class="n">epoch</span><span class="p">,</span> <span class="n">obj_all</span><span class="p">,</span> <span class="n">pop</span><span class="p">)</span> <span class="k">for</span> <span class="n">c</span> <span class="ow">in</span> <span class="n">callback</span><span class="p">])</span>
-</span><span id="random_search-125"><a href="#random_search-125"><span class="linenos">125</span></a>            <span class="k">else</span><span class="p">:</span>
-</span><span id="random_search-126"><a href="#random_search-126"><span class="linenos">126</span></a>                <span class="n">terminate</span> <span class="o">=</span> <span class="n">callback</span><span class="p">(</span><span class="n">epoch</span><span class="p">,</span> <span class="n">obj_all</span><span class="p">,</span> <span class="n">pop</span><span class="p">)</span>
-</span><span id="random_search-127"><a href="#random_search-127"><span class="linenos">127</span></a>
-</span><span id="random_search-128"><a href="#random_search-128"><span class="linenos">128</span></a>            <span class="k">if</span> <span class="n">terminate</span><span class="p">:</span>
-</span><span id="random_search-129"><a href="#random_search-129"><span class="linenos">129</span></a>                <span class="k">break</span>
-</span><span id="random_search-130"><a href="#random_search-130"><span class="linenos">130</span></a>
-</span><span id="random_search-131"><a href="#random_search-131"><span class="linenos">131</span></a>    <span class="c1"># clean the cache</span>
-</span><span id="random_search-132"><a href="#random_search-132"><span class="linenos">132</span></a>    <span class="k">if</span> <span class="n">cached</span><span class="p">:</span>
-</span><span id="random_search-133"><a href="#random_search-133"><span class="linenos">133</span></a>        <span class="n">memory</span><span class="o">.</span><span class="n">clear</span><span class="p">(</span><span class="n">warn</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
-</span><span id="random_search-134"><a href="#random_search-134"><span class="linenos">134</span></a>    
-</span><span id="random_search-135"><a href="#random_search-135"><span class="linenos">135</span></a>    <span class="k">if</span> <span class="n">debug</span><span class="p">:</span>
-</span><span id="random_search-136"><a href="#random_search-136"><span class="linenos">136</span></a>        <span class="k">return</span> <span class="p">(</span><span class="n">best_vector</span><span class="p">,</span> <span class="n">best_obj</span><span class="p">,</span> <span class="p">(</span><span class="n">obj_best_iter</span><span class="p">,</span> <span class="n">obj_avg_iter</span><span class="p">,</span> <span class="n">obj_worst_iter</span><span class="p">))</span>
-</span><span id="random_search-137"><a href="#random_search-137"><span class="linenos">137</span></a>    <span class="k">else</span><span class="p">:</span>
-</span><span id="random_search-138"><a href="#random_search-138"><span class="linenos">138</span></a>        <span class="k">return</span> <span class="p">(</span><span class="n">best_vector</span><span class="p">,</span> <span class="n">best_obj</span><span class="p">)</span>
+            <div class="pdoc-code codehilite"><pre><span></span><span id="random_search-126"><a href="#random_search-126"><span class="linenos">126</span></a><span class="k">def</span><span class="w"> </span><span class="nf">random_search</span><span class="p">(</span>
+</span><span id="random_search-127"><a href="#random_search-127"><span class="linenos">127</span></a>    <span class="n">objective</span><span class="p">:</span> <span class="n">collections</span><span class="o">.</span><span class="n">abc</span><span class="o">.</span><span class="n">Callable</span><span class="p">,</span>
+</span><span id="random_search-128"><a href="#random_search-128"><span class="linenos">128</span></a>    <span class="n">bounds</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
+</span><span id="random_search-129"><a href="#random_search-129"><span class="linenos">129</span></a>    <span class="n">population</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+</span><span id="random_search-130"><a href="#random_search-130"><span class="linenos">130</span></a>    <span class="n">callback</span><span class="p">:</span> <span class="s2">&quot;list[collections.abc.Callable] | collections.abc.Callable | None&quot;</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+</span><span id="random_search-131"><a href="#random_search-131"><span class="linenos">131</span></a>    <span class="n">n_iter</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">100</span><span class="p">,</span>
+</span><span id="random_search-132"><a href="#random_search-132"><span class="linenos">132</span></a>    <span class="n">n_pop</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">10</span><span class="p">,</span>
+</span><span id="random_search-133"><a href="#random_search-133"><span class="linenos">133</span></a>    <span class="n">n_jobs</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span><span class="p">,</span>
+</span><span id="random_search-134"><a href="#random_search-134"><span class="linenos">134</span></a>    <span class="n">cached</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+</span><span id="random_search-135"><a href="#random_search-135"><span class="linenos">135</span></a>    <span class="n">debug</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+</span><span id="random_search-136"><a href="#random_search-136"><span class="linenos">136</span></a>    <span class="n">verbose</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+</span><span id="random_search-137"><a href="#random_search-137"><span class="linenos">137</span></a>    <span class="n">seed</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">Generator</span> <span class="o">|</span> <span class="n">utils</span><span class="o">.</span><span class="n">Sampler</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+</span><span id="random_search-138"><a href="#random_search-138"><span class="linenos">138</span></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">:</span>
+</span><span id="random_search-139"><a href="#random_search-139"><span class="linenos">139</span></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+</span><span id="random_search-140"><a href="#random_search-140"><span class="linenos">140</span></a><span class="sd">    Functional interface for Random Search.</span>
+</span><span id="random_search-141"><a href="#random_search-141"><span class="linenos">141</span></a>
+</span><span id="random_search-142"><a href="#random_search-142"><span class="linenos">142</span></a><span class="sd">    Args:</span>
+</span><span id="random_search-143"><a href="#random_search-143"><span class="linenos">143</span></a><span class="sd">        objective (Callable): Function to minimize.</span>
+</span><span id="random_search-144"><a href="#random_search-144"><span class="linenos">144</span></a><span class="sd">        bounds (np.ndarray): Search space bounds.</span>
+</span><span id="random_search-145"><a href="#random_search-145"><span class="linenos">145</span></a><span class="sd">        population (np.ndarray | None): Initial population (mostly unused except for shape inference).</span>
+</span><span id="random_search-146"><a href="#random_search-146"><span class="linenos">146</span></a><span class="sd">        callback (list | Callable | None): Callbacks.</span>
+</span><span id="random_search-147"><a href="#random_search-147"><span class="linenos">147</span></a><span class="sd">        n_iter (int): Number of iterations (drops).</span>
+</span><span id="random_search-148"><a href="#random_search-148"><span class="linenos">148</span></a><span class="sd">        n_pop (int): Number of samples per iteration.</span>
+</span><span id="random_search-149"><a href="#random_search-149"><span class="linenos">149</span></a><span class="sd">        n_jobs (int): Parallel jobs.</span>
+</span><span id="random_search-150"><a href="#random_search-150"><span class="linenos">150</span></a><span class="sd">        cached (bool): Enable caching.</span>
+</span><span id="random_search-151"><a href="#random_search-151"><span class="linenos">151</span></a><span class="sd">        debug (bool): Enable history.</span>
+</span><span id="random_search-152"><a href="#random_search-152"><span class="linenos">152</span></a><span class="sd">        verbose (bool): Show progress.</span>
+</span><span id="random_search-153"><a href="#random_search-153"><span class="linenos">153</span></a><span class="sd">        seed (int | Generator | Sampler | None): Sampling strategy.</span>
+</span><span id="random_search-154"><a href="#random_search-154"><span class="linenos">154</span></a>
+</span><span id="random_search-155"><a href="#random_search-155"><span class="linenos">155</span></a><span class="sd">    Returns:</span>
+</span><span id="random_search-156"><a href="#random_search-156"><span class="linenos">156</span></a><span class="sd">        tuple: (best_position, best_score).</span>
+</span><span id="random_search-157"><a href="#random_search-157"><span class="linenos">157</span></a><span class="sd">    &quot;&quot;&quot;</span>
+</span><span id="random_search-158"><a href="#random_search-158"><span class="linenos">158</span></a>    <span class="n">optimizer</span> <span class="o">=</span> <span class="n">RandomSearch</span><span class="p">(</span>
+</span><span id="random_search-159"><a href="#random_search-159"><span class="linenos">159</span></a>        <span class="n">objective</span><span class="o">=</span><span class="n">objective</span><span class="p">,</span>
+</span><span id="random_search-160"><a href="#random_search-160"><span class="linenos">160</span></a>        <span class="n">bounds</span><span class="o">=</span><span class="n">bounds</span><span class="p">,</span>
+</span><span id="random_search-161"><a href="#random_search-161"><span class="linenos">161</span></a>        <span class="n">population</span><span class="o">=</span><span class="n">population</span><span class="p">,</span>
+</span><span id="random_search-162"><a href="#random_search-162"><span class="linenos">162</span></a>        <span class="n">callback</span><span class="o">=</span><span class="n">callback</span><span class="p">,</span>
+</span><span id="random_search-163"><a href="#random_search-163"><span class="linenos">163</span></a>        <span class="n">n_iter</span><span class="o">=</span><span class="n">n_iter</span><span class="p">,</span>
+</span><span id="random_search-164"><a href="#random_search-164"><span class="linenos">164</span></a>        <span class="n">n_pop</span><span class="o">=</span><span class="n">n_pop</span><span class="p">,</span>
+</span><span id="random_search-165"><a href="#random_search-165"><span class="linenos">165</span></a>        <span class="n">n_jobs</span><span class="o">=</span><span class="n">n_jobs</span><span class="p">,</span>
+</span><span id="random_search-166"><a href="#random_search-166"><span class="linenos">166</span></a>        <span class="n">cached</span><span class="o">=</span><span class="n">cached</span><span class="p">,</span>
+</span><span id="random_search-167"><a href="#random_search-167"><span class="linenos">167</span></a>        <span class="n">debug</span><span class="o">=</span><span class="n">debug</span><span class="p">,</span>
+</span><span id="random_search-168"><a href="#random_search-168"><span class="linenos">168</span></a>        <span class="n">verbose</span><span class="o">=</span><span class="n">verbose</span><span class="p">,</span>
+</span><span id="random_search-169"><a href="#random_search-169"><span class="linenos">169</span></a>        <span class="n">seed</span><span class="o">=</span><span class="n">seed</span><span class="p">,</span>
+</span><span id="random_search-170"><a href="#random_search-170"><span class="linenos">170</span></a>    <span class="p">)</span>
+</span><span id="random_search-171"><a href="#random_search-171"><span class="linenos">171</span></a>    <span class="k">return</span> <span class="n">optimizer</span><span class="o">.</span><span class="n">optimize</span><span class="p">()</span>
 </span></pre></div>
 
 
-            <div class="docstring"><p>Computes the Random Search optimization algorithm.</p>
+            <div class="docstring"><p>Functional interface for Random Search.</p>
 
 <h6 id="arguments">Arguments:</h6>
 
 <ul>
-<li><strong>objective (callable):</strong>  objective function used to evaluate the candidate solutions (lower is better)</li>
-<li><strong>bounds (np.ndarray):</strong>  bounds that limit the search space</li>
-<li><strong>population (list):</strong>  optional list of candidate solutions (default None)</li>
-<li><strong>callback (callable):</strong>  callback function that is called at each epoch (deafult None)</li>
-<li><strong>n_iter (int):</strong>  the number of iterations (default 100)</li>
-<li><strong>n_pop (int):</strong>  the number of elements in the population (default 10)</li>
-<li><strong>n_jobs (int):</strong>  number of concurrent jobs (default -1)</li>
-<li><strong>cached (bool):</strong>  controls if the objective function is cached by joblib (default False)</li>
-<li><strong>debug (bool):</strong>  controls if debug information is returned (default False)</li>
-<li><strong>verbose (bool):</strong>  controls the usage of tqdm as a progress bar (default False)</li>
-<li><strong>seed (int):</strong>  seed to init the random generator (default 42)</li>
+<li><strong>objective (Callable):</strong>  Function to minimize.</li>
+<li><strong>bounds (np.ndarray):</strong>  Search space bounds.</li>
+<li><strong>population (np.ndarray | None):</strong>  Initial population (mostly unused except for shape inference).</li>
+<li><strong>callback (list | Callable | None):</strong>  Callbacks.</li>
+<li><strong>n_iter (int):</strong>  Number of iterations (drops).</li>
+<li><strong>n_pop (int):</strong>  Number of samples per iteration.</li>
+<li><strong>n_jobs (int):</strong>  Parallel jobs.</li>
+<li><strong>cached (bool):</strong>  Enable caching.</li>
+<li><strong>debug (bool):</strong>  Enable history.</li>
+<li><strong>verbose (bool):</strong>  Show progress.</li>
+<li><strong>seed (int | Generator | Sampler | None):</strong>  Sampling strategy.</li>
 </ul>
 
 <h6 id="returns">Returns:</h6>
 
 <blockquote>
-  <p>tuple: the best solution</p>
+  <p>tuple: (best_position, best_score).</p>
 </blockquote>
 </div>
 

@@ -1,27 +1,84 @@
-'''
+"""
 pyBlindOpt is a library that implements several derivative-free optimization algorithms (including genetic and evolutionary methods).
-Currently, it implements eight different algorithms:
-1.  Random Search (RS): A baseline optimization method that iteratively generates candidate solutions from the search space according to a specified probability distribution (usually uniform) and records the best solution found. It serves as a benchmark for comparing the performance of more complex algorithms.
-2.  Hill Climbing (HC): A mathematical optimization technique belonging to the family of local search algorithms. It is an iterative method that starts with an arbitrary solution and attempts to find a better one by making incremental changes to the current solution.
-3.  Simulated Annealing (SA): A probabilistic technique for approximating the global optimum of a given function. It is a metaheuristic designed to escape local optima by allowing "uphill" moves (worse solutions) with a probability that decreases over time (simulating the cooling process of metallurgy).
-4.  Genetic Algorithm (GA): A metaheuristic inspired by the process of natural selection that belongs to the larger class of evolutionary algorithms (EA). GA generates high-quality solutions by relying on biologically inspired operators such as mutation, crossover, and selection.
-5.  Differential Evolution (DE): A population-based method that optimizes a problem by iteratively improving a candidate solution with regard to a given measure of quality. It makes few to no assumptions about the problem being optimized and is effective for searching very large spaces of candidate solutions.
-6.  Particle Swarm Optimization (PSO): A computational method that optimizes a problem by iteratively improving a candidate solution (particle) with regard to a given measure of quality. Particles move around the search space according to simple mathematical formulas involving their position and velocity. Each particle's movement is guided by its local best-known position and the global best-known position in the search space.
-7.  Grey Wolf Optimization (GWO): A population-based metaheuristic algorithm that simulates the leadership hierarchy (Alpha, Beta, Delta, and Omega) and hunting mechanism of grey wolves in nature.
-8.  Enhanced Grey Wolf Optimization (EGWO): An advanced variant of the standard GWO that incorporates mechanisms to better balance exploration and exploitation. This modification helps prevent the algorithm from stagnating in local optima, improving convergence speed and solution quality in complex landscapes.
+
+Currently, it implements thirteen different algorithms:
+
+1.  **Random Search (RS):** A baseline optimization method that iteratively generates candidate solutions from the search space according to a specified probability distribution (usually uniform) and records the best solution found.
+2.  **Hill Climbing (HC):** A local search algorithm that starts with an arbitrary solution and attempts to find a better one by making incremental changes (Greedy approach).
+3.  **Simulated Annealing (SA):** A probabilistic technique designed to escape local optima by allowing "uphill" moves (worse solutions) with a probability that decreases over time (simulating the cooling process of metallurgy).
+4.  **Genetic Algorithm (GA):** An evolutionary algorithm inspired by natural selection. It generates high-quality solutions using biologically inspired operators such as mutation, crossover, and selection.
+5.  **Differential Evolution (DE):** A population-based method that optimizes a problem by iteratively improving a candidate solution using the differences between randomly selected vectors.
+6.  **Particle Swarm Optimization (PSO):** A metaheuristic where particles move through the search space guided by their own best-known position and the swarm's global best-known position.
+7.  **Grey Wolf Optimization (GWO):** A population-based algorithm that simulates the leadership hierarchy (Alpha, Beta, Delta, Omega) and hunting mechanism of grey wolves.
+8.  **Enhanced Grey Wolf Optimization (EGWO):** An advanced variant of GWO that incorporates a weighted prey position and stochastic error to better balance exploration and exploitation.
+9.  **Artificial Bee Colony (ABC):** Simulates the foraging behavior of honey bees, utilizing employed, onlooker, and scout bees to exploit food sources and explore new ones.
+10. **Firefly Algorithm (FA):** Inspired by the flashing behavior of fireflies, where attraction is proportional to brightness (fitness) and decreases with distance.
+11. **Harris Hawks Optimization (HHO):** Mimics the cooperative hunting behavior of Harris' hawks, featuring distinct exploration and exploitation phases controlled by the prey's escaping energy.
+12. **Cuckoo Search (CS):** Based on the brood parasitism of cuckoos, utilizing Lévy flights for global exploration and nest abandonment for local optima avoidance.
+13. **Honey Badger Algorithm (HBA):** Mimics the intelligent foraging behavior of honey badgers, switching between digging (using smell intensity) and following honeyguides.
 
 All algorithms take advantage of the joblib library to parallelize objective function evaluations and cache results for improved performance.
-Note: The code has been optimized to a certain degree but was primarily created for educational purposes. Please consider libraries like pymoo or SciPy if you require a production-grade implementation. Regardless, reported issues will be fixed whenever possible.
-'''
+
+Note: The code has been optimized to a certain degree but was primarily created for educational purposes. Please consider libraries like pymoo or SciPy if you require a production-grade implementation.
+"""
+
+__author__ = "Mário Antunes"
+__license__ = "MIT"
+__version__ = "0.2"
+__email__ = "mario.antunes@ua.com"
+__url__ = "https://github.com/mariolpantunes/pyblindopt"
+__status__ = "Development"
+
 import pyBlindOpt.callback as callback
-import pyBlindOpt.de as de
-import pyBlindOpt.egwo as egwo
 import pyBlindOpt.functions as functions
-import pyBlindOpt.ga as ga
-import pyBlindOpt.gwo as gwo
-import pyBlindOpt.hc as hc
 import pyBlindOpt.init as init
-import pyBlindOpt.pso as pso
-import pyBlindOpt.rs as rs
-import pyBlindOpt.sa as sa
 import pyBlindOpt.utils as utils
+from pyBlindOpt.abc_opt import ArtificialBeeColony, artificial_bee_colony
+from pyBlindOpt.cs import CuckooSearch, cuckoo_search
+from pyBlindOpt.de import DifferentialEvolution, differential_evolution
+from pyBlindOpt.egwo import EGWO, enhanced_grey_wolf_optimization
+from pyBlindOpt.fa import FireflyAlgorithm, firefly_algorithm
+from pyBlindOpt.ga import GeneticAlgorithm, genetic_algorithm
+from pyBlindOpt.gwo import GWO, grey_wolf_optimization
+from pyBlindOpt.hba import HoneyBadgerAlgorithm, honey_badger_algorithm
+from pyBlindOpt.hc import HillClimbing, hill_climbing
+from pyBlindOpt.hho import HarrisHawksOptimization, harris_hawks_optimization
+from pyBlindOpt.pso import ParticleSwarmOptimization, particle_swarm_optimization
+from pyBlindOpt.rs import RandomSearch, random_search
+from pyBlindOpt.sa import SimulatedAnnealing, simulated_annealing
+
+__all__ = [
+    # Modules
+    "functions",
+    "utils",
+    "init",
+    "callback",
+    # Algorithms (Classes)
+    "RandomSearch",
+    "HillClimbing",
+    "SimulatedAnnealing",
+    "GeneticAlgorithm",
+    "DifferentialEvolution",
+    "ParticleSwarmOptimization",
+    "GWO",
+    "EGWO",
+    "ArtificialBeeColony",
+    "FireflyAlgorithm",
+    "HarrisHawksOptimization",
+    "CuckooSearch",
+    "HoneyBadgerAlgorithm",
+    # Algorithms (Functions)
+    "random_search",
+    "hill_climbing",
+    "simulated_annealing",
+    "genetic_algorithm",
+    "differential_evolution",
+    "particle_swarm_optimization",
+    "grey_wolf_optimization",
+    "enhanced_grey_wolf_optimization",
+    "artificial_bee_colony",
+    "firefly_algorithm",
+    "harris_hawks_optimization",
+    "cuckoo_search",
+    "honey_badger_algorithm",
+]

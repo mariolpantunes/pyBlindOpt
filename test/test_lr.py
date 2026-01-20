@@ -30,7 +30,6 @@ class LRPSO:
     def fit(self, X, y, n_pop=30, iter=100, verbose=False):
         bounds = np.asarray([(-50.0, 50.0), (-50.0, 50.0)])
         population = init.oblesa(lambda w: self._cost(X,y,w), bounds, n_pop=n_pop)
-        #print(f'Population = {population}')
         solution = pso.particle_swarm_optimization(lambda w: self._cost(X,y,w), bounds, population=population, n_iter=iter, verbose=verbose)
         self.w = solution[0]
     

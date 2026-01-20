@@ -1,241 +1,472 @@
 # coding: utf-8
 
-'''
-Genetic algorithm is a metaheuristic inspired by the process of natural selection 
-that belongs to the larger class of evolutionary algorithms (EA). 
-Genetic algorithms are commonly used to generate high-quality solutions to 
-optimization and search problems by relying on biologically inspired operators 
-such as mutation, crossover, and selection.
-'''
+"""
+Genetic Algorithm (GA).
+
+A population-based metaheuristic inspired by natural selection.
+Evolves a population using operators: Selection, Crossover (Recombination), and Mutation.
 
 
-__author__ = 'Mário Antunes'
-__version__ = '0.1'
-__email__ = 'mariolpantunes@gmail.com'
-__status__ = 'Development'
+**Analogy:**
+Survival of the fittest. Individuals compete to reproduce. The best traits are combined to create offspring, and random mutations introduce diversity to prevent stagnation.
+"""
 
+__author__ = "Mário Antunes"
+__license__ = "MIT"
+__version__ = "0.2"
+__email__ = "mario.antunes@ua.com"
+__url__ = "https://github.com/mariolpantunes/pyblindopt"
+__status__ = "Development"
 
-import math
-import tqdm
-import joblib
+import collections.abc
 import logging
-import tempfile
-import statistics
+
 import numpy as np
+
 import pyBlindOpt.utils as utils
-
-
-from collections.abc import Sequence
-
+from pyBlindOpt.optimizer import Optimizer
 
 logger = logging.getLogger(__name__)
 
 
-# tournament selection
-def tournament_selection(pop:list, scores:list, k:int=3) -> np.ndarray:
-    '''
-    Tournament selection.
+# ==============================================================================
+# Default Operators
+# ==============================================================================
+
+
+def tournament_selection(
+    pop: np.ndarray,
+    scores: np.ndarray,
+    k: int = 3,
+    rng: np.random.Generator | None = None,
+) -> np.ndarray:
+    """
+    Tournament Selection.
+
+    Selects the best individual from a random pool of $k$ competitors.
 
     Args:
-        pop (list): the population list
-        scores (list): the scores of each solution candidate
-        k (int): the number of participants in the tournament (default 3)
-        
+        pop (np.ndarray): Population.
+        scores (np.ndarray): Fitness scores.
+        k (int): Tournament size.
+
     Returns:
-        np.ndarray: the tournament champion
-    '''
-    # first random selection
-    selection_ix = np.random.randint(len(pop))
-    for ix in np.random.randint(0, len(pop), k-1):
-        # check if better (e.g. perform a tournament)
-        if scores[ix] < scores[selection_ix]:
-            selection_ix = ix
-    return pop[selection_ix]
+        np.ndarray: The selected winner.
+    """
+    if rng is None:
+        rng = np.random.default_rng()
+
+    n = len(pop)
+    # Select k random indices
+    selection_ix = rng.integers(0, n, size=k)
+
+    # Get the scores of these k candidates
+    candidate_scores = scores[selection_ix]
+
+    # Find the index (0 to k-1) of the best score
+    best_local_idx = np.argmin(candidate_scores)
+
+    # Return the actual individual
+    return pop[selection_ix[best_local_idx]]
 
 
-# random mutation operator
-def random_mutation(candidate:np.ndarray, r_mut:float, bounds:list) -> np.ndarray:
-    '''
-    Random mutation operator.
-    Generates a new solution from the bounds.
+def random_mutation(
+    candidate: np.ndarray,
+    r_mut: float,
+    bounds: np.ndarray,
+    rng: np.random.Generator | None = None,
+) -> np.ndarray:
+    """
+    Random Mutation.
+
+    Completely replaces the individual with a random solution with probability $r_{mut}$.
 
     Args:
-        candidate (np.ndarray): the candidate that will be mutated
-        r_mut (float): the mutation probability
-        bounds (list): bounds that limit the search space
-        
+        candidate (np.ndarray): Individual.
+        r_mut (float): Mutation probability.
+        rng: Random generator.
+
     Returns:
-        np.ndarray: the mutated candidate solution
-    '''
-    if np.random.rand() < r_mut:
-        solution = utils.get_random_solution(bounds)
-        return solution
+        np.ndarray: Mutated individual.
+    """
+    if rng is None:
+        rng = np.random.default_rng()
+
+    if rng.random() < r_mut:
+        return utils.get_random_solution(bounds, rng)
     else:
         return candidate
 
 
-# linear crossover operator: two parents to create three children
-def linear_crossover(p1:np.ndarray, p2:np.ndarray, r_cross:float) -> list:
-    '''
-    Linear crossover operator.
+def gaussian_mutation(
+    candidate: np.ndarray,
+    r_mut: float,
+    bounds: np.ndarray,
+    scale: float = 0.1,
+    rng: np.random.Generator | None = None,
+) -> np.ndarray:
+    """
+    Gaussian Mutation.
+
+    Adds Gaussian noise to the individual.
+    $$ x' = x + \\mathcal{N}(0, \\sigma^2) $$
 
     Args:
-        p1 (np.ndarray): the first parent
-        p2 (np.ndarray): the second parent
-        r_cross (float): the crossover probability
-        
-    Returns:
-        list: list with the offspring
-    '''
-    if np.random.rand() < r_cross:
-        c1 = 0.5*p1 + 0.5*p2
-        c2 = 1.5*p1 - 0.5*p2
-        c3 = -0.5*p1 + 1.5*p2
-        return [c1, c2, c3]
+        candidate: The vector to mutate.
+        r_mut: Mutation probability (applied per individual or per gene depending on logic).
+               Here, we treat it as: "If mutation occurs, apply noise".
+        bounds: Search space bounds.
+        scale: Standard deviation of the noise (relative to bound width or absolute).
+               Here we treat it as a fraction of the bound width.
+        rng: Random generator.
+    """
+    if rng is None:
+        rng = np.random.default_rng()
+
+    # Apply mutation with probability r_mut
+    if rng.random() < r_mut:
+        # Calculate dynamic scale based on bounds
+        # shape: (D,)
+        bound_width = bounds[:, 1] - bounds[:, 0]
+        sigma = bound_width * scale
+
+        # Generate noise
+        noise = rng.normal(0, sigma, size=candidate.shape)
+
+        # Apply and Clamp
+        mutated = candidate + noise
+        return utils.check_bounds(mutated, bounds)
     else:
-        return [p1, p2]
+        return candidate
 
 
-# blend crossover operator: two parents to create two children
-def blend_crossover(p1, p2, r_cross, alpha=.5):
-    '''
-    Blend crossover operator.
+def polynomial_mutation(
+    candidate: np.ndarray,
+    r_mut: float,
+    bounds: np.ndarray,
+    eta: float = 20.0,
+    rng: np.random.Generator | None = None,
+) -> np.ndarray:
+    """
+    Polynomial Mutation (Deb et al., NSGA-II).
+
+    Favor small perturbations but allows occasional large jumps based on 'eta'.
+    Uses a polynomial distribution to perturb genes, favoring small changes for fine-tuning.
 
     Args:
-        p1 (np.ndarray): the first parent
-        p2 (np.ndarray): the second parent
-        r_cross (float): the crossover probability
-        alpha (float): weight that controls the blend crossover (default 0.5)
-        
+        candidate: Individual to mutate.
+        r_mut: Probability of mutation per gene/dimension (usually 1/D).
+        bounds: Search space bounds.
+        eta: Distribution index. High value (~20) = Local search. Low value (~5) = Random search.
+        rng: Random generator.
+    """
+    if rng is None:
+        rng = np.random.default_rng()
+
+    # Create a copy to avoid mutating parent in place
+    mutant = candidate.copy()
+    lower = bounds[:, 0]
+    upper = bounds[:, 1]
+
+    # Iterate over each gene (dimension)
+    for i in range(len(candidate)):
+        if rng.random() < r_mut:
+            y = candidate[i]
+            yl, yu = lower[i], upper[i]
+            delta_max = yu - yl
+
+            # Generate random number u
+            u = rng.random()
+
+            if u <= 0.5:
+                delta_q = (2.0 * u) ** (1.0 / (eta + 1.0)) - 1.0
+            else:
+                delta_q = 1.0 - (2.0 * (1.0 - u)) ** (1.0 / (eta + 1.0))
+
+            # Apply mutation
+            mutant[i] = y + delta_q * delta_max
+
+            # Clamp
+            mutant[i] = max(yl, min(yu, mutant[i]))
+
+    return mutant
+
+
+def blend_crossover(
+    p1: np.ndarray,
+    p2: np.ndarray,
+    r_cross: float,
+    alpha: float = 0.5,
+    rng: np.random.Generator | None = None,
+) -> list[np.ndarray]:
+    """
+    Blend Crossover (BLX-alpha).
+
+    Creates offspring in the range $[min - I\\alpha, max + I\\alpha]$ where $I = |p1 - p2|$.
+
+    Args:
+        alpha (float): Expansion factor.
+
     Returns:
-        list: list with the offspring
-    '''
-    if np.random.rand() < r_cross:
-        c1 = p1 + alpha*(p2-p1)
-        c2 = p2 - alpha*(p2-p1)
+        list[np.ndarray]: Two children.
+    """
+    if rng is None:
+        rng = np.random.default_rng()
+
+    if rng.random() < r_cross:
+        diff = p2 - p1
+        c1 = p1 + alpha * diff
+        c2 = p2 - alpha * diff
         return [c1, c2]
     else:
         return [p1, p2]
 
 
-def genetic_algorithm(objective:callable, bounds:np.ndarray,
-population:np.ndarray=None, selection:callable=tournament_selection,
-crossover:callable=blend_crossover, mutation:callable=random_mutation,  
-callback:"Sequence[callable] | callable"=None, n_iter:int=200, 
-n_pop:int=20, r_cross:float=0.9, r_mut:float=0.3, n_jobs:int=-1, 
-cached:bool=False, debug:bool=False, verbose:bool=False, seed:int=42) -> tuple:
-    '''
-    Computes the genetic algorithm optimization.
-
-    Args:
-        objective (callable): objective function used to evaluate the candidate solutions (lower is better)
-        bounds (list): bounds that limit the search space
-        population (list): optional list of candidate solutions (default None)
-        selection (callable): selection operator (default tournament_selection)
-        crossover (callable): crossover operator (default blend_crossover)
-        mutation (callable): mutation operator (default random_mutation)
-        callback (callable): callback function that is called at each epoch (deafult None)
-        n_iter (int): the number of iterations (default 100)
-        n_pop (int): the number of elements in the population (default 10)
-        r_cross (float): ratio of crossover (default 0.9)
-        r_mut (float): ratio of mutation (default 0.3)
-        n_jobs (int): number of concurrent jobs (default -1)
-        cached (bool): controls if the objective function is cached by joblib (default False)
-        debug (bool): controls if debug information is returned (default False)
-        verbose (bool): controls the usage of tqdm as a progress bar (default False)
-        seed (int): seed to init the random generator (default 42)
+def linear_crossover(
+    p1: np.ndarray,
+    p2: np.ndarray,
+    r_cross: float,
+    rng: np.random.Generator | None = None,
+) -> list[np.ndarray]:
+    """
+    Linear crossover operator.
+    Returns 3 children (as per original definition), but GA loop usually expects 2.
+    Generates linear combinations of parents: $0.5(p1+p2)$, $1.5p1 - 0.5p2$, etc.
+    The GA class handles variable length returns by appending to the new pool.
 
     Returns:
-        tuple: the best solution
-    '''
-    # define the seed of the random generation
-    np.random.seed(seed)
-    
-    # cache the initial objective function
-    if cached:
-        # Cache from joblib
-        location = tempfile.gettempdir()
-        memory = joblib.Memory(location, verbose=0)
-        objective_cache = memory.cache(objective)
+            list[np.ndarray]: Three children.
+    """
+    if rng is None:
+        rng = np.random.default_rng()
+
+    if rng.random() < r_cross:
+        c1 = 0.5 * p1 + 0.5 * p2
+        c2 = 1.5 * p1 - 0.5 * p2
+        c3 = -0.5 * p1 + 1.5 * p2
+        return [c1, c2, c3]
     else:
-        objective_cache = objective
-    
-    # check if the initial population is given
-    if population is None:
-        # initial population of random bitstring
-        pop = [utils.get_random_solution(bounds) for _ in range(n_pop)]
-    else:
-        # initialise population of candidate and validate the bounds
-        pop = [utils.check_bounds(p, bounds) for p in population]
-        # overwrite the n_pop with the length of the given population
-        n_pop = len(population)
+        return [p1, p2]
 
-    # keep track of best solution
-    #scores = joblib.Parallel(n_jobs=n_jobs)(joblib.delayed(objective_cache)(c) for c in pop)
-    scores = utils.compute_objective(pop, objective_cache, n_jobs)
-    best_eval = min(scores)
-    best = pop[scores.index(best_eval)]
-    
-    # arrays to store the debug information
-    if debug:
-        obj_avg_iter = []
-        obj_best_iter = []
-        obj_worst_iter = []
-    
-    # define the limit for the selection method (work with even size population)
-    selection_limit = n_pop - (n_pop%2)
 
-    # enumerate generations
-    for epoch in tqdm.tqdm(range(n_iter), disable=not verbose):
-        # evaluate all candidates in the population
-        #scores = joblib.Parallel(n_jobs=n_jobs)(joblib.delayed(objective_cache)(c) for c in pop)
-        scores = utils.compute_objective(pop, objective_cache, n_jobs)
+# ==============================================================================
+# Genetic Algorithm Class
+# ==============================================================================
 
-        # check for new best solution
-        best_eval = min(scores)
-        best = pop[scores.index(best_eval)]
-        
-        # select parents
-        selected = [selection(pop, scores) for _ in range(n_pop)]
-        # create the next generation
+
+class GeneticAlgorithm(Optimizer):
+    """
+    Genetic Algorithm (GA).
+
+    A population-based metaheuristic that evolves solutions using biologically
+    inspired operators.
+
+    This implementation delegates the evolutionary logic to external callables
+    (selection, crossover, mutation), allowing full customization.
+    """
+
+    def __init__(
+        self,
+        objective: collections.abc.Callable,
+        bounds: np.ndarray,
+        population: np.ndarray | None = None,
+        selection: collections.abc.Callable = tournament_selection,
+        crossover: collections.abc.Callable = blend_crossover,
+        mutation: collections.abc.Callable = random_mutation,
+        r_cross: float = 0.9,
+        r_mut: float = 0.3,
+        callback: list[collections.abc.Callable]
+        | collections.abc.Callable
+        | None = None,
+        n_iter: int = 100,
+        n_pop: int = 20,
+        n_jobs: int = 1,
+        cached: bool = False,
+        debug: bool = False,
+        verbose: bool = False,
+        seed: int | np.random.Generator | utils.Sampler | None = None,
+    ):
+        """
+        Genetic Algorithm Optimizer.
+
+        Delegates evolutionary logic to callable operators for flexibility.
+
+        Args:
+            selection (Callable): Selection operator. Defaults to `tournament_selection`.
+            crossover (Callable): Crossover operator. Defaults to `blend_crossover`.
+            mutation (Callable): Mutation operator. Defaults to `random_mutation`.
+            r_cross (float): Crossover probability. Defaults to 0.9.
+            r_mut (float): Mutation probability. Defaults to 0.3.
+        """
+        # Store Operators
+        self.selection_op = selection
+        self.crossover_op = crossover
+        self.mutation_op = mutation
+
+        # Store Parameters
+        self.r_cross = r_cross
+        self.r_mut = r_mut
+
+        super().__init__(
+            objective=objective,
+            bounds=bounds,
+            population=population,
+            callback=callback,
+            n_iter=n_iter,
+            n_pop=n_pop,
+            n_jobs=n_jobs,
+            cached=cached,
+            debug=debug,
+            verbose=verbose,
+            seed=seed,
+        )
+
+    def _initialize(self):
+        """
+        Initialization hook.
+        """
+        pass
+
+    def _update_iter_params(self, epoch: int):
+        """
+        Parameter update hook.
+        """
+        pass
+
+    def _update_best(self, epoch: int):
+        """
+        Updates the global best solution.
+
+        Args:
+            epoch (int): Current iteration.
+        """
+        best_idx = np.argmin(self.scores)
+        if self.scores[best_idx] < self.best_score:
+            self.best_score = self.scores[best_idx]
+            self.best_pos = self.pop[best_idx].copy()
+
+    def _generate_offspring(self, epoch: int) -> np.ndarray:
+        """
+        Executes the GA Loop.
+
+        1.  **Selection:** Creates a mating pool of size $N$.
+        2.  **Crossover:** Pairs parents and produces children.
+        3.  **Mutation:** Mutates children.
+
+        Args:
+            epoch (int): Current iteration.
+
+        Returns:
+            np.ndarray: The next generation.
+        """
+        # 1. Selection
+        # Select n_pop parents
+        # Note: We pass self.rng to ensure reproducibility if operators support it
+        selected = []
+        for _ in range(self.n_pop):
+            # Check if operator accepts rng
+            try:
+                s = self.selection_op(self.pop, self.scores, rng=self.rng)
+            except TypeError:
+                s = self.selection_op(self.pop, self.scores)
+            selected.append(s)
+
+        # 2. Crossover & Mutation
         children = []
-        for i in range(0, selection_limit, 2):
-            # get selected parents in pairs
-            p1, p2 = selected[i], selected[i+1]
-            # crossover and mutation
-            for c in crossover(p1, p2, r_cross):
-                # apply mutation and store for next generation
-                children.append(mutation(c, r_mut, bounds))
-        # if one element is missing copy the last selection value
-        if len(children) < n_pop:
-            children.append(selected[-1])
-        
-        # replace population
-        pop = [utils.check_bounds(c, bounds) for c in children]
 
-        ## Optional store the debug information
-        if debug:
-            # store best, wort and average cost for all candidates
-            obj_avg_iter.append(statistics.mean(scores))
-            obj_best_iter.append(best_eval)
-            obj_worst_iter.append(max(scores))
-        
-        ## Optional execute the callback code
-        if callback is not None:
-            terminate = False
-            if isinstance(callback, Sequence):
-                terminate = any([c(epoch, scores, pop) for c in callback])
-            else:
-                terminate = callback(epoch, scores, pop)
+        # Work in pairs (0,1), (2,3), etc.
+        # Ensure we don't go out of bounds if n_pop is odd
+        limit = self.n_pop - (self.n_pop % 2)
 
-            if terminate:
+        for i in range(0, limit, 2):
+            p1, p2 = selected[i], selected[i + 1]
+
+            # Apply Crossover
+            try:
+                offspring_list = self.crossover_op(p1, p2, self.r_cross, rng=self.rng)
+            except TypeError:
+                offspring_list = self.crossover_op(p1, p2, self.r_cross)
+
+            # Apply Mutation to each child
+            for child in offspring_list:
+                # We stop adding if we reached n_pop (e.g., linear crossover produces 3 children)
+                if len(children) >= self.n_pop:
+                    break
+
+                try:
+                    mutant = self.mutation_op(
+                        child, self.r_mut, self.bounds, rng=self.rng
+                    )
+                except TypeError:
+                    mutant = self.mutation_op(child, self.r_mut, self.bounds)
+
+                children.append(mutant)
+
+            if len(children) >= self.n_pop:
                 break
 
-    # clean the cache
-    if cached:
-        memory.clear(warn=False)
-    
-    if debug:
-        return (best, best_eval, (obj_best_iter, obj_avg_iter, obj_worst_iter))
-    else:
-        return (best, best_eval)
+        # 3. Fill remaining spots (if any)
+        # If crossover produced fewer children or n_pop was odd
+        while len(children) < self.n_pop:
+            # Fallback: copy the last selected parent or random
+            children.append(selected[-1].copy())
+
+        return np.array(children)
+
+    def _selection(self, offspring: np.ndarray, offspring_scores: np.ndarray):
+        """
+        Generational Replacement.
+
+        Completely replaces the old population with the new offspring.
+
+        Args:
+            offspring (np.ndarray): New population.
+            offspring_scores (np.ndarray): New scores.
+        """
+        self.pop = offspring
+        self.scores = offspring_scores
+
+
+def genetic_algorithm(
+    objective: collections.abc.Callable,
+    bounds: np.ndarray,
+    population: np.ndarray | None = None,
+    selection: collections.abc.Callable = tournament_selection,
+    crossover: collections.abc.Callable = blend_crossover,
+    mutation: collections.abc.Callable = random_mutation,
+    r_cross: float = 0.9,
+    r_mut: float = 0.3,
+    callback: list[collections.abc.Callable] | collections.abc.Callable | None = None,
+    n_iter: int = 100,
+    n_pop: int = 20,
+    n_jobs: int = 1,
+    cached: bool = False,
+    debug: bool = False,
+    verbose: bool = False,
+    seed: int | np.random.Generator | utils.Sampler | None = None,
+) -> tuple:
+    """
+    Functional interface for Genetic Algorithm.
+
+    Returns:
+        tuple: (best_pos, best_score).
+    """
+    optimizer = GeneticAlgorithm(
+        objective=objective,
+        bounds=bounds,
+        population=population,
+        selection=selection,
+        crossover=crossover,
+        mutation=mutation,
+        r_cross=r_cross,
+        r_mut=r_mut,
+        callback=callback,
+        n_iter=n_iter,
+        n_pop=n_pop,
+        n_jobs=n_jobs,
+        cached=cached,
+        debug=debug,
+        verbose=verbose,
+        seed=seed,
+    )
+    return optimizer.optimize()

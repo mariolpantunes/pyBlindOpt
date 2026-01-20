@@ -1,152 +1,233 @@
 # coding: utf-8
 
+"""
+Particle Swarm Optimization (PSO).
 
-'''
-Particle swarm optimization is a computational method that optimizes 
-a problem by iteratively trying to improve a candidate solution with 
-regard to a given measure of quality. It solves a problem by having 
-a population of candidate solutions, here dubbed particles, and 
-moving these particles around in the search space according to simple 
-mathematical formula over the particle's position and velocity. Each 
-particle's movement is influenced by its local best-known position but 
-is also guided toward the best-known positions in the search space, 
-which are updated as better positions are found by other particles.
-'''
+A classic metaheuristic simulating a flock of birds or school of fish.
+Particles fly through the search space with a velocity adjusted by their own history and the swarm's best known position.
 
 
-__author__ = 'Mário Antunes'
-__version__ = '0.1'
-__email__ = 'mariolpantunes@gmail.com'
-__status__ = 'Development'
+**Mathematical Formulation:**
+$$ v_{t+1} = w v_t + c_1 r_1 (p_{best} - x_t) + c_2 r_2 (g_{best} - x_t) $$
+$$ x_{t+1} = x_t + v_{t+1} $$
+where $w$ is inertia, $c_1$ is cognitive (personal) weight, and $c_2$ is social (swarm) weight.
+"""
 
+__author__ = "Mário Antunes"
+__license__ = "MIT"
+__version__ = "0.2"
+__email__ = "mario.antunes@ua.com"
+__url__ = "https://github.com/mariolpantunes/pyblindopt"
+__status__ = "Development"
 
-import tqdm
-import joblib
+import collections.abc
 import logging
-import tempfile
-import statistics
+
 import numpy as np
+
 import pyBlindOpt.utils as utils
-
-
-from collections.abc import Sequence
-
+from pyBlindOpt.optimizer import Optimizer
 
 logger = logging.getLogger(__name__)
 
 
-def particle_swarm_optimization(objective:callable, bounds:np.ndarray,
-population:np.ndarray=None, callback:"Sequence[callable] | callable"=None,
-n_iter:int=100, n_pop:int=10, c1:float=0.1, c2:float=0.1, w:float=0.8,
-n_jobs:int=-1, cached=False, debug=False, verbose=False, seed:int=42) -> tuple:
-    '''
-    Computes the particle_swarm_optimization.
+class ParticleSwarmOptimization(Optimizer):
+    """
+    Particle Swarm Optimization (PSO).
 
-    Args:
-        objective (callable): objective function used to evaluate the candidate solutions (lower is better)
-        bounds (list): bounds that limit the search space
-        population (list): optional list of candidate solutions (default None)
-        callback (callable): callback function that is called at each epoch (deafult None)
-        n_iter (int): the number of iterations (default 100)
-        n_pop (int): the number of elements in the population (default 10)
-        c1 (float): weight of personal best (default 0.1)
-        c2 (float): weight of global best (default 0.1)
-        w (float): weight of momentum (default 0.8)
-        n_jobs (int): number of concurrent jobs (default -1)
-        cached (bool): controls if the objective function is cached by joblib (default False)
-        debug (bool): controls if debug information is returned (default False)
-        verbose (bool): controls the usage of tqdm as a progress bar (default False)
-        seed (int): seed to init the random generator (default 42)
+    A population-based metaheuristic where particles move through the search space
+    guided by their own best known position (pbest) and the swarm's best known position (gbest).
+    """
+
+    def __init__(
+        self,
+        objective: collections.abc.Callable,
+        bounds: np.ndarray,
+        population: np.ndarray | None = None,
+        c1: float = 0.1,  # Cognitive parameter
+        c2: float = 0.1,  # Social parameter
+        w: float = 0.8,  # Inertia weight
+        callback: list[collections.abc.Callable]
+        | collections.abc.Callable
+        | None = None,
+        n_iter: int = 100,
+        n_pop: int = 10,
+        n_jobs: int = 1,
+        cached: bool = False,
+        debug: bool = False,
+        verbose: bool = False,
+        seed: int | np.random.Generator | utils.Sampler | None = None,
+    ):
+        """
+        Particle Swarm Optimization.
+
+        Args:
+            c1 (float): Cognitive parameter. Pulls particle towards its own personal best. Defaults to 0.1.
+            c2 (float): Social parameter. Pulls particle towards the swarm's global best. Defaults to 0.1.
+            w (float): Inertia weight. Keeps the particle moving in its previous direction. Defaults to 0.8.
+        """
+        self.c1 = c1
+        self.c2 = c2
+        self.w = w
+
+        super().__init__(
+            objective=objective,
+            bounds=bounds,
+            population=population,
+            callback=callback,
+            n_iter=n_iter,
+            n_pop=n_pop,
+            n_jobs=n_jobs,
+            cached=cached,
+            debug=debug,
+            verbose=verbose,
+            seed=seed,
+        )
+
+    def _init_population(self, population, seed):
+        """
+        Initializes population and velocities.
+
+        Sets initial velocities to 10% of the bound width to prevent immediate explosion.
+
+        Args:
+            population: Initial positions.
+            seed: Random seed.
+        """
+        # 1. Initialize Positions (using Base implementation)
+        super()._init_population(population, seed)
+
+        # 2. Initialize Velocities
+        # V is initialized as 10% of the bound width to provide initial momentum
+        # but prevent immediate explosion.
+        bound_width = self.bounds[:, 1] - self.bounds[:, 0]
+        self.v = self.rng.uniform(
+            -0.1 * bound_width, 0.1 * bound_width, size=self.pop.shape
+        )
+
+    def _initialize(self):
+        """
+        Initializes Personal Bests ($P_{best}$).
+
+        Sets $P_{best}$ to the initial positions at the start of the run.
+        """
+        self.pbest = self.pop.copy()
+        self.pbest_scores = self.scores.copy()
+
+    def _update_iter_params(self, epoch: int):
+        """
+        Parameter update hook.
+
+        This implementation uses constant $w, c_1, c_2$, so no update is performed.
+        """
+        pass
+
+    def _update_best(self, epoch: int):
+        """
+        Updates the Global Best ($G_{best}$).
+
+        The global best is determined by the best value ever found in the $P_{best}$ history.
+
+        Args:
+            epoch (int): Current iteration.
+        """
+        best_idx = np.argmin(self.pbest_scores)
+        if self.pbest_scores[best_idx] < self.best_score:
+            self.best_score = self.pbest_scores[best_idx]
+            self.best_pos = self.pbest[best_idx].copy()
+
+    def _generate_offspring(self, epoch: int) -> np.ndarray:
+        """
+        Updates Velocities and Positions.
+
+        $$ v_{new} = w v + c_1 r_1 (P_{best} - x) + c_2 r_2 (G_{best} - x) $$
+        $$ x_{new} = x + v_{new} $$
+
+        Args:
+            epoch (int): Current iteration.
+
+        Returns:
+            np.ndarray: The new positions of the particles.
+        """
+        # Random coefficients r1, r2 (one pair per particle or per dimension?)
+        # Standard PSO usually does it per dimension for diversity.
+        r1 = self.rng.random(size=self.pop.shape)
+        r2 = self.rng.random(size=self.pop.shape)
+
+        # Cognitive Term (pbest - current)
+        cognitive = self.c1 * r1 * (self.pbest - self.pop)
+
+        # Social Term (gbest - current)
+        # We need to broadcast gbest (1D) to match pop shape (N, D)
+        social = self.c2 * r2 * (self.best_pos - self.pop)
+
+        # Update Velocity
+        self.v = (self.w * self.v) + cognitive + social
+
+        # Update Position
+        new_pos = self.pop + self.v
+        return new_pos
+
+    def _selection(self, offspring: np.ndarray, offspring_scores: np.ndarray):
+        """
+        Updates Personal Bests ($P_{best}$) and moves the swarm.
+
+        1.  Always accepts the new position $x_{new}$ as the current state (particles keep moving).
+        2.  Updates $P_{best}$ if $x_{new}$ is better than the previous $P_{best}$.
+
+        Args:
+            offspring (np.ndarray): New positions.
+            offspring_scores (np.ndarray): New scores.
+        """
+        # 1. Update Current Population (Particles move regardless of improvement)
+        # In PSO, the 'population' tracks the current *exploring* point.
+        self.pop = offspring
+        self.scores = offspring_scores
+
+        # 2. Update Personal Bests
+        # Check where new score < old pbest score
+        improved_mask = offspring_scores < self.pbest_scores
+
+        self.pbest[improved_mask] = offspring[improved_mask]
+        self.pbest_scores[improved_mask] = offspring_scores[improved_mask]
+
+
+def particle_swarm_optimization(
+    objective: collections.abc.Callable,
+    bounds: np.ndarray,
+    population: np.ndarray | None = None,
+    c1: float = 0.1,
+    c2: float = 0.1,
+    w: float = 0.8,
+    callback: list[collections.abc.Callable] | collections.abc.Callable | None = None,
+    n_iter: int = 100,
+    n_pop: int = 10,
+    n_jobs: int = 1,
+    cached: bool = False,
+    debug: bool = False,
+    verbose: bool = False,
+    seed: int | np.random.Generator | utils.Sampler | None = None,
+) -> tuple:
+    """
+    Functional interface for Particle Swarm Optimization.
 
     Returns:
-        tuple: the best solution
-    '''
-    # define the seed of the random generation
-    np.random.seed(seed)
-    # cache the initial objective function
-    if cached:
-        # Cache from joblib
-        location = tempfile.gettempdir()
-        memory = joblib.Memory(location, verbose=0)
-        objective_cache = memory.cache(objective)
-    else:
-        objective_cache = objective
-    
-    # check if the initial population is given
-    if population is None:
-        # initial population of random bitstring
-        x = [utils.get_random_solution(bounds) for _ in range(n_pop)]
-    else:
-        # initialise population of candidate and validate the bounds
-        x = [utils.check_bounds(p, bounds) for p in population]
-        # overwrite the n_pop with the length of the given population
-        n_pop = len(population)
-    
-    # compute the initial velocity values
-    v = [np.random.randn(len(bounds))* 0.1 for _ in range(n_pop)]
-
-    # Initialize data
-    pbest = x
-    #pbest_obj = joblib.Parallel(n_jobs=n_jobs)(joblib.delayed(objective_cache)(c) for c in pbest)
-    pbest_obj = utils.compute_objective(pbest, objective_cache, n_jobs)
-    #print(f'Pbest Obj {pbest_obj}')
-    gbest_obj = min(pbest_obj)
-    #print(f'gbest_obj: {gbest_obj}')
-    gbest = pbest[pbest_obj.index(gbest_obj)]
-    #print(f'gbest: {gbest}')
-
-    # arrays to store the debug information
-    if debug:
-        obj_avg_iter = []
-        obj_best_iter = []
-        obj_worst_iter = []
-    
-    for epoch in tqdm.tqdm(range(n_iter), disable=not verbose):
-        # Update params
-        r1, r2 = np.random.rand(2)
-        # Update V
-        v = [w*v[i]+c1*r1*(pbest[i]-x[i])+c2*r2*(gbest-x[i]) for i in range(n_pop)]
-        #print(f'V {v}')
-        # Update X
-        x = [x[i]+v[i] for i in range(n_pop)]
-        x = [utils.check_bounds(p, bounds) for p in x]
-        #obj = joblib.Parallel(n_jobs=n_jobs)(joblib.delayed(objective_cache)(c) for c in x)
-        obj = utils.compute_objective(x, objective_cache, n_jobs)
-        # replace personal best
-        # iterate over all candidate solutions
-        for j in range(n_pop):
-            # perform selection
-            if obj[j] < pbest_obj[j]:
-                # replace the target vector with the trial vector
-                pbest[j] = x[j]
-                # store the new objective function value
-                pbest_obj[j] = obj[j]
-        gbest_obj = min(pbest_obj)
-        gbest = pbest[pbest_obj.index(gbest_obj)]
-        
-        ## Optional store the debug information
-        if debug:
-            # store best, wort and average cost for all candidates
-            obj_avg_iter.append(statistics.mean(obj))
-            obj_best_iter.append(gbest_obj)
-            obj_worst_iter.append(max(obj))
-        
-        ## Optional execute the callback code
-        if callback is not None:
-            terminate = False
-            if isinstance(callback, Sequence):
-                terminate = any([c(epoch, pbest_obj, pbest) for c in callback])
-            else:
-                terminate = callback(epoch, pbest_obj, pbest)
-
-            if terminate:
-                break
-
-    # clean the cache
-    if cached:
-        memory.clear(warn=False)
-
-    if debug:
-        return (gbest, gbest_obj, (obj_best_iter, obj_avg_iter, obj_worst_iter))
-    else:
-        return (gbest, gbest_obj)
+        tuple: (best_pos, best_score).
+    """
+    optimizer = ParticleSwarmOptimization(
+        objective=objective,
+        bounds=bounds,
+        population=population,
+        c1=c1,
+        c2=c2,
+        w=w,
+        callback=callback,
+        n_iter=n_iter,
+        n_pop=n_pop,
+        n_jobs=n_jobs,
+        cached=cached,
+        debug=debug,
+        verbose=verbose,
+        seed=seed,
+    )
+    return optimizer.optimize()

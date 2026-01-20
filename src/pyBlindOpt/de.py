@@ -1,298 +1,315 @@
 # coding: utf-8
 
+"""
+Differential Evolution (DE).
 
-'''
-Differential evolution is a method that optimizes a problem by iteratively trying to 
-improve a candidate solution with regard to a given measure of quality.
-Such methods are commonly known as metaheuristics as they make few or no assumptions 
-about the problem being optimized and can search very large spaces of candidate solutions.
-'''
+A powerful evolutionary algorithm that uses the differences between randomly selected vectors to perturb the population.
 
+**Analogy:**
+Imagine a group of agents. Each agent looks at three others, takes the difference between two of them, scales it, and adds it to the third. This creates a "mutant" vector. If the mutant is better, the agent adopts it.
 
-__author__ = 'Mário Antunes'
-__version__ = '0.1'
-__email__ = 'mariolpantunes@gmail.com'
-__status__ = 'Development'
+**Mathematical Formulation:**
+**Mutation (DE/best/1):**
+$$ v_i = x_{best} + F \\cdot (x_{r1} - x_{r2}) $$
+**Crossover:**
+Mixes the target vector $x_i$ and mutant $v_i$ with probability $CR$.
+"""
 
+__author__ = "Mário Antunes"
+__license__ = "MIT"
+__version__ = "0.2"
+__email__ = "mario.antunes@ua.com"
+__url__ = "https://github.com/mariolpantunes/pyblindopt"
+__status__ = "Development"
 
+import collections.abc
 import enum
-import math
-import tqdm
-import random
-import joblib
 import logging
-import tempfile
-import statistics
+
 import numpy as np
-import pyBlindOpt.utils as utils
 
-
-from collections.abc import Sequence
-
+from pyBlindOpt.optimizer import Optimizer
 
 logger = logging.getLogger(__name__)
 
 
 @enum.unique
 class TargetVector(enum.Enum):
-    '''
-    Enum data type that represents how the target vector is selected
-    '''
-    best = 'best'
-    rand = 'rand'
-
-    def __str__(self):
-        return self.value
+    best = "best"
+    rand = "rand"
 
 
 @enum.unique
 class CrossoverMethod(enum.Enum):
-    '''
-    Enum data type that represents the crossover method
-    '''
-    bin = 'bin'
-    exp = 'exp'
-
-    def __str__(self):
-        return self.value
+    bin = "bin"
+    exp = "exp"
 
 
-def mutation(x:np.ndarray, F:float) -> np.ndarray:
-    '''
-    Computes the mutation operation.
+class DifferentialEvolution(Optimizer):
+    """
+    Differential Evolution Optimizer.
 
-    Args:
-        x (np.ndarray): a set (at least three) candidate solutions
-        F (float): weight that controls the mutation operation
+    Supports configurable strategies via the `variant` string (e.g., 'best/1/bin', 'rand/1/exp').
+    """
 
-    Returns:
-        np.ndarray: the mutated candidate solution
-    '''
-    diff = np.empty(x[0].shape)
-    for i in range(1, len(x), 2):
-        diff += x[i] - x[i+1]
-    return x[0] + F * diff
+    def __init__(
+        self,
+        objective: collections.abc.Callable,
+        bounds: np.ndarray,
+        population: np.ndarray | None = None,
+        variant: str = "best/1/bin",
+        callback: list[collections.abc.Callable]
+        | collections.abc.Callable
+        | None = None,
+        n_iter: int = 100,
+        n_pop: int = 10,
+        F: float = 0.5,
+        cr: float = 0.7,
+        n_jobs: int = 1,
+        cached: bool = False,
+        debug: bool = False,
+        verbose: bool = False,
+        seed: int = 42,
+    ):
+        """
+        Differential Evolution Optimizer.
 
+        Supports configurable strategies via the `variant` string (e.g., 'best/1/bin', 'rand/1/exp').
 
-def idx_bin(dims:int, cr:float) -> list:
-    '''
-    Computes crossover based on Binomial crossover.
+        Args:
+            variant (str): Strategy format 'target/num_diffs/crossover'. Defaults to 'best/1/bin'.
+            F (float): Differential weight (scaling factor). Defaults to 0.5.
+            cr (float): Crossover probability. Defaults to 0.7.
+        """
 
-    Args:
-        dims (int): the size of the solution vector
-        cr (float): weight that controls the crossover operation
+        self.F = F
+        self.cr = cr
 
-    Returns:
-        list: with the binary valued based on the binomial distribution
-    '''
-    j = random.randrange(dims)
-    idx = [True if random.random() < cr or i == j else False for i in range(dims)]
-    return idx
+        # Parse Variant String (e.g., "best/1/bin")
+        try:
+            v = variant.split("/")
+            self.tv = TargetVector[v[0]]
+            self.dv = int(v[1])
+            self.cm = CrossoverMethod[v[2]]
+            # Number of candidates needed:
+            # if 'best': we need 'dv' pairs (2*dv)
+            # if 'rand': we need 1 base + 'dv' pairs (1 + 2*dv)
+            self.nc = 2 * self.dv if self.tv is TargetVector.best else 1 + 2 * self.dv
+        except (KeyError, IndexError, ValueError):
+            raise ValueError(
+                "Variant must be format: '[rand|best]/n/[bin|exp]' (e.g., 'best/1/bin')"
+            )
 
+        super().__init__(
+            objective=objective,
+            bounds=bounds,
+            population=population,
+            callback=callback,
+            n_iter=n_iter,
+            n_pop=n_pop,
+            n_jobs=n_jobs,
+            cached=cached,
+            debug=debug,
+            verbose=verbose,
+            seed=seed,
+        )
 
-def idx_exp(dims:int, cr:float) -> list:
-    '''
-    Computes crossover based on Exponential crossover.
+    def _initialize(self):
+        """
+        Initialization hook.
 
-    Args:
-        dims (int): the size of the solution vector
-        cr (float): weight that controls the crossover operation
+        No specific state required per iteration.
+        """
+        pass
 
-    Returns:
-        list: with the binary valued based on the exponential distribution
-    '''
-    idx = []
-    j = random.randrange(dims)
-    idx.append(j)
-    j = (j + 1) % dims
-    while random.random() < cr and len(idx) < dims:
-        idx.append(j)
-        j = (j + 1)
-    rv = [True if i in idx else False for i in range(dims)]
-    return rv
+    def _update_best(self, epoch: int):
+        """
+        Updates the global best solution.
 
+        Args:
+            epoch (int): Current iteration.
+        """
+        best_idx = np.argmin(self.scores)
+        if self.scores[best_idx] < self.best_score:
+            self.best_score = self.scores[best_idx]
+            self.best_pos = self.pop[best_idx].copy()
 
-def crossover(mutated:np.ndarray, target:np.ndarray,
-dims:int, cr:float, cross_method:callable) -> np.ndarray:
-    '''
-    Applies the crossover operation based on the cross_method.
+    def _mutation(self, candidates: np.ndarray) -> np.ndarray:
+        """
+        Applies Differential Mutation.
 
-    Args:
-        mutated (np.ndarray): mutated version of the target candidate
-        target (np.ndarray): original target candidate
-        dims (int): the size of the solution vector
-        cr (float): weight that controls the crossover operation
-        cross_method (callable): method that computes the crossover index list
+        $$ v = x_{base} + F \\sum (x_{rA} - x_{rB}) $$
 
-    Returns:
-        np.ndarray: the offstring of the target and mutated parents
-    '''
-    idx = cross_method(dims, cr)
-    trial = [mutated[i] if idx[i] else target[i] for i in range(dims)]
-    return np.asarray(trial)
+        Args:
+            candidates (np.ndarray): Array where index 0 is the base vector and subsequent indices are pairs for difference calculation.
 
+        Returns:
+            np.ndarray: The mutant vector.
+        """
+        diff_sum = np.zeros_like(candidates[0])
 
-def differential_evolution(objective:callable, bounds:np.ndarray, population:list=None, 
-variant:str='best/1/bin', callback:"Sequence[callable] | callable"=None, n_iter:int=100, 
-n_pop:int=10, F:float=0.5, cr:float=0.7, rt:int=10, n_jobs:int=-1, cached:bool=False, 
-debug:bool=False, verbose:bool=False, seed:int=42) -> tuple:
-    '''
-    Computes the differential evolution optimization algorithm.
+        # Iterate pairs: (1,2), (3,4), etc.
+        for i in range(1, len(candidates), 2):
+            diff_sum += candidates[i] - candidates[i + 1]
 
-    Args:
-        objective (callable): objective function used to evaluate the candidate solutions (lower is better)
-        bounds (list): bounds that limit the search space
-        population (list): optional list of candidate solutions (default None)
-        variant (str): string that specifies the DE variant (default best/1/bin)
-        callback (callable): callback function that is called at each epoch (deafult None)
-        n_iter (int): the number of iterations (default 100)
-        n_pop (int): the number of elements in the population (default 10)
-        F (float): weight that controls the mutation operation (default 0.5)
-        cr (float): weight that controls the crossover operation (default 0.7)
-        rt (int): number of retries when refines initial population (default 10)
-        n_jobs (int): number of concurrent jobs (default -1)
-        cached (bool): controls if the objective function is cached by joblib (default False)
-        debug (bool): controls if debug information is returned (default False)
-        verbose (bool): controls the usage of tqdm as a progress bar (default False)
-        seed (int): seed to init the random generator (default 42)
+        return candidates[0] + self.F * diff_sum
 
-    Returns:
-        tuple: the best solution
-    '''
+    def _crossover_binom(self, target: np.ndarray, mutant: np.ndarray) -> np.ndarray:
+        """
+        Binomial Crossover.
 
-    try:
-        v = variant.split('/')
-        tv = TargetVector[v[0]]
-        dv = int(v[1])
-        cm = CrossoverMethod[v[2]]
+        Each gene is swapped with probability $CR$. Ensures at least one gene is changed.
 
-        nc = 2*dv if tv is TargetVector.best else 2*dv+1
-    except:
-        raise ValueError('variant must be = [rand|best]/n/[bin|exp]')
+        Args:
+            target (np.ndarray): The parent vector.
+            mutant (np.ndarray): The donor vector.
 
-    cross_method = {CrossoverMethod.bin: idx_bin, CrossoverMethod.exp: idx_exp}
+        Returns:
+            np.ndarray: The trial vector.
+        """
+        dim = target.shape[0]
+        # 1. Generate random mask
+        mask = self.rng.random(dim) < self.cr
+        # 2. Force at least one index to change (standard DE guarantee)
+        j_rand = self.rng.integers(0, dim)
+        mask[j_rand] = True
 
-    # define the seed of the random generation
-    np.random.seed(seed)
-    random.seed(seed)
+        trial = np.where(mask, mutant, target)
+        return trial
 
-    # cache the initial objective function
-    if cached:
-        # Cache from joblib
-        location = tempfile.gettempdir()
-        memory = joblib.Memory(location, verbose=0)
-        objective_cache = memory.cache(objective)
-    else:
-        objective_cache = objective
-    
-    # check if the initial population is given
-    if population is None:
-        # initialise population of candidate solutions randomly within the specified bounds
-        pop = bounds[:, 0] + (np.random.rand(n_pop, len(bounds)) * (bounds[:, 1] - bounds[:, 0]))
-        pop = [utils.check_bounds(p, bounds) for p in pop]
-        # evaluate initial population of candidate solutions
-        #obj_all = joblib.Parallel(n_jobs=n_jobs, backend='loky')(joblib.delayed(objective_cache)(c) for c in pop)
-        obj_all = utils.compute_objective(pop, objective_cache, n_jobs)
-        # improve the quality of the initial solutions (avoid initial solutions with inf cost)
-        r = 0
-        while any(math.isinf(i) for i in obj_all) and r < rt:
-            for i in range(n_pop):
-                if math.isinf(obj_all[i]):
-                    pop = bounds[:, 0] + (np.random.rand(n_pop, len(bounds)) * (bounds[:, 1] - bounds[:, 0]))
-                    pop = [utils.check_bounds(p, bounds) for p in pop]
-            #obj_all = joblib.Parallel(n_jobs=n_jobs, backend='loky')(joblib.delayed(objective_cache)(c) for c in pop)
-            obj_all = utils.compute_objective(pop, objective_cache, n_jobs)
-            r += 1
-        # if after R repetitions it still has inf. cost
-        if any(math.isinf(i) for i in obj_all):
-            valid_idx = [i for i in range(n_pop) if not math.isinf(obj_all[i])]
-            pop = pop[valid_idx]
-            obj_all = [obj_all[i] for i in valid_idx]
-            n_pop = len(valid_idx)
-    else:
-        # initialise population of candidate and validate the bounds
-        pop = [utils.check_bounds(p, bounds) for p in population]
-        # overwrite the n_pop with the length of the given population
-        n_pop = len(population)
-        # evaluate initial population of candidate solutions
-        #obj_all = joblib.Parallel(n_jobs=n_jobs, backend='loky')(joblib.delayed(objective_cache)(c) for c in pop)
-        obj_all = utils.compute_objective(pop, objective_cache, n_jobs)
+    def _crossover_exp(self, target: np.ndarray, mutant: np.ndarray) -> np.ndarray:
+        """
+        Exponential Crossover.
 
-    # find the best performing vector of initial population
-    best_vector = pop[np.argmin(obj_all)]
-    best_obj = min(obj_all)
-    prev_obj = best_obj
-    
-    # arrays to store the debug information
-    if debug:
-        obj_avg_iter = []
-        obj_best_iter = []
-        obj_worst_iter = []
-    
-    # run iterations of the algorithm
-    for epoch in tqdm.tqdm(range(n_iter), disable=not verbose):
-        # generate offspring
-        offspring = []
-        for j in tqdm.tqdm(range(n_pop), leave=False, disable=not verbose):
-            # choose three candidates, a, b and c, that are not the current one
-            candidates_idx = random.choices([candidate for candidate in range(n_pop) if candidate != j], k = nc)
-            diff_candidates = [pop[i] for i in candidates_idx]
-            
-            if tv is TargetVector.best:
-                candidates = [best_vector]
-                candidates.extend(diff_candidates)
+        Swaps a contiguous block of genes starting from a random index.
+
+        Args:
+            target (np.ndarray): The parent vector.
+            mutant (np.ndarray): The donor vector.
+
+        Returns:
+            np.ndarray: The trial vector.
+        """
+        dim = target.shape[0]
+        trial = target.copy()
+
+        j = self.rng.integers(0, dim)
+        L = 0
+        while self.rng.random() < self.cr and L < dim:
+            trial[j] = mutant[j]
+            j = (j + 1) % dim
+            L += 1
+
+        return trial
+
+    def _generate_offspring(self, epoch: int) -> np.ndarray:
+        """
+        Generates the Trial Population.
+
+        1.  **Selection:** Picks random distinct vectors ($r1, r2, ...$) for each individual.
+        2.  **Mutation:** Creates mutant vectors.
+        3.  **Crossover:** Combines mutant and target vectors.
+
+        Args:
+            epoch (int): Current iteration.
+
+        Returns:
+            np.ndarray: The population of trial vectors.
+        """
+        offspring = np.zeros_like(self.pop)
+
+        for j in range(self.n_pop):
+            available_indices = np.delete(np.arange(self.n_pop), j)
+            count_needed = (
+                2 * self.dv if self.tv is TargetVector.best else 1 + 2 * self.dv
+            )
+            if count_needed > len(available_indices):
+                # Fallback for very small populations
+                choices = self.rng.choice(
+                    available_indices, size=count_needed, replace=True
+                )
             else:
-                candidates = diff_candidates
+                choices = self.rng.choice(
+                    available_indices, size=count_needed, replace=False
+                )
 
-            # perform mutation
-            mutated = mutation(candidates, F)
-            # perform crossover
-            trial = crossover(mutated, pop[j], len(bounds), cr, cross_method[cm])
-            offspring.append(trial)
-        # check that lower and upper bounds are retained after mutation and crossover
-        offspring = [utils.check_bounds(trial, bounds) for trial in offspring]
-        #obj_trial = joblib.Parallel(n_jobs=n_jobs, backend='loky')(joblib.delayed(objective_cache)(c) for c in offspring)
-        obj_trial = utils.compute_objective(offspring, objective_cache, n_jobs)
+            picked_vecs = self.pop[choices]
 
-        # iterate over all candidate solutions
-        for j in range(n_pop):
-            # perform selection
-            if obj_trial[j] < obj_all[j]:
-                # replace the target vector with the trial vector
-                pop[j] = offspring[j]
-                # store the new objective function value
-                obj_all[j] = obj_trial[j]
-        # find the best performing vector at each iteration
-        best_obj = min(obj_all)
-        
-        # store the lowest objective function value
-        if best_obj < prev_obj:
-            best_vector = pop[np.argmin(obj_all)]
-            prev_obj = best_obj
-
-        ## Optional store the debug information
-        if debug:
-            # store best, wort and average cost for all candidates
-            obj_avg_iter.append(statistics.mean(obj_all))
-            obj_best_iter.append(best_obj)
-            obj_worst_iter.append(max(obj_all))
-    
-        ## Optional execute the callback code
-        if callback is not None:
-            terminate = False
-            if isinstance(callback, Sequence):
-                terminate = any([c(epoch, obj_all, pop) for c in callback])
+            # Construct the mutation candidate list
+            # Format: [Base, Pair1_A, Pair1_B, Pair2_A, Pair2_B...]
+            if self.tv is TargetVector.best:
+                candidates = np.vstack([self.best_pos, picked_vecs])
             else:
-                terminate = callback(epoch, obj_all, pop)
+                candidates = picked_vecs
 
-            if terminate:
-                break
+            # 2. Mutation
+            mutated_vec = self._mutation(candidates)
 
-    # clean the cache
-    if cached:
-        memory.clear(warn=False)
-    
-    if debug:
-        return (best_vector, best_obj, (obj_best_iter, obj_avg_iter, obj_worst_iter))
-    else:
-        return (best_vector, best_obj)
+            # 3. Crossover
+            if self.cm is CrossoverMethod.bin:
+                trial_vec = self._crossover_binom(self.pop[j], mutated_vec)
+            else:
+                trial_vec = self._crossover_exp(self.pop[j], mutated_vec)
+
+            offspring[j] = trial_vec
+
+        return offspring
+
+    def _selection(self, offspring: np.ndarray, offspring_scores: np.ndarray):
+        """
+        Greedy Selection.
+
+        Survivor selection: The child replaces the parent if and only if it is better.
+
+        Args:
+            offspring (np.ndarray): Trial vectors.
+            offspring_scores (np.ndarray): Trial scores.
+        """
+        improved_mask = offspring_scores < self.scores
+        self.pop[improved_mask] = offspring[improved_mask]
+        self.scores[improved_mask] = offspring_scores[improved_mask]
+
+
+def differential_evolution(
+    objective: collections.abc.Callable,
+    bounds: np.ndarray,
+    population: np.ndarray | None = None,
+    variant: str = "best/1/bin",
+    callback: list[collections.abc.Callable] | collections.abc.Callable | None = None,
+    n_iter: int = 100,
+    n_pop: int = 10,
+    F: float = 0.5,
+    cr: float = 0.7,
+    rt: int = 10,
+    n_jobs: int = 1,
+    cached: bool = False,
+    debug: bool = False,
+    verbose: bool = False,
+    seed: int = 42,
+) -> tuple:
+    """
+    Functional interface for Differential Evolution.
+
+    Returns:
+        tuple: (best_pos, best_score).
+    """
+    # Convert list population to array if provided
+    pop_arr = np.array(population) if population is not None else None
+
+    optimizer = DifferentialEvolution(
+        objective=objective,
+        bounds=bounds,
+        population=pop_arr,
+        variant=variant,
+        callback=callback,
+        n_iter=n_iter,
+        n_pop=n_pop,
+        F=F,
+        cr=cr,
+        n_jobs=n_jobs,
+        cached=cached,
+        debug=debug,
+        verbose=verbose,
+        seed=seed,
+    )
+    return optimizer.optimize()
