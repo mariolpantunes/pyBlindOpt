@@ -16,7 +16,7 @@ $$ x_{new} = x_{old} + \\alpha \\cdot \\text{Lévy}(\\beta) \\cdot (x_{old} - x_
 
 __author__ = "Mário Antunes"
 __license__ = "MIT"
-__version__ = "0.2"
+__version__ = "0.2.0"
 __email__ = "mario.antunes@ua.com"
 __url__ = "https://github.com/mariolpantunes/pyblindopt"
 __status__ = "Development"

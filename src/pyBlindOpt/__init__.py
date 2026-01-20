@@ -24,7 +24,7 @@ Note: The code has been optimized to a certain degree but was primarily created 
 
 __author__ = "Mário Antunes"
 __license__ = "MIT"
-__version__ = "0.2"
+__version__ = "0.2.0"
 __email__ = "mario.antunes@ua.com"
 __url__ = "https://github.com/mariolpantunes/pyblindopt"
 __status__ = "Development"

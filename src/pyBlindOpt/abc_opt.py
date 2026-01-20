@@ -18,7 +18,7 @@ $$ v_{i,j} = x_{i,j} + \\phi_{i,j} (x_{i,j} - x_{k,j}) $$
 
 __author__ = "Mário Antunes"
 __license__ = "MIT"
-__version__ = "0.2"
+__version__ = "0.2.0"
 __email__ = "mario.antunes@ua.com"
 __url__ = "https://github.com/mariolpantunes/pyblindopt"
 __status__ = "Development"
