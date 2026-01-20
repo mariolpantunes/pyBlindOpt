@@ -31,7 +31,6 @@ import collections.abc
 import numpy as np
 
 import pyBlindOpt.optimizer as optimizer
-import pyBlindOpt.utils as utils
 
 
 class GWO(optimizer.Optimizer):
@@ -134,17 +133,7 @@ class GWO(optimizer.Optimizer):
 
 
 def grey_wolf_optimization(
-    objective: collections.abc.Callable,
-    bounds: np.ndarray,
-    population: np.ndarray | None = None,
-    callback: list[collections.abc.Callable] | collections.abc.Callable | None = None,
-    n_iter: int = 100,
-    n_pop: int = 10,
-    n_jobs: int = 1,
-    cached=False,
-    debug=False,
-    verbose=False,
-    seed: int | np.random.Generator | utils.Sampler | None = None,
+    objective: collections.abc.Callable, bounds: np.ndarray, **kwargs
 ) -> tuple:
     """
     Functional interface for Grey Wolf Optimization.
@@ -152,17 +141,5 @@ def grey_wolf_optimization(
     Returns:
         tuple: (best_pos, best_score).
     """
-    optimizer = GWO(
-        objective=objective,
-        bounds=bounds,
-        population=population,
-        callback=callback,
-        n_iter=n_iter,
-        n_pop=n_pop,
-        n_jobs=n_jobs,
-        cached=cached,
-        debug=debug,
-        verbose=verbose,
-        seed=seed,
-    )
+    optimizer = GWO(objective=objective, bounds=bounds, **kwargs)
     return optimizer.optimize()

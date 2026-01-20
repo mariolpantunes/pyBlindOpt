@@ -27,36 +27,40 @@ __status__ = "Development"
 
 import numpy as np
 
+import pyBlindOpt.utils as utils
 from pyBlindOpt.optimizer import Optimizer
 
 
 class FireflyAlgorithm(Optimizer):
     """
     Firefly Algorithm Optimizer.
-
-    Args:
-        alpha (float): Randomization parameter (step size). Defaults to 0.5.
-        beta0 (float): Initial attractiveness at distance r=0. Defaults to 1.0.
-        gamma (float): Light absorption coefficient. Controls convergence speed. Defaults to 1.0.
-        alpha_decay (float): Geometric decay rate for alpha. Defaults to 0.97.
     """
 
+    @utils.inherit_signature(Optimizer)
     def __init__(
         self,
         objective,
         bounds,
-        population=None,
         alpha: float = 0.5,
         beta0: float = 1.0,
         gamma: float = 1.0,
         alpha_decay: float = 0.97,
         **kwargs,
     ):
+        """
+        Firefly Algorithm Optimizer.
+
+        Args:
+            alpha (float): Randomization parameter (step size). Defaults to 0.5.
+            beta0 (float): Initial attractiveness at distance r=0. Defaults to 1.0.
+            gamma (float): Light absorption coefficient. Controls convergence speed. Defaults to 1.0.
+            alpha_decay (float): Geometric decay rate for alpha. Defaults to 0.97.
+        """
         self.alpha = alpha
         self.beta0 = beta0
         self.gamma = gamma
         self.alpha_decay = alpha_decay
-        super().__init__(objective, bounds, population, **kwargs)
+        super().__init__(objective, bounds, **kwargs)
 
     def _initialize(self):
         """
@@ -156,11 +160,21 @@ class FireflyAlgorithm(Optimizer):
         self.scores[improved_mask] = offspring_scores[improved_mask]
 
 
-def firefly_algorithm(objective, bounds, **kwargs):
+def firefly_algorithm(
+    objective,
+    bounds,
+    alpha: float = 0.5,
+    beta0: float = 1.0,
+    gamma: float = 1.0,
+    alpha_decay: float = 0.97,
+    **kwargs,
+):
     """
     Functional interface for the Firefly Algorithm.
 
     Returns:
         tuple: (best_pos, best_score).
     """
-    return FireflyAlgorithm(objective, bounds, **kwargs).optimize()
+    return FireflyAlgorithm(
+        objective, bounds, alpha, beta0, gamma, alpha_decay, **kwargs
+    ).optimize()

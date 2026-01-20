@@ -31,7 +31,7 @@ import logging
 
 import numpy as np
 
-import pyBlindOpt.init as init  # Required for population generation
+import pyBlindOpt.init as init
 import pyBlindOpt.utils as utils
 from pyBlindOpt.optimizer import Optimizer
 
@@ -123,17 +123,7 @@ class RandomSearch(Optimizer):
 
 
 def random_search(
-    objective: collections.abc.Callable,
-    bounds: np.ndarray,
-    population: np.ndarray | None = None,
-    callback: "list[collections.abc.Callable] | collections.abc.Callable | None" = None,
-    n_iter: int = 100,
-    n_pop: int = 10,
-    n_jobs: int = 1,
-    cached: bool = False,
-    debug: bool = False,
-    verbose: bool = False,
-    seed: int | np.random.Generator | utils.Sampler | None = None,
+    objective: collections.abc.Callable, bounds: np.ndarray, **kwargs
 ) -> tuple:
     """
     Functional interface for Random Search.
@@ -141,30 +131,9 @@ def random_search(
     Args:
         objective (Callable): Function to minimize.
         bounds (np.ndarray): Search space bounds.
-        population (np.ndarray | None): Initial population (mostly unused except for shape inference).
-        callback (list | Callable | None): Callbacks.
-        n_iter (int): Number of iterations (drops).
-        n_pop (int): Number of samples per iteration.
-        n_jobs (int): Parallel jobs.
-        cached (bool): Enable caching.
-        debug (bool): Enable history.
-        verbose (bool): Show progress.
-        seed (int | Generator | Sampler | None): Sampling strategy.
 
     Returns:
         tuple: (best_position, best_score).
     """
-    optimizer = RandomSearch(
-        objective=objective,
-        bounds=bounds,
-        population=population,
-        callback=callback,
-        n_iter=n_iter,
-        n_pop=n_pop,
-        n_jobs=n_jobs,
-        cached=cached,
-        debug=debug,
-        verbose=verbose,
-        seed=seed,
-    )
+    optimizer = RandomSearch(objective=objective, bounds=bounds, **kwargs)
     return optimizer.optimize()

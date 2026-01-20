@@ -19,17 +19,11 @@ __url__ = "https://github.com/mariolpantunes/pyblindopt"
 __status__ = "Development"
 
 import collections.abc
-import logging
 import math
 
 import numpy as np
 
-import pyBlindOpt.utils as utils
-
-# We import the concrete GWO class to extend it
 from pyBlindOpt.gwo import GWO
-
-logger = logging.getLogger(__name__)
 
 
 class EGWO(GWO):
@@ -112,17 +106,7 @@ class EGWO(GWO):
 
 
 def enhanced_grey_wolf_optimization(
-    objective: collections.abc.Callable,
-    bounds: np.ndarray,
-    population: np.ndarray | None = None,
-    callback: "list[collections.abc.Callable] | collections.abc.Callable | None" = None,
-    n_iter: int = 100,
-    n_pop: int = 10,
-    n_jobs: int = 1,
-    cached: bool = False,
-    debug: bool = False,
-    verbose: bool = False,
-    seed: int | np.random.Generator | utils.Sampler | None = None,
+    objective: collections.abc.Callable, bounds: np.ndarray, **kwargs
 ) -> tuple:
     """
     Functional interface for Enhanced GWO.
@@ -130,17 +114,5 @@ def enhanced_grey_wolf_optimization(
     Returns:
         tuple: (best_pos, best_score).
     """
-    optimizer = EGWO(
-        objective=objective,
-        bounds=bounds,
-        population=population,
-        callback=callback,
-        n_iter=n_iter,
-        n_pop=n_pop,
-        n_jobs=n_jobs,
-        cached=cached,
-        debug=debug,
-        verbose=verbose,
-        seed=seed,
-    )
+    optimizer = EGWO(objective=objective, bounds=bounds, **kwargs)
     return optimizer.optimize()

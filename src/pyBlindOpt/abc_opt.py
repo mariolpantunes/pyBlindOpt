@@ -35,7 +35,8 @@ class ArtificialBeeColony(Optimizer):
     Artificial Bee Colony Optimizer.
     """
 
-    def __init__(self, objective, bounds, population=None, limit: int = 50, **kwargs):
+    @utils.inherit_signature(Optimizer)
+    def __init__(self, objective, bounds, limit: int = 50, **kwargs):
         """
         Artificial Bee Colony Optimizer.
 
@@ -43,7 +44,7 @@ class ArtificialBeeColony(Optimizer):
             limit (int, optional): The number of trials without improvement before a food source is abandoned (Scout phase). Defaults to 50.
         """
         self.limit = limit
-        super().__init__(objective, bounds, population, **kwargs)
+        super().__init__(objective, bounds, **kwargs)
 
     def _initialize(self):
         """
@@ -182,11 +183,11 @@ class ArtificialBeeColony(Optimizer):
         self.scores = offspring_scores
 
 
-def artificial_bee_colony(objective, bounds, **kwargs):
+def artificial_bee_colony(objective, bounds, limit: int = 50, **kwargs):
     """
     Functional interface for Artificial Bee Colony optimization.
 
     Returns:
         tuple: (best_pos, best_score).
     """
-    return ArtificialBeeColony(objective, bounds, **kwargs).optimize()
+    return ArtificialBeeColony(objective, bounds, limit, **kwargs).optimize()

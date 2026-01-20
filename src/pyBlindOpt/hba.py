@@ -26,6 +26,7 @@ import math
 
 import numpy as np
 
+import pyBlindOpt.utils as utils
 from pyBlindOpt.optimizer import Optimizer
 
 
@@ -34,11 +35,11 @@ class HoneyBadgerAlgorithm(Optimizer):
     Honey Badger Algorithm.
     """
 
+    @utils.inherit_signature(Optimizer)
     def __init__(
         self,
         objective,
         bounds,
-        population=None,
         beta: float = 6.0,
         C: float = 2.0,
         **kwargs,
@@ -52,7 +53,7 @@ class HoneyBadgerAlgorithm(Optimizer):
         """
         self.beta = beta
         self.C = C
-        super().__init__(objective, bounds, population, **kwargs)
+        super().__init__(objective, bounds, **kwargs)
 
     def _initialize(self):
         """
@@ -142,11 +143,13 @@ class HoneyBadgerAlgorithm(Optimizer):
         self.scores[improved_mask] = offspring_scores[improved_mask]
 
 
-def honey_badger_algorithm(objective, bounds, **kwargs):
+def honey_badger_algorithm(
+    objective, bounds, beta: float = 6.0, C: float = 2.0, **kwargs
+):
     """
     Functional interface for Honey Badger Algorithm.
 
     Returns:
         tuple: (best_pos, best_score).
     """
-    return HoneyBadgerAlgorithm(objective, bounds, **kwargs).optimize()
+    return HoneyBadgerAlgorithm(objective, bounds, beta, C, **kwargs).optimize()

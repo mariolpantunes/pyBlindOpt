@@ -41,41 +41,20 @@ class SimulatedAnnealing(Optimizer):
     $$ T_k = \\frac{T_0}{k + 1} $$
     """
 
+    @utils.inherit_signature(Optimizer)
     def __init__(
         self,
         objective: collections.abc.Callable,
         bounds: np.ndarray,
-        population: np.ndarray | None = None,
         step_size: float = 0.01,
         temp: float = 20.0,
-        callback: list[collections.abc.Callable]
-        | collections.abc.Callable
-        | None = None,
-        n_iter: int = 200,
-        n_pop: int = 1,
-        n_jobs: int = 1,
-        cached: bool = False,
-        debug: bool = False,
-        verbose: bool = False,
-        seed: int | np.random.Generator | utils.Sampler | None = None,
+        **kwargs,
     ):
         self.step_size = step_size
         self.initial_temp = temp
         self.current_temp = temp
 
-        super().__init__(
-            objective=objective,
-            bounds=bounds,
-            population=population,
-            callback=callback,
-            n_iter=n_iter,
-            n_pop=n_pop,
-            n_jobs=n_jobs,
-            cached=cached,
-            debug=debug,
-            verbose=verbose,
-            seed=seed,
-        )
+        super().__init__(objective=objective, bounds=bounds, **kwargs)
 
     def _initialize(self):
         """
@@ -155,17 +134,9 @@ class SimulatedAnnealing(Optimizer):
 def simulated_annealing(
     objective: collections.abc.Callable,
     bounds: np.ndarray,
-    population: np.ndarray | None = None,
     step_size: float = 0.01,
     temp: float = 20.0,
-    callback: list[collections.abc.Callable] | collections.abc.Callable | None = None,
-    n_iter: int = 200,
-    n_pop: int = 1,
-    n_jobs: int = 1,
-    cached: bool = False,
-    debug: bool = False,
-    verbose: bool = False,
-    seed: int | np.random.Generator | utils.Sampler | None = None,
+    **kwargs,
 ) -> tuple:
     """
     Functional interface for Simulated Annealing.
@@ -174,18 +145,6 @@ def simulated_annealing(
     Set n_pop > 1 to enable Parallel Simulated Annealing.
     """
     optimizer = SimulatedAnnealing(
-        objective=objective,
-        bounds=bounds,
-        population=population,
-        step_size=step_size,
-        temp=temp,
-        callback=callback,
-        n_iter=n_iter,
-        n_pop=n_pop,
-        n_jobs=n_jobs,
-        cached=cached,
-        debug=debug,
-        verbose=verbose,
-        seed=seed,
+        objective=objective, bounds=bounds, step_size=step_size, temp=temp, **kwargs
     )
     return optimizer.optimize()

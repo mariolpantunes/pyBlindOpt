@@ -19,21 +19,16 @@ __url__ = "https://github.com/mariolpantunes/pyblindopt"
 __status__ = "Development"
 
 import collections.abc
-import logging
 
 import numpy as np
 
 import pyBlindOpt.utils as utils
 from pyBlindOpt.optimizer import Optimizer
 
-logger = logging.getLogger(__name__)
-
 
 # ==============================================================================
 # Default Operators
 # ==============================================================================
-
-
 def tournament_selection(
     pop: np.ndarray,
     scores: np.ndarray,
@@ -252,8 +247,6 @@ def linear_crossover(
 # ==============================================================================
 # Genetic Algorithm Class
 # ==============================================================================
-
-
 class GeneticAlgorithm(Optimizer):
     """
     Genetic Algorithm (GA).
@@ -265,26 +258,17 @@ class GeneticAlgorithm(Optimizer):
     (selection, crossover, mutation), allowing full customization.
     """
 
+    @utils.inherit_signature(Optimizer)
     def __init__(
         self,
         objective: collections.abc.Callable,
         bounds: np.ndarray,
-        population: np.ndarray | None = None,
         selection: collections.abc.Callable = tournament_selection,
         crossover: collections.abc.Callable = blend_crossover,
         mutation: collections.abc.Callable = random_mutation,
         r_cross: float = 0.9,
         r_mut: float = 0.3,
-        callback: list[collections.abc.Callable]
-        | collections.abc.Callable
-        | None = None,
-        n_iter: int = 100,
-        n_pop: int = 20,
-        n_jobs: int = 1,
-        cached: bool = False,
-        debug: bool = False,
-        verbose: bool = False,
-        seed: int | np.random.Generator | utils.Sampler | None = None,
+        **kwargs,
     ):
         """
         Genetic Algorithm Optimizer.
@@ -307,19 +291,7 @@ class GeneticAlgorithm(Optimizer):
         self.r_cross = r_cross
         self.r_mut = r_mut
 
-        super().__init__(
-            objective=objective,
-            bounds=bounds,
-            population=population,
-            callback=callback,
-            n_iter=n_iter,
-            n_pop=n_pop,
-            n_jobs=n_jobs,
-            cached=cached,
-            debug=debug,
-            verbose=verbose,
-            seed=seed,
-        )
+        super().__init__(objective=objective, bounds=bounds, **kwargs)
 
     def _initialize(self):
         """
@@ -430,20 +402,12 @@ class GeneticAlgorithm(Optimizer):
 def genetic_algorithm(
     objective: collections.abc.Callable,
     bounds: np.ndarray,
-    population: np.ndarray | None = None,
     selection: collections.abc.Callable = tournament_selection,
     crossover: collections.abc.Callable = blend_crossover,
     mutation: collections.abc.Callable = random_mutation,
     r_cross: float = 0.9,
     r_mut: float = 0.3,
-    callback: list[collections.abc.Callable] | collections.abc.Callable | None = None,
-    n_iter: int = 100,
-    n_pop: int = 20,
-    n_jobs: int = 1,
-    cached: bool = False,
-    debug: bool = False,
-    verbose: bool = False,
-    seed: int | np.random.Generator | utils.Sampler | None = None,
+    **kwargs,
 ) -> tuple:
     """
     Functional interface for Genetic Algorithm.
@@ -454,19 +418,11 @@ def genetic_algorithm(
     optimizer = GeneticAlgorithm(
         objective=objective,
         bounds=bounds,
-        population=population,
         selection=selection,
         crossover=crossover,
         mutation=mutation,
         r_cross=r_cross,
         r_mut=r_mut,
-        callback=callback,
-        n_iter=n_iter,
-        n_pop=n_pop,
-        n_jobs=n_jobs,
-        cached=cached,
-        debug=debug,
-        verbose=verbose,
-        seed=seed,
+        **kwargs,
     )
     return optimizer.optimize()

@@ -28,11 +28,15 @@ from pyBlindOpt.optimizer import Optimizer
 
 
 class CuckooSearch(Optimizer):
+    """
+    Cuckoo Search (CS) optimization.
+    """
+
+    @utils.inherit_signature(Optimizer)
     def __init__(
         self,
         objective,
         bounds,
-        population=None,
         pa: float = 0.25,
         alpha: float = 0.01,
         beta: float = 1.5,
@@ -41,7 +45,7 @@ class CuckooSearch(Optimizer):
         self.pa = pa
         self.alpha = alpha
         self.beta = beta
-        super().__init__(objective, bounds, population, **kwargs)
+        super().__init__(objective, bounds, **kwargs)
 
     def _initialize(self):
         """
@@ -140,11 +144,18 @@ class CuckooSearch(Optimizer):
                 self.scores[update_idxs] = new_scores[better_abandon]
 
 
-def cuckoo_search(objective, bounds, **kwargs):
+def cuckoo_search(
+    objective,
+    bounds,
+    pa: float = 0.25,
+    alpha: float = 0.01,
+    beta: float = 1.5,
+    **kwargs,
+):
     """
     Functional interface for Cuckoo Search.
 
     Returns:
         tuple: (best_pos, best_score).
     """
-    return CuckooSearch(objective, bounds, **kwargs).optimize()
+    return CuckooSearch(objective, bounds, pa, alpha, beta, **kwargs).optimize()

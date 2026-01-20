@@ -39,24 +39,15 @@ class ParticleSwarmOptimization(Optimizer):
     guided by their own best known position (pbest) and the swarm's best known position (gbest).
     """
 
+    @utils.inherit_signature(Optimizer)
     def __init__(
         self,
         objective: collections.abc.Callable,
         bounds: np.ndarray,
-        population: np.ndarray | None = None,
         c1: float = 0.1,  # Cognitive parameter
         c2: float = 0.1,  # Social parameter
         w: float = 0.8,  # Inertia weight
-        callback: list[collections.abc.Callable]
-        | collections.abc.Callable
-        | None = None,
-        n_iter: int = 100,
-        n_pop: int = 10,
-        n_jobs: int = 1,
-        cached: bool = False,
-        debug: bool = False,
-        verbose: bool = False,
-        seed: int | np.random.Generator | utils.Sampler | None = None,
+        **kwargs,
     ):
         """
         Particle Swarm Optimization.
@@ -70,19 +61,7 @@ class ParticleSwarmOptimization(Optimizer):
         self.c2 = c2
         self.w = w
 
-        super().__init__(
-            objective=objective,
-            bounds=bounds,
-            population=population,
-            callback=callback,
-            n_iter=n_iter,
-            n_pop=n_pop,
-            n_jobs=n_jobs,
-            cached=cached,
-            debug=debug,
-            verbose=verbose,
-            seed=seed,
-        )
+        super().__init__(objective=objective, bounds=bounds, **kwargs)
 
     def _init_population(self, population, seed):
         """
@@ -195,18 +174,10 @@ class ParticleSwarmOptimization(Optimizer):
 def particle_swarm_optimization(
     objective: collections.abc.Callable,
     bounds: np.ndarray,
-    population: np.ndarray | None = None,
     c1: float = 0.1,
     c2: float = 0.1,
     w: float = 0.8,
-    callback: list[collections.abc.Callable] | collections.abc.Callable | None = None,
-    n_iter: int = 100,
-    n_pop: int = 10,
-    n_jobs: int = 1,
-    cached: bool = False,
-    debug: bool = False,
-    verbose: bool = False,
-    seed: int | np.random.Generator | utils.Sampler | None = None,
+    **kwargs,
 ) -> tuple:
     """
     Functional interface for Particle Swarm Optimization.
@@ -215,19 +186,6 @@ def particle_swarm_optimization(
         tuple: (best_pos, best_score).
     """
     optimizer = ParticleSwarmOptimization(
-        objective=objective,
-        bounds=bounds,
-        population=population,
-        c1=c1,
-        c2=c2,
-        w=w,
-        callback=callback,
-        n_iter=n_iter,
-        n_pop=n_pop,
-        n_jobs=n_jobs,
-        cached=cached,
-        debug=debug,
-        verbose=verbose,
-        seed=seed,
+        objective=objective, bounds=bounds, c1=c1, c2=c2, w=w, **kwargs
     )
     return optimizer.optimize()

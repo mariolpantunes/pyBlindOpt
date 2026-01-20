@@ -46,6 +46,7 @@ class Optimizer(abc.ABC):
         self,
         objective: collections.abc.Callable,
         bounds: np.ndarray,
+        *,
         population: np.ndarray | None = None,
         callback: "list[collections.abc.Callable] | collections.abc.Callable | None" = None,
         n_iter: int = 100,

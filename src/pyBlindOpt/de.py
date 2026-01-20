@@ -24,13 +24,11 @@ __status__ = "Development"
 
 import collections.abc
 import enum
-import logging
 
 import numpy as np
 
+import pyBlindOpt.utils as utils
 from pyBlindOpt.optimizer import Optimizer
-
-logger = logging.getLogger(__name__)
 
 
 @enum.unique
@@ -52,24 +50,16 @@ class DifferentialEvolution(Optimizer):
     Supports configurable strategies via the `variant` string (e.g., 'best/1/bin', 'rand/1/exp').
     """
 
+    @utils.inherit_signature(Optimizer)
     def __init__(
         self,
         objective: collections.abc.Callable,
         bounds: np.ndarray,
         population: np.ndarray | None = None,
         variant: str = "best/1/bin",
-        callback: list[collections.abc.Callable]
-        | collections.abc.Callable
-        | None = None,
-        n_iter: int = 100,
-        n_pop: int = 10,
         F: float = 0.5,
         cr: float = 0.7,
-        n_jobs: int = 1,
-        cached: bool = False,
-        debug: bool = False,
-        verbose: bool = False,
-        seed: int = 42,
+        **kwargs,
     ):
         """
         Differential Evolution Optimizer.
@@ -100,19 +90,7 @@ class DifferentialEvolution(Optimizer):
                 "Variant must be format: '[rand|best]/n/[bin|exp]' (e.g., 'best/1/bin')"
             )
 
-        super().__init__(
-            objective=objective,
-            bounds=bounds,
-            population=population,
-            callback=callback,
-            n_iter=n_iter,
-            n_pop=n_pop,
-            n_jobs=n_jobs,
-            cached=cached,
-            debug=debug,
-            verbose=verbose,
-            seed=seed,
-        )
+        super().__init__(objective, bounds, **kwargs)
 
     def _initialize(self):
         """
@@ -273,19 +251,10 @@ class DifferentialEvolution(Optimizer):
 def differential_evolution(
     objective: collections.abc.Callable,
     bounds: np.ndarray,
-    population: np.ndarray | None = None,
     variant: str = "best/1/bin",
-    callback: list[collections.abc.Callable] | collections.abc.Callable | None = None,
-    n_iter: int = 100,
-    n_pop: int = 10,
     F: float = 0.5,
     cr: float = 0.7,
-    rt: int = 10,
-    n_jobs: int = 1,
-    cached: bool = False,
-    debug: bool = False,
-    verbose: bool = False,
-    seed: int = 42,
+    **kwargs,
 ) -> tuple:
     """
     Functional interface for Differential Evolution.
@@ -293,23 +262,8 @@ def differential_evolution(
     Returns:
         tuple: (best_pos, best_score).
     """
-    # Convert list population to array if provided
-    pop_arr = np.array(population) if population is not None else None
 
     optimizer = DifferentialEvolution(
-        objective=objective,
-        bounds=bounds,
-        population=pop_arr,
-        variant=variant,
-        callback=callback,
-        n_iter=n_iter,
-        n_pop=n_pop,
-        F=F,
-        cr=cr,
-        n_jobs=n_jobs,
-        cached=cached,
-        debug=debug,
-        verbose=verbose,
-        seed=seed,
+        objective=objective, bounds=bounds, variant=variant, F=F, cr=cr, **kwargs
     )
     return optimizer.optimize()

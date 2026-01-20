@@ -58,37 +58,16 @@ class HillClimbing(Optimizer):
     it only if it strictly improves the objective (Greedy).
     """
 
+    @utils.inherit_signature(Optimizer)
     def __init__(
         self,
         objective: collections.abc.Callable,
         bounds: np.ndarray,
-        population: np.ndarray | None = None,
         step_size: float = 0.01,
-        callback: list[collections.abc.Callable]
-        | collections.abc.Callable
-        | None = None,
-        n_iter: int = 200,
-        n_pop: int = 1,  # Default to 1 for standard Hill Climbing
-        n_jobs: int = 1,
-        cached: bool = False,
-        debug: bool = False,
-        verbose: bool = False,
-        seed: int | np.random.Generator | utils.Sampler | None = None,
+        **kwargs,
     ):
         self.step_size = step_size
-        super().__init__(
-            objective=objective,
-            bounds=bounds,
-            population=population,
-            callback=callback,
-            n_iter=n_iter,
-            n_pop=n_pop,
-            n_jobs=n_jobs,
-            cached=cached,
-            debug=debug,
-            verbose=verbose,
-            seed=seed,
-        )
+        super().__init__(objective=objective, bounds=bounds, **kwargs)
 
     def _initialize(self):
         """
@@ -164,16 +143,8 @@ class HillClimbing(Optimizer):
 def hill_climbing(
     objective: collections.abc.Callable,
     bounds: np.ndarray,
-    population: np.ndarray | None = None,
     step_size: float = 0.01,
-    callback: list[collections.abc.Callable] | collections.abc.Callable | None = None,
-    n_iter: int = 200,
-    n_pop: int = 1,
-    n_jobs: int = 1,
-    cached: bool = False,
-    debug: bool = False,
-    verbose: bool = False,
-    seed: int | np.random.Generator | utils.Sampler | None = None,
+    **kwargs,
 ) -> tuple:
     """
     Functional interface for running Hill Climbing optimization.
@@ -181,32 +152,12 @@ def hill_climbing(
     Args:
         objective (Callable): Function to minimize.
         bounds (np.ndarray): Search space bounds.
-        population (np.ndarray | None): Initial population.
         step_size (float): Standard deviation of perturbation noise.
-        callback (list | Callable | None): End-of-epoch callbacks.
-        n_iter (int): Number of iterations.
-        n_pop (int): Number of parallel climbers (Parallel HC).
-        n_jobs (int): Parallel jobs for evaluation.
-        cached (bool): Enable function caching.
-        debug (bool): Enable history tracking.
-        verbose (bool): Show progress bar.
-        seed (int | Generator | Sampler | None): Random seed/sampler.
 
     Returns:
         tuple: (best_position, best_score) or (best_pos, best_score, history) if debug=True.
     """
     optimizer = HillClimbing(
-        objective=objective,
-        bounds=bounds,
-        population=population,
-        step_size=step_size,
-        callback=callback,
-        n_iter=n_iter,
-        n_pop=n_pop,
-        n_jobs=n_jobs,
-        cached=cached,
-        debug=debug,
-        verbose=verbose,
-        seed=seed,
+        objective=objective, bounds=bounds, step_size=step_size, **kwargs
     )
     return optimizer.optimize()

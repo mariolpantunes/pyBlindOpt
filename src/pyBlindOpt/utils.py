@@ -15,11 +15,30 @@ __url__ = "https://github.com/mariolpantunes/pyblindopt"
 __status__ = "Development"
 
 import abc
+import functools
 import math
 from collections.abc import Callable
 
 import joblib
 import numpy as np
+
+
+def inherit_signature(from_class):
+    def decorator(func):
+        if from_class.__init__.__doc__:
+            func.__doc__ = (
+                (func.__doc__ or "")
+                + "\nBase Parameters:\n"
+                + from_class.__init__.__doc__
+            )
+
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            return func(*args, **kwargs)
+
+        return wrapper
+
+    return decorator
 
 
 def scale(
