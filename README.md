@@ -1,4 +1,4 @@
-# ![pyBlindOpt logo](assets/pyblindopt_logo.svg) pyBlindOpt
+# ![pyBlindOpt logo](https://raw.githubusercontent.com/mariolpantunes/pyBlindOpt/refs/heads/main/assets/pyblindopt_logo.svg) pyBlindOpt
 
 ![PyPI - Version](https://img.shields.io/pypi/v/pyBlindOpt)
 ![PyPI - Python Version](https://img.shields.io/pypi/pyversions/pyBlindOpt)

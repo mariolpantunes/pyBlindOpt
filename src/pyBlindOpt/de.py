@@ -6,24 +6,28 @@ Differential Evolution (DE).
 A powerful evolutionary algorithm that uses the differences between randomly selected vectors to perturb the population.
 
 **Analogy:**
-Imagine a group of agents. Each agent looks at three others, takes the difference between two of them, scales it, and adds it to the third. This creates a "mutant" vector. If the mutant is better, the agent adopts it.
+Imagine a group of agents. Each agent looks at other agents, takes the difference between them, scales it, and adds it to a target vector. This creates a "mutant". If the mutant is better than the current agent, it replaces it.
 
 **Mathematical Formulation:**
 **Mutation (DE/best/1):**
 $$ v_i = x_{best} + F \\cdot (x_{r1} - x_{r2}) $$
 **Crossover:**
 Mixes the target vector $x_i$ and mutant $v_i$ with probability $CR$.
+
+**Key Concepts:**
+* **Mutation:** Generating a new vector from differences of others.
+* **Crossover:** Mixing the mutant with the current individual.
+* **Selection:** Greedy survival (child replaces parent if better).
 """
 
 __author__ = "Mário Antunes"
 __license__ = "MIT"
-__version__ = "0.2.0"
+__version__ = "0.3.0"
 __email__ = "mario.antunes@ua.com"
 __url__ = "https://github.com/mariolpantunes/pyblindopt"
 __status__ = "Development"
 
 import collections.abc
-import enum
 
 import numpy as np
 
@@ -31,32 +35,147 @@ import pyBlindOpt.utils as utils
 from pyBlindOpt.optimizer import Optimizer
 
 
-@enum.unique
-class TargetVector(enum.Enum):
-    best = "best"
-    rand = "rand"
+# ==============================================================================
+# 1. Mutation Operators
+# ==============================================================================
+def mutation_rand_1(
+    current: np.ndarray, best: np.ndarray, candidates: np.ndarray, F: float
+) -> np.ndarray:
+    """
+    DE/rand/1: $v = r1 + F(r2 - r3)$
+    """
+    return candidates[0] + F * (candidates[1] - candidates[2])
 
 
-@enum.unique
-class CrossoverMethod(enum.Enum):
-    bin = "bin"
-    exp = "exp"
+def mutation_best_1(
+    current: np.ndarray, best: np.ndarray, candidates: np.ndarray, F: float
+) -> np.ndarray:
+    """
+    DE/best/1: $v = best + F(r1 - r2)$
+    """
+    return best + F * (candidates[0] - candidates[1])
 
 
+def mutation_rand_2(
+    current: np.ndarray, best: np.ndarray, candidates: np.ndarray, F: float
+) -> np.ndarray:
+    """
+    DE/rand/2: $v = r1 + F(r2 - r3) + F(r4 - r5)$
+    """
+    return (
+        candidates[0]
+        + F * (candidates[1] - candidates[2])
+        + F * (candidates[3] - candidates[4])
+    )
+
+
+def mutation_best_2(
+    current: np.ndarray, best: np.ndarray, candidates: np.ndarray, F: float
+) -> np.ndarray:
+    """
+    DE/best/2: $v = best + F(r1 - r2) + F(r3 - r4)$
+    """
+    return (
+        best + F * (candidates[0] - candidates[1]) + F * (candidates[2] - candidates[3])
+    )
+
+
+def mutation_current_to_best_1(
+    current: np.ndarray, best: np.ndarray, candidates: np.ndarray, F: float
+) -> np.ndarray:
+    """
+    DE/current-to-best/1: $v = current + F(best - current) + F(r1 - r2)$
+    """
+    return current + F * (best - current) + F * (candidates[0] - candidates[1])
+
+
+def mutation_current_to_rand_1(
+    current: np.ndarray, best: np.ndarray, candidates: np.ndarray, F: float
+) -> np.ndarray:
+    """
+    DE/current-to-rand/1: $v = current + F(r1 - current) + F(r2 - r3)$
+    """
+    return current + F * (candidates[0] - current) + F * (candidates[1] - candidates[2])
+
+
+# ==============================================================================
+# 2. Crossover Operators
+# ==============================================================================
+def crossover_bin(
+    target: np.ndarray, mutant: np.ndarray, cr: float, rng: np.random.Generator
+) -> np.ndarray:
+    """
+    Binomial Crossover.
+    Each gene is swapped with probability $CR$. Ensures at least one gene is changed.
+    """
+    dim = target.shape[0]
+    mask = rng.random(dim) < cr
+    # Force at least one index to change (standard DE guarantee)
+    j_rand = rng.integers(0, dim)
+    mask[j_rand] = True
+    return np.where(mask, mutant, target)
+
+
+def crossover_exp(
+    target: np.ndarray, mutant: np.ndarray, cr: float, rng: np.random.Generator
+) -> np.ndarray:
+    """
+    Exponential Crossover.
+    Swaps a contiguous block of genes starting from a random index.
+    """
+    dim = target.shape[0]
+    trial = target.copy()
+    j = rng.integers(0, dim)
+    L = 0
+    while rng.random() < cr and L < dim:
+        trial[j] = mutant[j]
+        j = (j + 1) % dim
+        L += 1
+    return trial
+
+
+# ==============================================================================
+# 3. Optimizer Class
+# ==============================================================================
 class DifferentialEvolution(Optimizer):
     """
     Differential Evolution Optimizer.
 
-    Supports configurable strategies via the `variant` string (e.g., 'best/1/bin', 'rand/1/exp').
+    A versatile DE implementation supporting multiple mutation strategies and crossover methods
+    via a configuration string.
+
+    **Supported Variants:**
+    * `rand/1`: Standard DE. Good diversity.
+    * `best/1`: Converges fast, greedy.
+    * `rand/2`: Robust for difficult landscapes.
+    * `best/2`: Trade-off between greedy and robust.
+    * `current-to-best/1`: Rotationally invariant, modern standard.
+    * `current-to-rand/1`: Rotationally invariant, exploratory.
+
+    **Supported Crossovers:**
+    * `bin`: Binomial (independent swaps).
+    * `exp`: Exponential (block swaps).
     """
+
+    # Strategy Mapping: "Name" -> (Function, Required_Sample_Count)
+    _STRATEGIES = {
+        "rand/1": (mutation_rand_1, 3),
+        "best/1": (mutation_best_1, 2),
+        "rand/2": (mutation_rand_2, 5),
+        "best/2": (mutation_best_2, 4),
+        "current-to-best/1": (mutation_current_to_best_1, 2),
+        "current-to-rand/1": (mutation_current_to_rand_1, 3),
+    }
+
+    _CROSSOVERS = {"bin": crossover_bin, "exp": crossover_exp}
 
     @utils.inherit_signature(Optimizer)
     def __init__(
         self,
         objective: collections.abc.Callable,
         bounds: np.ndarray,
-        population: np.ndarray | None = None,
         variant: str = "best/1/bin",
+        parent_selection: str = "rand",
         F: float = 0.5,
         cr: float = 0.7,
         **kwargs,
@@ -64,30 +183,48 @@ class DifferentialEvolution(Optimizer):
         """
         Differential Evolution Optimizer.
 
-        Supports configurable strategies via the `variant` string (e.g., 'best/1/bin', 'rand/1/exp').
-
         Args:
-            variant (str): Strategy format 'target/num_diffs/crossover'. Defaults to 'best/1/bin'.
+            variant (str): Strategy format 'target/num_diffs/crossover'.
+                           Examples: 'rand/1/bin', 'best/2/exp', 'current-to-best/1/bin'.
+                           Defaults to 'best/1/bin'.
+            parent_selection (str): Method to select the base vector ($r1$).
+                                    Options: 'rand' (Standard), 'tournament'.
+                                    Defaults to 'rand'.
             F (float): Differential weight (scaling factor). Defaults to 0.5.
             cr (float): Crossover probability. Defaults to 0.7.
         """
-
         self.F = F
         self.cr = cr
+        self.parent_selection = parent_selection
+        self.variant_name = variant
 
-        # Parse Variant String (e.g., "best/1/bin")
+        # Parse Variant String
         try:
-            v = variant.split("/")
-            self.tv = TargetVector[v[0]]
-            self.dv = int(v[1])
-            self.cm = CrossoverMethod[v[2]]
-            # Number of candidates needed:
-            # if 'best': we need 'dv' pairs (2*dv)
-            # if 'rand': we need 1 base + 'dv' pairs (1 + 2*dv)
-            self.nc = 2 * self.dv if self.tv is TargetVector.best else 1 + 2 * self.dv
-        except (KeyError, IndexError, ValueError):
+            # Expect format: "strategy_base/strategy_num/crossover"
+            # We join base and num to look up strategy (e.g. "rand/1")
+            parts = variant.split("/")
+            if len(parts) != 3:
+                raise ValueError("Variant format must be 'base/n/cross'")
+
+            strategy_key = f"{parts[0]}/{parts[1]}"
+            crossover_key = parts[2]
+
+            if strategy_key not in self._STRATEGIES:
+                raise KeyError(f"Unknown strategy: {strategy_key}")
+            if crossover_key not in self._CROSSOVERS:
+                raise KeyError(f"Unknown crossover: {crossover_key}")
+
+            self.mutation_op, self.samples_needed = self._STRATEGIES[strategy_key]
+            self.crossover_op = self._CROSSOVERS[crossover_key]
+
+        except (KeyError, IndexError, ValueError) as e:
+            valid_strats = list(self._STRATEGIES.keys())
+            valid_cross = list(self._CROSSOVERS.keys())
             raise ValueError(
-                "Variant must be format: '[rand|best]/n/[bin|exp]' (e.g., 'best/1/bin')"
+                f"Invalid variant '{variant}'.\n"
+                f"Supported Strategies: {valid_strats}\n"
+                f"Supported Crossovers: {valid_cross}\n"
+                f"Error: {e}"
             )
 
         super().__init__(objective, bounds, **kwargs)
@@ -95,155 +232,102 @@ class DifferentialEvolution(Optimizer):
     def _initialize(self):
         """
         Initialization hook.
-
-        No specific state required per iteration.
         """
         pass
 
     def _update_best(self, epoch: int):
         """
         Updates the global best solution.
-
-        Args:
-            epoch (int): Current iteration.
         """
         best_idx = np.argmin(self.scores)
         if self.scores[best_idx] < self.best_score:
             self.best_score = self.scores[best_idx]
             self.best_pos = self.pop[best_idx].copy()
 
-    def _mutation(self, candidates: np.ndarray) -> np.ndarray:
-        """
-        Applies Differential Mutation.
-
-        $$ v = x_{base} + F \\sum (x_{rA} - x_{rB}) $$
-
-        Args:
-            candidates (np.ndarray): Array where index 0 is the base vector and subsequent indices are pairs for difference calculation.
-
-        Returns:
-            np.ndarray: The mutant vector.
-        """
-        diff_sum = np.zeros_like(candidates[0])
-
-        # Iterate pairs: (1,2), (3,4), etc.
-        for i in range(1, len(candidates), 2):
-            diff_sum += candidates[i] - candidates[i + 1]
-
-        return candidates[0] + self.F * diff_sum
-
-    def _crossover_binom(self, target: np.ndarray, mutant: np.ndarray) -> np.ndarray:
-        """
-        Binomial Crossover.
-
-        Each gene is swapped with probability $CR$. Ensures at least one gene is changed.
-
-        Args:
-            target (np.ndarray): The parent vector.
-            mutant (np.ndarray): The donor vector.
-
-        Returns:
-            np.ndarray: The trial vector.
-        """
-        dim = target.shape[0]
-        # 1. Generate random mask
-        mask = self.rng.random(dim) < self.cr
-        # 2. Force at least one index to change (standard DE guarantee)
-        j_rand = self.rng.integers(0, dim)
-        mask[j_rand] = True
-
-        trial = np.where(mask, mutant, target)
-        return trial
-
-    def _crossover_exp(self, target: np.ndarray, mutant: np.ndarray) -> np.ndarray:
-        """
-        Exponential Crossover.
-
-        Swaps a contiguous block of genes starting from a random index.
-
-        Args:
-            target (np.ndarray): The parent vector.
-            mutant (np.ndarray): The donor vector.
-
-        Returns:
-            np.ndarray: The trial vector.
-        """
-        dim = target.shape[0]
-        trial = target.copy()
-
-        j = self.rng.integers(0, dim)
-        L = 0
-        while self.rng.random() < self.cr and L < dim:
-            trial[j] = mutant[j]
-            j = (j + 1) % dim
-            L += 1
-
-        return trial
-
     def _generate_offspring(self, epoch: int) -> np.ndarray:
         """
         Generates the Trial Population.
 
-        1.  **Selection:** Picks random distinct vectors ($r1, r2, ...$) for each individual.
+        1.  **Selection:** Picks random distinct vectors ($r1, r2, ...$).
+            Supports Tournament selection for the base vector ($r1$).
         2.  **Mutation:** Creates mutant vectors.
         3.  **Crossover:** Combines mutant and target vectors.
-
-        Args:
-            epoch (int): Current iteration.
-
-        Returns:
-            np.ndarray: The population of trial vectors.
         """
         offspring = np.zeros_like(self.pop)
+        n_pop = self.n_pop
 
-        for j in range(self.n_pop):
-            available_indices = np.delete(np.arange(self.n_pop), j)
-            count_needed = (
-                2 * self.dv if self.tv is TargetVector.best else 1 + 2 * self.dv
-            )
-            if count_needed > len(available_indices):
-                # Fallback for very small populations
-                choices = self.rng.choice(
-                    available_indices, size=count_needed, replace=True
-                )
+        for j in range(n_pop):
+            # 1. Identify valid pool (cannot include self)
+            available_indices = np.delete(np.arange(n_pop), j)
+
+            # 2. Select Candidates
+            if self.parent_selection == "tournament":
+                # Tournament for the first candidate (r1 / base vector)
+                # This increases selection pressure for the mutation base.
+
+                # a. Perform Tournament
+                k_tournament = 3
+                if len(available_indices) < k_tournament:
+                    # Fallback for small pops
+                    tourn_inds = self.rng.choice(
+                        available_indices, size=len(available_indices), replace=False
+                    )
+                else:
+                    tourn_inds = self.rng.choice(
+                        available_indices, size=k_tournament, replace=False
+                    )
+
+                # Winner has lowest score (minimization)
+                winner_idx = tourn_inds[np.argmin(self.scores[tourn_inds])]
+
+                # b. Select remaining candidates randomly
+                needed_others = self.samples_needed - 1
+                remaining_pool = np.setdiff1d(available_indices, [winner_idx])
+
+                if len(remaining_pool) < needed_others:
+                    # Fallback (allow replacement if strictly needed)
+                    others = self.rng.choice(
+                        remaining_pool, size=needed_others, replace=True
+                    )
+                else:
+                    others = self.rng.choice(
+                        remaining_pool, size=needed_others, replace=False
+                    )
+
+                # Combine: [Winner, r2, r3...]
+                choices = np.concatenate(([winner_idx], others))
+
             else:
-                choices = self.rng.choice(
-                    available_indices, size=count_needed, replace=False
-                )
+                # Standard Random Selection
+                if self.samples_needed > len(available_indices):
+                    choices = self.rng.choice(
+                        available_indices, size=self.samples_needed, replace=True
+                    )
+                else:
+                    choices = self.rng.choice(
+                        available_indices, size=self.samples_needed, replace=False
+                    )
 
-            picked_vecs = self.pop[choices]
+            candidates = self.pop[choices]
 
-            # Construct the mutation candidate list
-            # Format: [Base, Pair1_A, Pair1_B, Pair2_A, Pair2_B...]
-            if self.tv is TargetVector.best:
-                candidates = np.vstack([self.best_pos, picked_vecs])
-            else:
-                candidates = picked_vecs
+            # 3. Mutation
+            # Note: For 'best/...' strategies, 'best' is used as base, and 'candidates' are just diffs.
+            # Tournament selection above mainly benefits 'rand/...' strategies where candidates[0] is base.
+            mutant = self.mutation_op(self.pop[j], self.best_pos, candidates, self.F)
 
-            # 2. Mutation
-            mutated_vec = self._mutation(candidates)
-
-            # 3. Crossover
-            if self.cm is CrossoverMethod.bin:
-                trial_vec = self._crossover_binom(self.pop[j], mutated_vec)
-            else:
-                trial_vec = self._crossover_exp(self.pop[j], mutated_vec)
-
-            offspring[j] = trial_vec
+            # 4. Crossover
+            trial = self.crossover_op(self.pop[j], mutant, self.cr, self.rng)
+            offspring[j] = trial
 
         return offspring
 
     def _selection(self, offspring: np.ndarray, offspring_scores: np.ndarray):
         """
-        Greedy Selection.
+        Greedy Survivor Selection.
 
-        Survivor selection: The child replaces the parent if and only if it is better.
-
-        Args:
-            offspring (np.ndarray): Trial vectors.
-            offspring_scores (np.ndarray): Trial scores.
+        The child replaces the parent if and only if it is better or equal.
         """
-        improved_mask = offspring_scores < self.scores
+        improved_mask = offspring_scores <= self.scores
         self.pop[improved_mask] = offspring[improved_mask]
         self.scores[improved_mask] = offspring_scores[improved_mask]
 
@@ -252,6 +336,7 @@ def differential_evolution(
     objective: collections.abc.Callable,
     bounds: np.ndarray,
     variant: str = "best/1/bin",
+    parent_selection: str = "rand",
     F: float = 0.5,
     cr: float = 0.7,
     **kwargs,
@@ -259,11 +344,24 @@ def differential_evolution(
     """
     Functional interface for Differential Evolution.
 
+    Args:
+        objective (Callable): The function to minimize.
+        bounds (np.ndarray): Search bounds (min, max).
+        variant (str): Strategy string (e.g., 'rand/1/bin').
+        parent_selection (str): 'rand' or 'tournament'.
+        F (float): Mutation factor.
+        cr (float): Crossover probability.
+
     Returns:
         tuple: (best_pos, best_score).
     """
-
     optimizer = DifferentialEvolution(
-        objective=objective, bounds=bounds, variant=variant, F=F, cr=cr, **kwargs
+        objective=objective,
+        bounds=bounds,
+        variant=variant,
+        parent_selection=parent_selection,
+        F=F,
+        cr=cr,
+        **kwargs,
     )
     return optimizer.optimize()
