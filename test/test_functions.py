@@ -1,18 +1,19 @@
 # coding: utf-8
 
-__author__ = 'Mário Antunes'
-__version__ = '0.2'
-__email__ = 'mariolpantunes@gmail.com'
-__status__ = 'Development'
+__author__ = "Mário Antunes"
+__version__ = "0.2"
+__email__ = "mariolpantunes@gmail.com"
+__status__ = "Development"
 
 
 import unittest
+
 import numpy as np
+
 import pyBlindOpt.functions as functions
 
 
 class TestFunctions(unittest.TestCase):
-    
     # --- Sphere Tests ---
     def test_sphere_00(self):
         """Test Sphere Global Minimum at 0"""
@@ -27,7 +28,7 @@ class TestFunctions(unittest.TestCase):
         self.assertEqual(result, 2.0)
 
     # --- Rastrigin Tests ---
-    # 
+    #
     def test_rastrigin_00(self):
         """Test Rastrigin Global Minimum at 0"""
         x = np.array([0, 0])
@@ -44,7 +45,7 @@ class TestFunctions(unittest.TestCase):
         self.assertEqual(result, 1.0)
 
     # --- Ackley Tests ---
-    # 
+    #
     def test_ackley_00(self):
         """Test Ackley Global Minimum at 0"""
         x = np.array([0, 0])
@@ -65,7 +66,7 @@ class TestFunctions(unittest.TestCase):
         self.assertNotEqual(result, 0.0)
 
     # --- Rosenbrock Tests ---
-    # 
+    #
     def test_rosenbrock_00(self):
         """Test Rosenbrock Global Minimum at [1, 1, ..., 1]"""
         # Rosenbrock min is NOT at 0, it is at 1.
@@ -105,5 +106,5 @@ class TestFunctions(unittest.TestCase):
         self.assertGreater(result, 0.0)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()

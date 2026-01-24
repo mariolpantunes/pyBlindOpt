@@ -183,12 +183,13 @@ def oblesa(
     search_mode: str = "radius",
     k: int | None = None,
     decay: float = 0.9,
-    batch_size: int = 50,
+    batch_size: int = 100,
     tol: float = 1e-3,
     radius: float | None = None,
     border_strategy: str = "repulsive",
     metric: str | collections.abc.Callable = "softened_inverse",
-    seed: int | np.random.Generator | None = 42,
+    seed: int | np.random.Generator | None = None,
+    diversity_weight: float = 0.5,
     **metric_kwargs,
 ) -> np.ndarray:
     """
@@ -239,10 +240,20 @@ def oblesa(
         batch = population[i:end]
         scores[i:end] = utils.compute_objective(batch, objective, n_jobs)
 
-    probs = utils.score_2_probs(scores)
+    prob_fitness = utils.score_2_probs(scores)
+
+    if diversity_weight > 0:
+        crowding = utils.compute_crowding_distance(population)
+        prob_dist = utils.score_2_probs(-crowding)
+    else:
+        prob_dist = np.zeros_like(prob_fitness)
+
+    final_probs = (1.0 - diversity_weight) * prob_fitness + diversity_weight * prob_dist
+    # Normalize (Floating point math might make sum slightly != 1.0)
+    final_probs /= np.sum(final_probs)
 
     try:
-        idx = rng.choice(population.shape[0], size=n_pop, replace=False, p=probs)
+        idx = rng.choice(population.shape[0], size=n_pop, replace=False, p=final_probs)
     except ValueError:
         idx = np.argpartition(scores, n_pop)[:n_pop]
 
