@@ -16,6 +16,7 @@ __status__ = "Development"
 
 import abc
 import functools
+import inspect
 import math
 from collections.abc import Callable
 
@@ -23,14 +24,29 @@ import joblib
 import numpy as np
 
 
-def inherit_signature(from_class):
+def inherit_docs(from_obj):
+    """
+    Unified decorator to inherit docstrings from either a class or a function.
+
+    Args:
+        from_obj: The source class or function to pull documentation from.
+    """
+
     def decorator(func):
-        if from_class.__init__.__doc__:
-            func.__doc__ = (
-                (func.__doc__ or "")
-                + "\nBase Parameters:\n"
-                + from_class.__init__.__doc__
-            )
+        # 1. Determine the source of the docstring
+        if inspect.isclass(from_obj):
+            # Prefer __init__ docstring, fallback to class docstring
+            source_doc = from_obj.__init__.__doc__ or from_obj.__doc__
+            header = f"\nBase Parameters (from {from_obj.__name__}):\n"
+        else:
+            source_doc = from_obj.__doc__
+            header = f"\nInherited Parameters (from {from_obj.__name__}):\n"
+
+        # 2. Append the documentation if it exists
+        if source_doc:
+            current_doc = func.__doc__ or ""
+            # Use inspect.cleandoc to fix indentation issues from multiline strings
+            func.__doc__ = f"{current_doc}\n{header}{inspect.cleandoc(source_doc)}"
 
         @functools.wraps(func)
         def wrapper(*args, **kwargs):

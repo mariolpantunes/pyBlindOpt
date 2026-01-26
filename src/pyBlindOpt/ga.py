@@ -258,7 +258,7 @@ class GeneticAlgorithm(Optimizer):
     (selection, crossover, mutation), allowing full customization.
     """
 
-    @utils.inherit_signature(Optimizer)
+    @utils.inherit_docs(Optimizer)
     def __init__(
         self,
         objective: collections.abc.Callable,

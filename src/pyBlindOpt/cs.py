@@ -32,7 +32,7 @@ class CuckooSearch(Optimizer):
     Cuckoo Search (CS) optimization.
     """
 
-    @utils.inherit_signature(Optimizer)
+    @utils.inherit_docs(Optimizer)
     def __init__(
         self,
         objective,

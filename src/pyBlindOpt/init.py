@@ -172,25 +172,18 @@ def round_init(
     return full_pool[selected_indices]
 
 
+@utils.inherit_docs(ess.esa)
 def oblesa(
     objective: collections.abc.Callable,
     bounds: np.ndarray,
+    *,
     population: np.ndarray | utils.Sampler | None = None,
     n_pop: int = 10,
     n_jobs: int = 1,
-    epochs: int = 1024,
-    lr: float = 0.01,
-    search_mode: str = "radius",
-    k: int | None = None,
-    decay: float = 0.9,
-    batch_size: int = 100,
-    tol: float = 1e-3,
-    radius: float | None = None,
-    border_strategy: str = "repulsive",
-    metric: str | collections.abc.Callable = "softened_inverse",
     seed: int | np.random.Generator | None = None,
-    diversity_weight: float = 0.5,
-    **metric_kwargs,
+    selection: str = "best",
+    diversity_weight: float = 0.0,
+    **kwargs,
 ) -> np.ndarray:
     """
     OBLESA (Opposition-Based Learning with Empty Space Search) Initialization.
@@ -199,8 +192,22 @@ def oblesa(
     the population is not only high-quality but also maximally distributed
     (low potential energy configuration).
 
+    Args:
+        objective (Callable): The objective function to minimize.
+        bounds (np.ndarray): Search space boundaries of shape (D, 2).
+        population (ndarray | Sampler | None): Initial population or Sampler.
+            If None, RandomSampler is used.
+        n_pop (int): Number of individuals to select for the final population.
+        n_jobs (int): Number of parallel jobs for objective evaluation.
+        seed (int | Generator | None): Random seed or Generator instance.
+        selection (str): Selection strategy, either 'best' (greedy) or 'random'
+            (stochastic selection based on fitness/diversity).
+        diversity_weight (float): Trade-off between fitness (0.0) and spatial
+            diversity (1.0) using crowding distance.
+        **kwargs: Arguments passed directly to `ess.esa` for the repulsion simulation.
+
     Returns:
-        np.ndarray: Optimized population.
+        np.ndarray: Optimized population of shape (n_pop, D).
     """
     rng = (
         np.random.default_rng(seed)
@@ -214,23 +221,7 @@ def oblesa(
     opp_pop = utils.check_bounds(lower + upper - ran_pop, bounds)
 
     combined_samples = np.vstack((ran_pop, opp_pop))
-    emp_pop = ess.esa(
-        combined_samples,
-        bounds,
-        n=2 * n_pop,
-        epochs=epochs,
-        lr=lr,
-        k=k,
-        decay=decay,
-        batch_size=batch_size,
-        radius=radius,
-        search_mode=search_mode,
-        border_strategy=border_strategy,
-        tol=tol,
-        seed=rng,
-        metric=metric,
-        **metric_kwargs,
-    )
+    emp_pop = ess.esa(combined_samples, bounds, n=2 * n_pop, seed=rng, **kwargs)
 
     population = np.vstack((ran_pop, opp_pop, emp_pop))
     scores = np.zeros(population.shape[0])
@@ -249,13 +240,17 @@ def oblesa(
         prob_dist = np.zeros_like(prob_fitness)
 
     final_probs = (1.0 - diversity_weight) * prob_fitness + diversity_weight * prob_dist
-    # Normalize (Floating point math might make sum slightly != 1.0)
     final_probs /= np.sum(final_probs)
 
-    try:
-        idx = rng.choice(population.shape[0], size=n_pop, replace=False, p=final_probs)
-    except ValueError:
-        idx = np.argpartition(scores, n_pop)[:n_pop]
+    if selection == "best":
+        idx = np.argpartition(final_probs, n_pop)[-n_pop:]
+    else:
+        try:
+            idx = rng.choice(
+                population.shape[0], size=n_pop, replace=False, p=final_probs
+            )
+        except ValueError:
+            idx = np.argpartition(final_probs, n_pop)[-n_pop:]
 
     return population[idx]
 

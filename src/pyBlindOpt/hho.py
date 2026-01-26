@@ -41,7 +41,7 @@ class HarrisHawksOptimization(Optimizer):
     Implements the 4 phases of HHO driven by the escaping energy $E$.
     """
 
-    @utils.inherit_signature(Optimizer)
+    @utils.inherit_docs(Optimizer)
     def __init__(self, objective, bounds, **kwargs):
         super().__init__(objective, bounds, **kwargs)
 

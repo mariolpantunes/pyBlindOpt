@@ -169,7 +169,7 @@ class DifferentialEvolution(Optimizer):
 
     _CROSSOVERS = {"bin": crossover_bin, "exp": crossover_exp}
 
-    @utils.inherit_signature(Optimizer)
+    @utils.inherit_docs(Optimizer)
     def __init__(
         self,
         objective: collections.abc.Callable,

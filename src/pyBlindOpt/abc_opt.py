@@ -35,7 +35,7 @@ class ArtificialBeeColony(Optimizer):
     Artificial Bee Colony Optimizer.
     """
 
-    @utils.inherit_signature(Optimizer)
+    @utils.inherit_docs(Optimizer)
     def __init__(self, objective, bounds, limit: int = 50, **kwargs):
         """
         Artificial Bee Colony Optimizer.

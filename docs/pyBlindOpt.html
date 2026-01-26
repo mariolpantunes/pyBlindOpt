@@ -537,7 +537,7 @@ independent of previous results.</p>
 </span><span id="HillClimbing-59"><a href="#HillClimbing-59"><span class="linenos"> 59</span></a><span class="sd">    it only if it strictly improves the objective (Greedy).</span>
 </span><span id="HillClimbing-60"><a href="#HillClimbing-60"><span class="linenos"> 60</span></a><span class="sd">    &quot;&quot;&quot;</span>
 </span><span id="HillClimbing-61"><a href="#HillClimbing-61"><span class="linenos"> 61</span></a>
-</span><span id="HillClimbing-62"><a href="#HillClimbing-62"><span class="linenos"> 62</span></a>    <span class="nd">@utils</span><span class="o">.</span><span class="n">inherit_signature</span><span class="p">(</span><span class="n">Optimizer</span><span class="p">)</span>
+</span><span id="HillClimbing-62"><a href="#HillClimbing-62"><span class="linenos"> 62</span></a>    <span class="nd">@utils</span><span class="o">.</span><span class="n">inherit_docs</span><span class="p">(</span><span class="n">Optimizer</span><span class="p">)</span>
 </span><span id="HillClimbing-63"><a href="#HillClimbing-63"><span class="linenos"> 63</span></a>    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
 </span><span id="HillClimbing-64"><a href="#HillClimbing-64"><span class="linenos"> 64</span></a>        <span class="bp">self</span><span class="p">,</span>
 </span><span id="HillClimbing-65"><a href="#HillClimbing-65"><span class="linenos"> 65</span></a>        <span class="n">objective</span><span class="p">:</span> <span class="n">collections</span><span class="o">.</span><span class="n">abc</span><span class="o">.</span><span class="n">Callable</span><span class="p">,</span>
@@ -630,7 +630,7 @@ it only if it strictly improves the objective (Greedy).</p>
                             <div id="HillClimbing.__init__" class="classattr">
                                         <input id="HillClimbing.__init__-view-source" class="view-source-toggle-state" type="checkbox" aria-hidden="true" tabindex="-1">
 <div class="attr function">
-                    <div class="decorator decorator-utils.inherit_signature">@utils.inherit_signature(Optimizer)</div>
+                    <div class="decorator decorator-utils.inherit_docs">@utils.inherit_docs(Optimizer)</div>
 
         <span class="name">HillClimbing</span><span class="signature pdoc-code multiline">(<span class="param">	<span class="n">objective</span><span class="p">:</span> <span class="n">Callable</span>,</span><span class="param">	<span class="n">bounds</span><span class="p">:</span> <span class="n">numpy</span><span class="o">.</span><span class="n">ndarray</span>,</span><span class="param">	<span class="n">step_size</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.01</span>,</span><span class="param">	<span class="o">**</span><span class="n">kwargs</span></span>)</span>
 
@@ -638,7 +638,7 @@ it only if it strictly improves the objective (Greedy).</p>
 
     </div>
     <a class="headerlink" href="#HillClimbing.__init__"></a>
-            <div class="pdoc-code codehilite"><pre><span></span><span id="HillClimbing.__init__-62"><a href="#HillClimbing.__init__-62"><span class="linenos">62</span></a>    <span class="nd">@utils</span><span class="o">.</span><span class="n">inherit_signature</span><span class="p">(</span><span class="n">Optimizer</span><span class="p">)</span>
+            <div class="pdoc-code codehilite"><pre><span></span><span id="HillClimbing.__init__-62"><a href="#HillClimbing.__init__-62"><span class="linenos">62</span></a>    <span class="nd">@utils</span><span class="o">.</span><span class="n">inherit_docs</span><span class="p">(</span><span class="n">Optimizer</span><span class="p">)</span>
 </span><span id="HillClimbing.__init__-63"><a href="#HillClimbing.__init__-63"><span class="linenos">63</span></a>    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
 </span><span id="HillClimbing.__init__-64"><a href="#HillClimbing.__init__-64"><span class="linenos">64</span></a>        <span class="bp">self</span><span class="p">,</span>
 </span><span id="HillClimbing.__init__-65"><a href="#HillClimbing.__init__-65"><span class="linenos">65</span></a>        <span class="n">objective</span><span class="p">:</span> <span class="n">collections</span><span class="o">.</span><span class="n">abc</span><span class="o">.</span><span class="n">Callable</span><span class="p">,</span>
@@ -651,18 +651,18 @@ it only if it strictly improves the objective (Greedy).</p>
 </span></pre></div>
 
 
-            <div class="docstring"><h6 id="base-parameters">Base Parameters:</h6>
+            <div class="docstring"><p>Base Parameters (from Optimizer):
+Initializes the optimizer infrastructure.</p>
 
-<blockquote>
-  <p>Initializes the optimizer infrastructure.</p>
-  
-  <p>Args:
-      objective: Target function.
-      bounds: Search space constraints.
-      n_iter: Max epochs.
-      n_pop: Population size.
-      cached: Enable disk caching for objective.</p>
-</blockquote>
+<h6 id="arguments">Arguments:</h6>
+
+<ul>
+<li><strong>objective:</strong>  Target function.</li>
+<li><strong>bounds:</strong>  Search space constraints.</li>
+<li><strong>n_iter:</strong>  Max epochs.</li>
+<li><strong>n_pop:</strong>  Population size.</li>
+<li><strong>cached:</strong>  Enable disk caching for objective.</li>
+</ul>
 </div>
 
 
@@ -705,7 +705,7 @@ it only if it strictly improves the objective (Greedy).</p>
 </span><span id="SimulatedAnnealing-42"><a href="#SimulatedAnnealing-42"><span class="linenos"> 42</span></a><span class="sd">    $$ T_k = \\frac{T_0}{k + 1} $$</span>
 </span><span id="SimulatedAnnealing-43"><a href="#SimulatedAnnealing-43"><span class="linenos"> 43</span></a><span class="sd">    &quot;&quot;&quot;</span>
 </span><span id="SimulatedAnnealing-44"><a href="#SimulatedAnnealing-44"><span class="linenos"> 44</span></a>
-</span><span id="SimulatedAnnealing-45"><a href="#SimulatedAnnealing-45"><span class="linenos"> 45</span></a>    <span class="nd">@utils</span><span class="o">.</span><span class="n">inherit_signature</span><span class="p">(</span><span class="n">Optimizer</span><span class="p">)</span>
+</span><span id="SimulatedAnnealing-45"><a href="#SimulatedAnnealing-45"><span class="linenos"> 45</span></a>    <span class="nd">@utils</span><span class="o">.</span><span class="n">inherit_docs</span><span class="p">(</span><span class="n">Optimizer</span><span class="p">)</span>
 </span><span id="SimulatedAnnealing-46"><a href="#SimulatedAnnealing-46"><span class="linenos"> 46</span></a>    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
 </span><span id="SimulatedAnnealing-47"><a href="#SimulatedAnnealing-47"><span class="linenos"> 47</span></a>        <span class="bp">self</span><span class="p">,</span>
 </span><span id="SimulatedAnnealing-48"><a href="#SimulatedAnnealing-48"><span class="linenos"> 48</span></a>        <span class="n">objective</span><span class="p">:</span> <span class="n">collections</span><span class="o">.</span><span class="n">abc</span><span class="o">.</span><span class="n">Callable</span><span class="p">,</span>
@@ -813,7 +813,7 @@ $$ T_k = \frac{T_0}{k + 1} $$</p>
                             <div id="SimulatedAnnealing.__init__" class="classattr">
                                         <input id="SimulatedAnnealing.__init__-view-source" class="view-source-toggle-state" type="checkbox" aria-hidden="true" tabindex="-1">
 <div class="attr function">
-                    <div class="decorator decorator-utils.inherit_signature">@utils.inherit_signature(Optimizer)</div>
+                    <div class="decorator decorator-utils.inherit_docs">@utils.inherit_docs(Optimizer)</div>
 
         <span class="name">SimulatedAnnealing</span><span class="signature pdoc-code multiline">(<span class="param">	<span class="n">objective</span><span class="p">:</span> <span class="n">Callable</span>,</span><span class="param">	<span class="n">bounds</span><span class="p">:</span> <span class="n">numpy</span><span class="o">.</span><span class="n">ndarray</span>,</span><span class="param">	<span class="n">step_size</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.01</span>,</span><span class="param">	<span class="n">temp</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">20.0</span>,</span><span class="param">	<span class="o">**</span><span class="n">kwargs</span></span>)</span>
 
@@ -821,7 +821,7 @@ $$ T_k = \frac{T_0}{k + 1} $$</p>
 
     </div>
     <a class="headerlink" href="#SimulatedAnnealing.__init__"></a>
-            <div class="pdoc-code codehilite"><pre><span></span><span id="SimulatedAnnealing.__init__-45"><a href="#SimulatedAnnealing.__init__-45"><span class="linenos">45</span></a>    <span class="nd">@utils</span><span class="o">.</span><span class="n">inherit_signature</span><span class="p">(</span><span class="n">Optimizer</span><span class="p">)</span>
+            <div class="pdoc-code codehilite"><pre><span></span><span id="SimulatedAnnealing.__init__-45"><a href="#SimulatedAnnealing.__init__-45"><span class="linenos">45</span></a>    <span class="nd">@utils</span><span class="o">.</span><span class="n">inherit_docs</span><span class="p">(</span><span class="n">Optimizer</span><span class="p">)</span>
 </span><span id="SimulatedAnnealing.__init__-46"><a href="#SimulatedAnnealing.__init__-46"><span class="linenos">46</span></a>    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
 </span><span id="SimulatedAnnealing.__init__-47"><a href="#SimulatedAnnealing.__init__-47"><span class="linenos">47</span></a>        <span class="bp">self</span><span class="p">,</span>
 </span><span id="SimulatedAnnealing.__init__-48"><a href="#SimulatedAnnealing.__init__-48"><span class="linenos">48</span></a>        <span class="n">objective</span><span class="p">:</span> <span class="n">collections</span><span class="o">.</span><span class="n">abc</span><span class="o">.</span><span class="n">Callable</span><span class="p">,</span>
@@ -838,18 +838,18 @@ $$ T_k = \frac{T_0}{k + 1} $$</p>
 </span></pre></div>
 
 
-            <div class="docstring"><h6 id="base-parameters">Base Parameters:</h6>
+            <div class="docstring"><p>Base Parameters (from Optimizer):
+Initializes the optimizer infrastructure.</p>
 
-<blockquote>
-  <p>Initializes the optimizer infrastructure.</p>
-  
-  <p>Args:
-      objective: Target function.
-      bounds: Search space constraints.
-      n_iter: Max epochs.
-      n_pop: Population size.
-      cached: Enable disk caching for objective.</p>
-</blockquote>
+<h6 id="arguments">Arguments:</h6>
+
+<ul>
+<li><strong>objective:</strong>  Target function.</li>
+<li><strong>bounds:</strong>  Search space constraints.</li>
+<li><strong>n_iter:</strong>  Max epochs.</li>
+<li><strong>n_pop:</strong>  Population size.</li>
+<li><strong>cached:</strong>  Enable disk caching for objective.</li>
+</ul>
 </div>
 
 
@@ -910,7 +910,7 @@ $$ T_k = \frac{T_0}{k + 1} $$</p>
 </span><span id="GeneticAlgorithm-259"><a href="#GeneticAlgorithm-259"><span class="linenos">259</span></a><span class="sd">    (selection, crossover, mutation), allowing full customization.</span>
 </span><span id="GeneticAlgorithm-260"><a href="#GeneticAlgorithm-260"><span class="linenos">260</span></a><span class="sd">    &quot;&quot;&quot;</span>
 </span><span id="GeneticAlgorithm-261"><a href="#GeneticAlgorithm-261"><span class="linenos">261</span></a>
-</span><span id="GeneticAlgorithm-262"><a href="#GeneticAlgorithm-262"><span class="linenos">262</span></a>    <span class="nd">@utils</span><span class="o">.</span><span class="n">inherit_signature</span><span class="p">(</span><span class="n">Optimizer</span><span class="p">)</span>
+</span><span id="GeneticAlgorithm-262"><a href="#GeneticAlgorithm-262"><span class="linenos">262</span></a>    <span class="nd">@utils</span><span class="o">.</span><span class="n">inherit_docs</span><span class="p">(</span><span class="n">Optimizer</span><span class="p">)</span>
 </span><span id="GeneticAlgorithm-263"><a href="#GeneticAlgorithm-263"><span class="linenos">263</span></a>    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
 </span><span id="GeneticAlgorithm-264"><a href="#GeneticAlgorithm-264"><span class="linenos">264</span></a>        <span class="bp">self</span><span class="p">,</span>
 </span><span id="GeneticAlgorithm-265"><a href="#GeneticAlgorithm-265"><span class="linenos">265</span></a>        <span class="n">objective</span><span class="p">:</span> <span class="n">collections</span><span class="o">.</span><span class="n">abc</span><span class="o">.</span><span class="n">Callable</span><span class="p">,</span>
@@ -1065,7 +1065,7 @@ inspired operators.</p>
                             <div id="GeneticAlgorithm.__init__" class="classattr">
                                         <input id="GeneticAlgorithm.__init__-view-source" class="view-source-toggle-state" type="checkbox" aria-hidden="true" tabindex="-1">
 <div class="attr function">
-                    <div class="decorator decorator-utils.inherit_signature">@utils.inherit_signature(Optimizer)</div>
+                    <div class="decorator decorator-utils.inherit_docs">@utils.inherit_docs(Optimizer)</div>
 
         <span class="name">GeneticAlgorithm</span><span class="signature pdoc-code multiline">(<span class="param">	<span class="n">objective</span><span class="p">:</span> <span class="n">Callable</span>,</span><span class="param">	<span class="n">bounds</span><span class="p">:</span> <span class="n">numpy</span><span class="o">.</span><span class="n">ndarray</span>,</span><span class="param">	<span class="n">selection</span><span class="p">:</span> <span class="n">Callable</span> <span class="o">=</span> <span class="o">&lt;</span><span class="n">function</span> <span class="n">tournament_selection</span><span class="o">&gt;</span>,</span><span class="param">	<span class="n">crossover</span><span class="p">:</span> <span class="n">Callable</span> <span class="o">=</span> <span class="o">&lt;</span><span class="n">function</span> <span class="n">blend_crossover</span><span class="o">&gt;</span>,</span><span class="param">	<span class="n">mutation</span><span class="p">:</span> <span class="n">Callable</span> <span class="o">=</span> <span class="o">&lt;</span><span class="n">function</span> <span class="n">random_mutation</span><span class="o">&gt;</span>,</span><span class="param">	<span class="n">r_cross</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.9</span>,</span><span class="param">	<span class="n">r_mut</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.3</span>,</span><span class="param">	<span class="o">**</span><span class="n">kwargs</span></span>)</span>
 
@@ -1073,7 +1073,7 @@ inspired operators.</p>
 
     </div>
     <a class="headerlink" href="#GeneticAlgorithm.__init__"></a>
-            <div class="pdoc-code codehilite"><pre><span></span><span id="GeneticAlgorithm.__init__-262"><a href="#GeneticAlgorithm.__init__-262"><span class="linenos">262</span></a>    <span class="nd">@utils</span><span class="o">.</span><span class="n">inherit_signature</span><span class="p">(</span><span class="n">Optimizer</span><span class="p">)</span>
+            <div class="pdoc-code codehilite"><pre><span></span><span id="GeneticAlgorithm.__init__-262"><a href="#GeneticAlgorithm.__init__-262"><span class="linenos">262</span></a>    <span class="nd">@utils</span><span class="o">.</span><span class="n">inherit_docs</span><span class="p">(</span><span class="n">Optimizer</span><span class="p">)</span>
 </span><span id="GeneticAlgorithm.__init__-263"><a href="#GeneticAlgorithm.__init__-263"><span class="linenos">263</span></a>    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
 </span><span id="GeneticAlgorithm.__init__-264"><a href="#GeneticAlgorithm.__init__-264"><span class="linenos">264</span></a>        <span class="bp">self</span><span class="p">,</span>
 </span><span id="GeneticAlgorithm.__init__-265"><a href="#GeneticAlgorithm.__init__-265"><span class="linenos">265</span></a>        <span class="n">objective</span><span class="p">:</span> <span class="n">collections</span><span class="o">.</span><span class="n">abc</span><span class="o">.</span><span class="n">Callable</span><span class="p">,</span>
@@ -1122,18 +1122,18 @@ inspired operators.</p>
         r_mut (float): Mutation probability. Defaults to 0.3.
 </code></pre>
 
-<h6 id="base-parameters">Base Parameters:</h6>
+<p>Base Parameters (from Optimizer):
+Initializes the optimizer infrastructure.</p>
 
-<blockquote>
-  <p>Initializes the optimizer infrastructure.</p>
-  
-  <p>Args:
-      objective: Target function.
-      bounds: Search space constraints.
-      n_iter: Max epochs.
-      n_pop: Population size.
-      cached: Enable disk caching for objective.</p>
-</blockquote>
+<h6 id="arguments">Arguments:</h6>
+
+<ul>
+<li><strong>objective:</strong>  Target function.</li>
+<li><strong>bounds:</strong>  Search space constraints.</li>
+<li><strong>n_iter:</strong>  Max epochs.</li>
+<li><strong>n_pop:</strong>  Population size.</li>
+<li><strong>cached:</strong>  Enable disk caching for objective.</li>
+</ul>
 </div>
 
 
@@ -1237,7 +1237,7 @@ inspired operators.</p>
 </span><span id="DifferentialEvolution-170"><a href="#DifferentialEvolution-170"><span class="linenos">170</span></a>
 </span><span id="DifferentialEvolution-171"><a href="#DifferentialEvolution-171"><span class="linenos">171</span></a>    <span class="n">_CROSSOVERS</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;bin&quot;</span><span class="p">:</span> <span class="n">crossover_bin</span><span class="p">,</span> <span class="s2">&quot;exp&quot;</span><span class="p">:</span> <span class="n">crossover_exp</span><span class="p">}</span>
 </span><span id="DifferentialEvolution-172"><a href="#DifferentialEvolution-172"><span class="linenos">172</span></a>
-</span><span id="DifferentialEvolution-173"><a href="#DifferentialEvolution-173"><span class="linenos">173</span></a>    <span class="nd">@utils</span><span class="o">.</span><span class="n">inherit_signature</span><span class="p">(</span><span class="n">Optimizer</span><span class="p">)</span>
+</span><span id="DifferentialEvolution-173"><a href="#DifferentialEvolution-173"><span class="linenos">173</span></a>    <span class="nd">@utils</span><span class="o">.</span><span class="n">inherit_docs</span><span class="p">(</span><span class="n">Optimizer</span><span class="p">)</span>
 </span><span id="DifferentialEvolution-174"><a href="#DifferentialEvolution-174"><span class="linenos">174</span></a>    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
 </span><span id="DifferentialEvolution-175"><a href="#DifferentialEvolution-175"><span class="linenos">175</span></a>        <span class="bp">self</span><span class="p">,</span>
 </span><span id="DifferentialEvolution-176"><a href="#DifferentialEvolution-176"><span class="linenos">176</span></a>        <span class="n">objective</span><span class="p">:</span> <span class="n">collections</span><span class="o">.</span><span class="n">abc</span><span class="o">.</span><span class="n">Callable</span><span class="p">,</span>
@@ -1429,7 +1429,7 @@ via a configuration string.</p>
                             <div id="DifferentialEvolution.__init__" class="classattr">
                                         <input id="DifferentialEvolution.__init__-view-source" class="view-source-toggle-state" type="checkbox" aria-hidden="true" tabindex="-1">
 <div class="attr function">
-                    <div class="decorator decorator-utils.inherit_signature">@utils.inherit_signature(Optimizer)</div>
+                    <div class="decorator decorator-utils.inherit_docs">@utils.inherit_docs(Optimizer)</div>
 
         <span class="name">DifferentialEvolution</span><span class="signature pdoc-code multiline">(<span class="param">	<span class="n">objective</span><span class="p">:</span> <span class="n">Callable</span>,</span><span class="param">	<span class="n">bounds</span><span class="p">:</span> <span class="n">numpy</span><span class="o">.</span><span class="n">ndarray</span>,</span><span class="param">	<span class="n">variant</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s1">&#39;best/1/bin&#39;</span>,</span><span class="param">	<span class="n">parent_selection</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s1">&#39;rand&#39;</span>,</span><span class="param">	<span class="n">F</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.5</span>,</span><span class="param">	<span class="n">cr</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.7</span>,</span><span class="param">	<span class="o">**</span><span class="n">kwargs</span></span>)</span>
 
@@ -1437,7 +1437,7 @@ via a configuration string.</p>
 
     </div>
     <a class="headerlink" href="#DifferentialEvolution.__init__"></a>
-            <div class="pdoc-code codehilite"><pre><span></span><span id="DifferentialEvolution.__init__-173"><a href="#DifferentialEvolution.__init__-173"><span class="linenos">173</span></a>    <span class="nd">@utils</span><span class="o">.</span><span class="n">inherit_signature</span><span class="p">(</span><span class="n">Optimizer</span><span class="p">)</span>
+            <div class="pdoc-code codehilite"><pre><span></span><span id="DifferentialEvolution.__init__-173"><a href="#DifferentialEvolution.__init__-173"><span class="linenos">173</span></a>    <span class="nd">@utils</span><span class="o">.</span><span class="n">inherit_docs</span><span class="p">(</span><span class="n">Optimizer</span><span class="p">)</span>
 </span><span id="DifferentialEvolution.__init__-174"><a href="#DifferentialEvolution.__init__-174"><span class="linenos">174</span></a>    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
 </span><span id="DifferentialEvolution.__init__-175"><a href="#DifferentialEvolution.__init__-175"><span class="linenos">175</span></a>        <span class="bp">self</span><span class="p">,</span>
 </span><span id="DifferentialEvolution.__init__-176"><a href="#DifferentialEvolution.__init__-176"><span class="linenos">176</span></a>        <span class="n">objective</span><span class="p">:</span> <span class="n">collections</span><span class="o">.</span><span class="n">abc</span><span class="o">.</span><span class="n">Callable</span><span class="p">,</span>
@@ -1512,18 +1512,18 @@ via a configuration string.</p>
         cr (float): Crossover probability. Defaults to 0.7.
 </code></pre>
 
-<h6 id="base-parameters">Base Parameters:</h6>
+<p>Base Parameters (from Optimizer):
+Initializes the optimizer infrastructure.</p>
 
-<blockquote>
-  <p>Initializes the optimizer infrastructure.</p>
-  
-  <p>Args:
-      objective: Target function.
-      bounds: Search space constraints.
-      n_iter: Max epochs.
-      n_pop: Population size.
-      cached: Enable disk caching for objective.</p>
-</blockquote>
+<h6 id="arguments">Arguments:</h6>
+
+<ul>
+<li><strong>objective:</strong>  Target function.</li>
+<li><strong>bounds:</strong>  Search space constraints.</li>
+<li><strong>n_iter:</strong>  Max epochs.</li>
+<li><strong>n_pop:</strong>  Population size.</li>
+<li><strong>cached:</strong>  Enable disk caching for objective.</li>
+</ul>
 </div>
 
 
@@ -1592,7 +1592,7 @@ via a configuration string.</p>
 </span><span id="ParticleSwarmOptimization-40"><a href="#ParticleSwarmOptimization-40"><span class="linenos"> 40</span></a><span class="sd">    guided by their own best known position (pbest) and the swarm&#39;s best known position (gbest).</span>
 </span><span id="ParticleSwarmOptimization-41"><a href="#ParticleSwarmOptimization-41"><span class="linenos"> 41</span></a><span class="sd">    &quot;&quot;&quot;</span>
 </span><span id="ParticleSwarmOptimization-42"><a href="#ParticleSwarmOptimization-42"><span class="linenos"> 42</span></a>
-</span><span id="ParticleSwarmOptimization-43"><a href="#ParticleSwarmOptimization-43"><span class="linenos"> 43</span></a>    <span class="nd">@utils</span><span class="o">.</span><span class="n">inherit_signature</span><span class="p">(</span><span class="n">Optimizer</span><span class="p">)</span>
+</span><span id="ParticleSwarmOptimization-43"><a href="#ParticleSwarmOptimization-43"><span class="linenos"> 43</span></a>    <span class="nd">@utils</span><span class="o">.</span><span class="n">inherit_docs</span><span class="p">(</span><span class="n">Optimizer</span><span class="p">)</span>
 </span><span id="ParticleSwarmOptimization-44"><a href="#ParticleSwarmOptimization-44"><span class="linenos"> 44</span></a>    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
 </span><span id="ParticleSwarmOptimization-45"><a href="#ParticleSwarmOptimization-45"><span class="linenos"> 45</span></a>        <span class="bp">self</span><span class="p">,</span>
 </span><span id="ParticleSwarmOptimization-46"><a href="#ParticleSwarmOptimization-46"><span class="linenos"> 46</span></a>        <span class="n">objective</span><span class="p">:</span> <span class="n">collections</span><span class="o">.</span><span class="n">abc</span><span class="o">.</span><span class="n">Callable</span><span class="p">,</span>
@@ -1735,7 +1735,7 @@ guided by their own best known position (pbest) and the swarm's best known posit
                             <div id="ParticleSwarmOptimization.__init__" class="classattr">
                                         <input id="ParticleSwarmOptimization.__init__-view-source" class="view-source-toggle-state" type="checkbox" aria-hidden="true" tabindex="-1">
 <div class="attr function">
-                    <div class="decorator decorator-utils.inherit_signature">@utils.inherit_signature(Optimizer)</div>
+                    <div class="decorator decorator-utils.inherit_docs">@utils.inherit_docs(Optimizer)</div>
 
         <span class="name">ParticleSwarmOptimization</span><span class="signature pdoc-code multiline">(<span class="param">	<span class="n">objective</span><span class="p">:</span> <span class="n">Callable</span>,</span><span class="param">	<span class="n">bounds</span><span class="p">:</span> <span class="n">numpy</span><span class="o">.</span><span class="n">ndarray</span>,</span><span class="param">	<span class="n">c1</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.1</span>,</span><span class="param">	<span class="n">c2</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.1</span>,</span><span class="param">	<span class="n">w</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.8</span>,</span><span class="param">	<span class="o">**</span><span class="n">kwargs</span></span>)</span>
 
@@ -1743,7 +1743,7 @@ guided by their own best known position (pbest) and the swarm's best known posit
 
     </div>
     <a class="headerlink" href="#ParticleSwarmOptimization.__init__"></a>
-            <div class="pdoc-code codehilite"><pre><span></span><span id="ParticleSwarmOptimization.__init__-43"><a href="#ParticleSwarmOptimization.__init__-43"><span class="linenos">43</span></a>    <span class="nd">@utils</span><span class="o">.</span><span class="n">inherit_signature</span><span class="p">(</span><span class="n">Optimizer</span><span class="p">)</span>
+            <div class="pdoc-code codehilite"><pre><span></span><span id="ParticleSwarmOptimization.__init__-43"><a href="#ParticleSwarmOptimization.__init__-43"><span class="linenos">43</span></a>    <span class="nd">@utils</span><span class="o">.</span><span class="n">inherit_docs</span><span class="p">(</span><span class="n">Optimizer</span><span class="p">)</span>
 </span><span id="ParticleSwarmOptimization.__init__-44"><a href="#ParticleSwarmOptimization.__init__-44"><span class="linenos">44</span></a>    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
 </span><span id="ParticleSwarmOptimization.__init__-45"><a href="#ParticleSwarmOptimization.__init__-45"><span class="linenos">45</span></a>        <span class="bp">self</span><span class="p">,</span>
 </span><span id="ParticleSwarmOptimization.__init__-46"><a href="#ParticleSwarmOptimization.__init__-46"><span class="linenos">46</span></a>        <span class="n">objective</span><span class="p">:</span> <span class="n">collections</span><span class="o">.</span><span class="n">abc</span><span class="o">.</span><span class="n">Callable</span><span class="p">,</span>
@@ -1777,18 +1777,18 @@ guided by their own best known position (pbest) and the swarm's best known posit
         w (float): Inertia weight. Keeps the particle moving in its previous direction. Defaults to 0.8.
 </code></pre>
 
-<h6 id="base-parameters">Base Parameters:</h6>
+<p>Base Parameters (from Optimizer):
+Initializes the optimizer infrastructure.</p>
 
-<blockquote>
-  <p>Initializes the optimizer infrastructure.</p>
-  
-  <p>Args:
-      objective: Target function.
-      bounds: Search space constraints.
-      n_iter: Max epochs.
-      n_pop: Population size.
-      cached: Enable disk caching for objective.</p>
-</blockquote>
+<h6 id="arguments">Arguments:</h6>
+
+<ul>
+<li><strong>objective:</strong>  Target function.</li>
+<li><strong>bounds:</strong>  Search space constraints.</li>
+<li><strong>n_iter:</strong>  Max epochs.</li>
+<li><strong>n_pop:</strong>  Population size.</li>
+<li><strong>cached:</strong>  Enable disk caching for objective.</li>
+</ul>
 </div>
 
 
@@ -2059,7 +2059,7 @@ guided by their own best known position (pbest) and the swarm's best known posit
 </span><span id="ArtificialBeeColony-36"><a href="#ArtificialBeeColony-36"><span class="linenos"> 36</span></a><span class="sd">    Artificial Bee Colony Optimizer.</span>
 </span><span id="ArtificialBeeColony-37"><a href="#ArtificialBeeColony-37"><span class="linenos"> 37</span></a><span class="sd">    &quot;&quot;&quot;</span>
 </span><span id="ArtificialBeeColony-38"><a href="#ArtificialBeeColony-38"><span class="linenos"> 38</span></a>
-</span><span id="ArtificialBeeColony-39"><a href="#ArtificialBeeColony-39"><span class="linenos"> 39</span></a>    <span class="nd">@utils</span><span class="o">.</span><span class="n">inherit_signature</span><span class="p">(</span><span class="n">Optimizer</span><span class="p">)</span>
+</span><span id="ArtificialBeeColony-39"><a href="#ArtificialBeeColony-39"><span class="linenos"> 39</span></a>    <span class="nd">@utils</span><span class="o">.</span><span class="n">inherit_docs</span><span class="p">(</span><span class="n">Optimizer</span><span class="p">)</span>
 </span><span id="ArtificialBeeColony-40"><a href="#ArtificialBeeColony-40"><span class="linenos"> 40</span></a>    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">objective</span><span class="p">,</span> <span class="n">bounds</span><span class="p">,</span> <span class="n">limit</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">50</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
 </span><span id="ArtificialBeeColony-41"><a href="#ArtificialBeeColony-41"><span class="linenos"> 41</span></a><span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
 </span><span id="ArtificialBeeColony-42"><a href="#ArtificialBeeColony-42"><span class="linenos"> 42</span></a><span class="sd">        Artificial Bee Colony Optimizer.</span>
@@ -2215,7 +2215,7 @@ guided by their own best known position (pbest) and the swarm's best known posit
                             <div id="ArtificialBeeColony.__init__" class="classattr">
                                         <input id="ArtificialBeeColony.__init__-view-source" class="view-source-toggle-state" type="checkbox" aria-hidden="true" tabindex="-1">
 <div class="attr function">
-                    <div class="decorator decorator-utils.inherit_signature">@utils.inherit_signature(Optimizer)</div>
+                    <div class="decorator decorator-utils.inherit_docs">@utils.inherit_docs(Optimizer)</div>
 
         <span class="name">ArtificialBeeColony</span><span class="signature pdoc-code condensed">(<span class="param"><span class="n">objective</span>, </span><span class="param"><span class="n">bounds</span>, </span><span class="param"><span class="n">limit</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">50</span>, </span><span class="param"><span class="o">**</span><span class="n">kwargs</span></span>)</span>
 
@@ -2223,7 +2223,7 @@ guided by their own best known position (pbest) and the swarm's best known posit
 
     </div>
     <a class="headerlink" href="#ArtificialBeeColony.__init__"></a>
-            <div class="pdoc-code codehilite"><pre><span></span><span id="ArtificialBeeColony.__init__-39"><a href="#ArtificialBeeColony.__init__-39"><span class="linenos">39</span></a>    <span class="nd">@utils</span><span class="o">.</span><span class="n">inherit_signature</span><span class="p">(</span><span class="n">Optimizer</span><span class="p">)</span>
+            <div class="pdoc-code codehilite"><pre><span></span><span id="ArtificialBeeColony.__init__-39"><a href="#ArtificialBeeColony.__init__-39"><span class="linenos">39</span></a>    <span class="nd">@utils</span><span class="o">.</span><span class="n">inherit_docs</span><span class="p">(</span><span class="n">Optimizer</span><span class="p">)</span>
 </span><span id="ArtificialBeeColony.__init__-40"><a href="#ArtificialBeeColony.__init__-40"><span class="linenos">40</span></a>    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">objective</span><span class="p">,</span> <span class="n">bounds</span><span class="p">,</span> <span class="n">limit</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">50</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
 </span><span id="ArtificialBeeColony.__init__-41"><a href="#ArtificialBeeColony.__init__-41"><span class="linenos">41</span></a><span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
 </span><span id="ArtificialBeeColony.__init__-42"><a href="#ArtificialBeeColony.__init__-42"><span class="linenos">42</span></a><span class="sd">        Artificial Bee Colony Optimizer.</span>
@@ -2242,18 +2242,18 @@ guided by their own best known position (pbest) and the swarm's best known posit
         limit (int, optional): The number of trials without improvement before a food source is abandoned (Scout phase). Defaults to 50.
 </code></pre>
 
-<h6 id="base-parameters">Base Parameters:</h6>
+<p>Base Parameters (from Optimizer):
+Initializes the optimizer infrastructure.</p>
 
-<blockquote>
-  <p>Initializes the optimizer infrastructure.</p>
-  
-  <p>Args:
-      objective: Target function.
-      bounds: Search space constraints.
-      n_iter: Max epochs.
-      n_pop: Population size.
-      cached: Enable disk caching for objective.</p>
-</blockquote>
+<h6 id="arguments">Arguments:</h6>
+
+<ul>
+<li><strong>objective:</strong>  Target function.</li>
+<li><strong>bounds:</strong>  Search space constraints.</li>
+<li><strong>n_iter:</strong>  Max epochs.</li>
+<li><strong>n_pop:</strong>  Population size.</li>
+<li><strong>cached:</strong>  Enable disk caching for objective.</li>
+</ul>
 </div>
 
 
@@ -2286,7 +2286,7 @@ guided by their own best known position (pbest) and the swarm's best known posit
 </span><span id="FireflyAlgorithm-37"><a href="#FireflyAlgorithm-37"><span class="linenos"> 37</span></a><span class="sd">    Firefly Algorithm Optimizer.</span>
 </span><span id="FireflyAlgorithm-38"><a href="#FireflyAlgorithm-38"><span class="linenos"> 38</span></a><span class="sd">    &quot;&quot;&quot;</span>
 </span><span id="FireflyAlgorithm-39"><a href="#FireflyAlgorithm-39"><span class="linenos"> 39</span></a>
-</span><span id="FireflyAlgorithm-40"><a href="#FireflyAlgorithm-40"><span class="linenos"> 40</span></a>    <span class="nd">@utils</span><span class="o">.</span><span class="n">inherit_signature</span><span class="p">(</span><span class="n">Optimizer</span><span class="p">)</span>
+</span><span id="FireflyAlgorithm-40"><a href="#FireflyAlgorithm-40"><span class="linenos"> 40</span></a>    <span class="nd">@utils</span><span class="o">.</span><span class="n">inherit_docs</span><span class="p">(</span><span class="n">Optimizer</span><span class="p">)</span>
 </span><span id="FireflyAlgorithm-41"><a href="#FireflyAlgorithm-41"><span class="linenos"> 41</span></a>    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
 </span><span id="FireflyAlgorithm-42"><a href="#FireflyAlgorithm-42"><span class="linenos"> 42</span></a>        <span class="bp">self</span><span class="p">,</span>
 </span><span id="FireflyAlgorithm-43"><a href="#FireflyAlgorithm-43"><span class="linenos"> 43</span></a>        <span class="n">objective</span><span class="p">,</span>
@@ -2418,7 +2418,7 @@ guided by their own best known position (pbest) and the swarm's best known posit
                             <div id="FireflyAlgorithm.__init__" class="classattr">
                                         <input id="FireflyAlgorithm.__init__-view-source" class="view-source-toggle-state" type="checkbox" aria-hidden="true" tabindex="-1">
 <div class="attr function">
-                    <div class="decorator decorator-utils.inherit_signature">@utils.inherit_signature(Optimizer)</div>
+                    <div class="decorator decorator-utils.inherit_docs">@utils.inherit_docs(Optimizer)</div>
 
         <span class="name">FireflyAlgorithm</span><span class="signature pdoc-code multiline">(<span class="param">	<span class="n">objective</span>,</span><span class="param">	<span class="n">bounds</span>,</span><span class="param">	<span class="n">alpha</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.5</span>,</span><span class="param">	<span class="n">beta0</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1.0</span>,</span><span class="param">	<span class="n">gamma</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1.0</span>,</span><span class="param">	<span class="n">alpha_decay</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.97</span>,</span><span class="param">	<span class="o">**</span><span class="n">kwargs</span></span>)</span>
 
@@ -2426,7 +2426,7 @@ guided by their own best known position (pbest) and the swarm's best known posit
 
     </div>
     <a class="headerlink" href="#FireflyAlgorithm.__init__"></a>
-            <div class="pdoc-code codehilite"><pre><span></span><span id="FireflyAlgorithm.__init__-40"><a href="#FireflyAlgorithm.__init__-40"><span class="linenos">40</span></a>    <span class="nd">@utils</span><span class="o">.</span><span class="n">inherit_signature</span><span class="p">(</span><span class="n">Optimizer</span><span class="p">)</span>
+            <div class="pdoc-code codehilite"><pre><span></span><span id="FireflyAlgorithm.__init__-40"><a href="#FireflyAlgorithm.__init__-40"><span class="linenos">40</span></a>    <span class="nd">@utils</span><span class="o">.</span><span class="n">inherit_docs</span><span class="p">(</span><span class="n">Optimizer</span><span class="p">)</span>
 </span><span id="FireflyAlgorithm.__init__-41"><a href="#FireflyAlgorithm.__init__-41"><span class="linenos">41</span></a>    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
 </span><span id="FireflyAlgorithm.__init__-42"><a href="#FireflyAlgorithm.__init__-42"><span class="linenos">42</span></a>        <span class="bp">self</span><span class="p">,</span>
 </span><span id="FireflyAlgorithm.__init__-43"><a href="#FireflyAlgorithm.__init__-43"><span class="linenos">43</span></a>        <span class="n">objective</span><span class="p">,</span>
@@ -2463,18 +2463,18 @@ guided by their own best known position (pbest) and the swarm's best known posit
         alpha_decay (float): Geometric decay rate for alpha. Defaults to 0.97.
 </code></pre>
 
-<h6 id="base-parameters">Base Parameters:</h6>
+<p>Base Parameters (from Optimizer):
+Initializes the optimizer infrastructure.</p>
 
-<blockquote>
-  <p>Initializes the optimizer infrastructure.</p>
-  
-  <p>Args:
-      objective: Target function.
-      bounds: Search space constraints.
-      n_iter: Max epochs.
-      n_pop: Population size.
-      cached: Enable disk caching for objective.</p>
-</blockquote>
+<h6 id="arguments">Arguments:</h6>
+
+<ul>
+<li><strong>objective:</strong>  Target function.</li>
+<li><strong>bounds:</strong>  Search space constraints.</li>
+<li><strong>n_iter:</strong>  Max epochs.</li>
+<li><strong>n_pop:</strong>  Population size.</li>
+<li><strong>cached:</strong>  Enable disk caching for objective.</li>
+</ul>
 </div>
 
 
@@ -2542,7 +2542,7 @@ guided by their own best known position (pbest) and the swarm's best known posit
 </span><span id="HarrisHawksOptimization-42"><a href="#HarrisHawksOptimization-42"><span class="linenos"> 42</span></a><span class="sd">    Implements the 4 phases of HHO driven by the escaping energy $E$.</span>
 </span><span id="HarrisHawksOptimization-43"><a href="#HarrisHawksOptimization-43"><span class="linenos"> 43</span></a><span class="sd">    &quot;&quot;&quot;</span>
 </span><span id="HarrisHawksOptimization-44"><a href="#HarrisHawksOptimization-44"><span class="linenos"> 44</span></a>
-</span><span id="HarrisHawksOptimization-45"><a href="#HarrisHawksOptimization-45"><span class="linenos"> 45</span></a>    <span class="nd">@utils</span><span class="o">.</span><span class="n">inherit_signature</span><span class="p">(</span><span class="n">Optimizer</span><span class="p">)</span>
+</span><span id="HarrisHawksOptimization-45"><a href="#HarrisHawksOptimization-45"><span class="linenos"> 45</span></a>    <span class="nd">@utils</span><span class="o">.</span><span class="n">inherit_docs</span><span class="p">(</span><span class="n">Optimizer</span><span class="p">)</span>
 </span><span id="HarrisHawksOptimization-46"><a href="#HarrisHawksOptimization-46"><span class="linenos"> 46</span></a>    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">objective</span><span class="p">,</span> <span class="n">bounds</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
 </span><span id="HarrisHawksOptimization-47"><a href="#HarrisHawksOptimization-47"><span class="linenos"> 47</span></a>        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">objective</span><span class="p">,</span> <span class="n">bounds</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
 </span><span id="HarrisHawksOptimization-48"><a href="#HarrisHawksOptimization-48"><span class="linenos"> 48</span></a>
@@ -2693,7 +2693,7 @@ guided by their own best known position (pbest) and the swarm's best known posit
                             <div id="HarrisHawksOptimization.__init__" class="classattr">
                                         <input id="HarrisHawksOptimization.__init__-view-source" class="view-source-toggle-state" type="checkbox" aria-hidden="true" tabindex="-1">
 <div class="attr function">
-                    <div class="decorator decorator-utils.inherit_signature">@utils.inherit_signature(Optimizer)</div>
+                    <div class="decorator decorator-utils.inherit_docs">@utils.inherit_docs(Optimizer)</div>
 
         <span class="name">HarrisHawksOptimization</span><span class="signature pdoc-code condensed">(<span class="param"><span class="n">objective</span>, </span><span class="param"><span class="n">bounds</span>, </span><span class="param"><span class="o">**</span><span class="n">kwargs</span></span>)</span>
 
@@ -2701,24 +2701,24 @@ guided by their own best known position (pbest) and the swarm's best known posit
 
     </div>
     <a class="headerlink" href="#HarrisHawksOptimization.__init__"></a>
-            <div class="pdoc-code codehilite"><pre><span></span><span id="HarrisHawksOptimization.__init__-45"><a href="#HarrisHawksOptimization.__init__-45"><span class="linenos">45</span></a>    <span class="nd">@utils</span><span class="o">.</span><span class="n">inherit_signature</span><span class="p">(</span><span class="n">Optimizer</span><span class="p">)</span>
+            <div class="pdoc-code codehilite"><pre><span></span><span id="HarrisHawksOptimization.__init__-45"><a href="#HarrisHawksOptimization.__init__-45"><span class="linenos">45</span></a>    <span class="nd">@utils</span><span class="o">.</span><span class="n">inherit_docs</span><span class="p">(</span><span class="n">Optimizer</span><span class="p">)</span>
 </span><span id="HarrisHawksOptimization.__init__-46"><a href="#HarrisHawksOptimization.__init__-46"><span class="linenos">46</span></a>    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">objective</span><span class="p">,</span> <span class="n">bounds</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
 </span><span id="HarrisHawksOptimization.__init__-47"><a href="#HarrisHawksOptimization.__init__-47"><span class="linenos">47</span></a>        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">objective</span><span class="p">,</span> <span class="n">bounds</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
 </span></pre></div>
 
 
-            <div class="docstring"><h6 id="base-parameters">Base Parameters:</h6>
+            <div class="docstring"><p>Base Parameters (from Optimizer):
+Initializes the optimizer infrastructure.</p>
 
-<blockquote>
-  <p>Initializes the optimizer infrastructure.</p>
-  
-  <p>Args:
-      objective: Target function.
-      bounds: Search space constraints.
-      n_iter: Max epochs.
-      n_pop: Population size.
-      cached: Enable disk caching for objective.</p>
-</blockquote>
+<h6 id="arguments">Arguments:</h6>
+
+<ul>
+<li><strong>objective:</strong>  Target function.</li>
+<li><strong>bounds:</strong>  Search space constraints.</li>
+<li><strong>n_iter:</strong>  Max epochs.</li>
+<li><strong>n_pop:</strong>  Population size.</li>
+<li><strong>cached:</strong>  Enable disk caching for objective.</li>
+</ul>
 </div>
 
 
@@ -2740,7 +2740,7 @@ guided by their own best known position (pbest) and the swarm's best known posit
 </span><span id="CuckooSearch-33"><a href="#CuckooSearch-33"><span class="linenos"> 33</span></a><span class="sd">    Cuckoo Search (CS) optimization.</span>
 </span><span id="CuckooSearch-34"><a href="#CuckooSearch-34"><span class="linenos"> 34</span></a><span class="sd">    &quot;&quot;&quot;</span>
 </span><span id="CuckooSearch-35"><a href="#CuckooSearch-35"><span class="linenos"> 35</span></a>
-</span><span id="CuckooSearch-36"><a href="#CuckooSearch-36"><span class="linenos"> 36</span></a>    <span class="nd">@utils</span><span class="o">.</span><span class="n">inherit_signature</span><span class="p">(</span><span class="n">Optimizer</span><span class="p">)</span>
+</span><span id="CuckooSearch-36"><a href="#CuckooSearch-36"><span class="linenos"> 36</span></a>    <span class="nd">@utils</span><span class="o">.</span><span class="n">inherit_docs</span><span class="p">(</span><span class="n">Optimizer</span><span class="p">)</span>
 </span><span id="CuckooSearch-37"><a href="#CuckooSearch-37"><span class="linenos"> 37</span></a>    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
 </span><span id="CuckooSearch-38"><a href="#CuckooSearch-38"><span class="linenos"> 38</span></a>        <span class="bp">self</span><span class="p">,</span>
 </span><span id="CuckooSearch-39"><a href="#CuckooSearch-39"><span class="linenos"> 39</span></a>        <span class="n">objective</span><span class="p">,</span>
@@ -2860,7 +2860,7 @@ guided by their own best known position (pbest) and the swarm's best known posit
                             <div id="CuckooSearch.__init__" class="classattr">
                                         <input id="CuckooSearch.__init__-view-source" class="view-source-toggle-state" type="checkbox" aria-hidden="true" tabindex="-1">
 <div class="attr function">
-                    <div class="decorator decorator-utils.inherit_signature">@utils.inherit_signature(Optimizer)</div>
+                    <div class="decorator decorator-utils.inherit_docs">@utils.inherit_docs(Optimizer)</div>
 
         <span class="name">CuckooSearch</span><span class="signature pdoc-code multiline">(<span class="param">	<span class="n">objective</span>,</span><span class="param">	<span class="n">bounds</span>,</span><span class="param">	<span class="n">pa</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.25</span>,</span><span class="param">	<span class="n">alpha</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.01</span>,</span><span class="param">	<span class="n">beta</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1.5</span>,</span><span class="param">	<span class="o">**</span><span class="n">kwargs</span></span>)</span>
 
@@ -2868,7 +2868,7 @@ guided by their own best known position (pbest) and the swarm's best known posit
 
     </div>
     <a class="headerlink" href="#CuckooSearch.__init__"></a>
-            <div class="pdoc-code codehilite"><pre><span></span><span id="CuckooSearch.__init__-36"><a href="#CuckooSearch.__init__-36"><span class="linenos">36</span></a>    <span class="nd">@utils</span><span class="o">.</span><span class="n">inherit_signature</span><span class="p">(</span><span class="n">Optimizer</span><span class="p">)</span>
+            <div class="pdoc-code codehilite"><pre><span></span><span id="CuckooSearch.__init__-36"><a href="#CuckooSearch.__init__-36"><span class="linenos">36</span></a>    <span class="nd">@utils</span><span class="o">.</span><span class="n">inherit_docs</span><span class="p">(</span><span class="n">Optimizer</span><span class="p">)</span>
 </span><span id="CuckooSearch.__init__-37"><a href="#CuckooSearch.__init__-37"><span class="linenos">37</span></a>    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
 </span><span id="CuckooSearch.__init__-38"><a href="#CuckooSearch.__init__-38"><span class="linenos">38</span></a>        <span class="bp">self</span><span class="p">,</span>
 </span><span id="CuckooSearch.__init__-39"><a href="#CuckooSearch.__init__-39"><span class="linenos">39</span></a>        <span class="n">objective</span><span class="p">,</span>
@@ -2885,18 +2885,18 @@ guided by their own best known position (pbest) and the swarm's best known posit
 </span></pre></div>
 
 
-            <div class="docstring"><h6 id="base-parameters">Base Parameters:</h6>
+            <div class="docstring"><p>Base Parameters (from Optimizer):
+Initializes the optimizer infrastructure.</p>
 
-<blockquote>
-  <p>Initializes the optimizer infrastructure.</p>
-  
-  <p>Args:
-      objective: Target function.
-      bounds: Search space constraints.
-      n_iter: Max epochs.
-      n_pop: Population size.
-      cached: Enable disk caching for objective.</p>
-</blockquote>
+<h6 id="arguments">Arguments:</h6>
+
+<ul>
+<li><strong>objective:</strong>  Target function.</li>
+<li><strong>bounds:</strong>  Search space constraints.</li>
+<li><strong>n_iter:</strong>  Max epochs.</li>
+<li><strong>n_pop:</strong>  Population size.</li>
+<li><strong>cached:</strong>  Enable disk caching for objective.</li>
+</ul>
 </div>
 
 
@@ -2951,7 +2951,7 @@ guided by their own best known position (pbest) and the swarm's best known posit
 </span><span id="HoneyBadgerAlgorithm-36"><a href="#HoneyBadgerAlgorithm-36"><span class="linenos"> 36</span></a><span class="sd">    Honey Badger Algorithm.</span>
 </span><span id="HoneyBadgerAlgorithm-37"><a href="#HoneyBadgerAlgorithm-37"><span class="linenos"> 37</span></a><span class="sd">    &quot;&quot;&quot;</span>
 </span><span id="HoneyBadgerAlgorithm-38"><a href="#HoneyBadgerAlgorithm-38"><span class="linenos"> 38</span></a>
-</span><span id="HoneyBadgerAlgorithm-39"><a href="#HoneyBadgerAlgorithm-39"><span class="linenos"> 39</span></a>    <span class="nd">@utils</span><span class="o">.</span><span class="n">inherit_signature</span><span class="p">(</span><span class="n">Optimizer</span><span class="p">)</span>
+</span><span id="HoneyBadgerAlgorithm-39"><a href="#HoneyBadgerAlgorithm-39"><span class="linenos"> 39</span></a>    <span class="nd">@utils</span><span class="o">.</span><span class="n">inherit_docs</span><span class="p">(</span><span class="n">Optimizer</span><span class="p">)</span>
 </span><span id="HoneyBadgerAlgorithm-40"><a href="#HoneyBadgerAlgorithm-40"><span class="linenos"> 40</span></a>    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
 </span><span id="HoneyBadgerAlgorithm-41"><a href="#HoneyBadgerAlgorithm-41"><span class="linenos"> 41</span></a>        <span class="bp">self</span><span class="p">,</span>
 </span><span id="HoneyBadgerAlgorithm-42"><a href="#HoneyBadgerAlgorithm-42"><span class="linenos"> 42</span></a>        <span class="n">objective</span><span class="p">,</span>
@@ -3067,7 +3067,7 @@ guided by their own best known position (pbest) and the swarm's best known posit
                             <div id="HoneyBadgerAlgorithm.__init__" class="classattr">
                                         <input id="HoneyBadgerAlgorithm.__init__-view-source" class="view-source-toggle-state" type="checkbox" aria-hidden="true" tabindex="-1">
 <div class="attr function">
-                    <div class="decorator decorator-utils.inherit_signature">@utils.inherit_signature(Optimizer)</div>
+                    <div class="decorator decorator-utils.inherit_docs">@utils.inherit_docs(Optimizer)</div>
 
         <span class="name">HoneyBadgerAlgorithm</span><span class="signature pdoc-code condensed">(<span class="param"><span class="n">objective</span>, </span><span class="param"><span class="n">bounds</span>, </span><span class="param"><span class="n">beta</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">6.0</span>, </span><span class="param"><span class="n">C</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">2.0</span>, </span><span class="param"><span class="o">**</span><span class="n">kwargs</span></span>)</span>
 
@@ -3075,7 +3075,7 @@ guided by their own best known position (pbest) and the swarm's best known posit
 
     </div>
     <a class="headerlink" href="#HoneyBadgerAlgorithm.__init__"></a>
-            <div class="pdoc-code codehilite"><pre><span></span><span id="HoneyBadgerAlgorithm.__init__-39"><a href="#HoneyBadgerAlgorithm.__init__-39"><span class="linenos">39</span></a>    <span class="nd">@utils</span><span class="o">.</span><span class="n">inherit_signature</span><span class="p">(</span><span class="n">Optimizer</span><span class="p">)</span>
+            <div class="pdoc-code codehilite"><pre><span></span><span id="HoneyBadgerAlgorithm.__init__-39"><a href="#HoneyBadgerAlgorithm.__init__-39"><span class="linenos">39</span></a>    <span class="nd">@utils</span><span class="o">.</span><span class="n">inherit_docs</span><span class="p">(</span><span class="n">Optimizer</span><span class="p">)</span>
 </span><span id="HoneyBadgerAlgorithm.__init__-40"><a href="#HoneyBadgerAlgorithm.__init__-40"><span class="linenos">40</span></a>    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
 </span><span id="HoneyBadgerAlgorithm.__init__-41"><a href="#HoneyBadgerAlgorithm.__init__-41"><span class="linenos">41</span></a>        <span class="bp">self</span><span class="p">,</span>
 </span><span id="HoneyBadgerAlgorithm.__init__-42"><a href="#HoneyBadgerAlgorithm.__init__-42"><span class="linenos">42</span></a>        <span class="n">objective</span><span class="p">,</span>
@@ -3104,18 +3104,18 @@ guided by their own best known position (pbest) and the swarm's best known posit
         C (float): Constant for density factor update. Defaults to 2.0.
 </code></pre>
 
-<h6 id="base-parameters">Base Parameters:</h6>
+<p>Base Parameters (from Optimizer):
+Initializes the optimizer infrastructure.</p>
 
-<blockquote>
-  <p>Initializes the optimizer infrastructure.</p>
-  
-  <p>Args:
-      objective: Target function.
-      bounds: Search space constraints.
-      n_iter: Max epochs.
-      n_pop: Population size.
-      cached: Enable disk caching for objective.</p>
-</blockquote>
+<h6 id="arguments">Arguments:</h6>
+
+<ul>
+<li><strong>objective:</strong>  Target function.</li>
+<li><strong>bounds:</strong>  Search space constraints.</li>
+<li><strong>n_iter:</strong>  Max epochs.</li>
+<li><strong>n_pop:</strong>  Population size.</li>
+<li><strong>cached:</strong>  Enable disk caching for objective.</li>
+</ul>
 </div>
 
 

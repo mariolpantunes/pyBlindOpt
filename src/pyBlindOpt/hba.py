@@ -35,7 +35,7 @@ class HoneyBadgerAlgorithm(Optimizer):
     Honey Badger Algorithm.
     """
 
-    @utils.inherit_signature(Optimizer)
+    @utils.inherit_docs(Optimizer)
     def __init__(
         self,
         objective,

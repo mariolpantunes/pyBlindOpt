@@ -58,7 +58,7 @@ class HillClimbing(Optimizer):
     it only if it strictly improves the objective (Greedy).
     """
 
-    @utils.inherit_signature(Optimizer)
+    @utils.inherit_docs(Optimizer)
     def __init__(
         self,
         objective: collections.abc.Callable,

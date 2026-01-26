@@ -36,7 +36,7 @@ class FireflyAlgorithm(Optimizer):
     Firefly Algorithm Optimizer.
     """
 
-    @utils.inherit_signature(Optimizer)
+    @utils.inherit_docs(Optimizer)
     def __init__(
         self,
         objective,

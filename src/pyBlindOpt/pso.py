@@ -39,7 +39,7 @@ class ParticleSwarmOptimization(Optimizer):
     guided by their own best known position (pbest) and the swarm's best known position (gbest).
     """
 
-    @utils.inherit_signature(Optimizer)
+    @utils.inherit_docs(Optimizer)
     def __init__(
         self,
         objective: collections.abc.Callable,

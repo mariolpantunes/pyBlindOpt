@@ -1,5 +1,6 @@
 pdoc>=16.0.0
-numpy>=2.4.1
+numpy>=1.6.4
 joblib>=1.5.3
 tqdm>=4.67.1
+optuna>=4.7.0
 EmptySpaceSearch>=0.3.1

@@ -41,7 +41,7 @@ class SimulatedAnnealing(Optimizer):
     $$ T_k = \\frac{T_0}{k + 1} $$
     """
 
-    @utils.inherit_signature(Optimizer)
+    @utils.inherit_docs(Optimizer)
     def __init__(
         self,
         objective: collections.abc.Callable,
