@@ -9,6 +9,7 @@ import unittest
 
 import numpy as np
 
+import pyBlindOpt.functions as func
 import pyBlindOpt.utils as utils
 
 
@@ -17,7 +18,24 @@ class TestUtils(unittest.TestCase):
         # Shared RNG for reproducible tests
         self.rng = np.random.default_rng(42)
 
-    # --- Bounds & Validation Tests ---
+    def test_inherit_docs(self):
+        """Test docstring inheritance decorator"""
+
+        class Parent:
+            """Parent documentation."""
+
+            pass
+
+        @utils.inherit_docs(Parent)
+        def child_func():
+            """Child documentation."""
+            pass
+
+        doc = child_func.__doc__
+
+        self.assertIsNotNone(doc, "Docstring should not be None")
+        self.assertIn("Parent documentation", doc or "")
+        self.assertIn("Child documentation", doc or "")
 
     def test_check_bounds_00(self):
         """Test clipping single dimension"""
@@ -63,8 +81,6 @@ class TestUtils(unittest.TestCase):
         clipped = utils.check_bounds(result[np.newaxis, :], bounds)
         np.testing.assert_array_equal(result, clipped.flatten())
 
-    # --- Sampler Tests ---
-
     def test_random_sampler(self):
         bounds = np.asarray([[-5.0, 5.0], [0.0, 10.0]])
         sampler = utils.RandomSampler(self.rng)
@@ -99,6 +115,16 @@ class TestUtils(unittest.TestCase):
         pop_high = sampler.sample(10, bounds_high)
         self.assertEqual(pop_high.shape, (10, 40))
 
+    def test_sobol_dimension_limit(self):
+        """Test that Sobol raises error for unsupported dimensions (>40)"""
+        # Create bounds for 41 dimensions
+        bounds = np.zeros((41, 2))
+
+        sampler = utils.SobolSampler(self.rng)
+
+        with self.assertRaises(ValueError):
+            sampler.sample(10, bounds)
+
     def test_chaotic_sampler(self):
         """Test Chaotic Map Sampler (Logistic Map)"""
         bounds = np.asarray([[-5.0, 5.0], [0.0, 10.0]])
@@ -132,8 +158,6 @@ class TestUtils(unittest.TestCase):
 
         np.testing.assert_array_almost_equal(pop_fresh, pop_replay)
 
-    # --- Math Helper Tests ---
-
     def test_scale_inv_scale(self):
         """Test Normalization and Denormalization cycle"""
         original = np.array([[10.0], [20.0], [30.0]])
@@ -147,6 +171,20 @@ class TestUtils(unittest.TestCase):
         # Inverse Scale back
         restored = utils.inv_scale(scaled, min_v, max_v)
         np.testing.assert_array_almost_equal(restored, original)
+
+    def test_scale_zero_variance(self):
+        """Test scaling when all values are identical (div by zero protection)"""
+        # Input: [10, 10, 10] -> Max=10, Min=10 -> Denom=0
+        arr = np.array([[10.0], [10.0], [10.0]])
+
+        scaled, min_v, max_v = utils.scale(arr)
+
+        # Expect: All zeros (not NaNs or Infs)
+        expected = np.zeros_like(arr)
+
+        np.testing.assert_array_equal(scaled, expected)
+        self.assertEqual(min_v, 10.0)
+        self.assertEqual(max_v, 10.0)
 
     def test_score_2_probs_softmax(self):
         """Test Softmax probability conversion"""
@@ -172,7 +210,15 @@ class TestUtils(unittest.TestCase):
         # The best score should take almost all probability mass
         self.assertTrue(probs_low[0] > 0.99)
 
-    # --- Distance Metrics Tests ---
+    def test_score_2_probs_flat(self):
+        """Test probability distribution when all scores are equal"""
+        scores = np.array([5.0, 5.0, 5.0, 5.0])
+
+        # Should return uniform distribution [0.25, 0.25, 0.25, 0.25]
+        probs = utils.score_2_probs(scores)
+
+        expected = np.full_like(scores, 0.25)
+        np.testing.assert_array_almost_equal(probs, expected)
 
     def test_global_distances(self):
         """Test vectorized sum of distances"""
@@ -195,42 +241,52 @@ class TestUtils(unittest.TestCase):
         self.assertTrue(crowding[0] > 0.8)
         self.assertTrue(crowding[3] > 0.8)
 
-    # --- Objective Computation Tests ---
-
     def test_compute_objective_vectorized(self):
-        """Test evaluation of a simple sum-of-squares"""
+        """
+        Test vectorized evaluation
+        """
         pop = np.array([[1, 1], [2, 2], [3, 3]])
 
-        def sphere(x):
-            # Optimistic vectorization check inside utils will pass (N, D)
-            # We must handle the reduction
-            if x.ndim == 2:
-                return np.sum(x**2, axis=1)
-            return np.sum(x**2)
-
-        scores = utils.compute_objective(pop, sphere, n_jobs=1)
+        scores = utils.compute_objective(pop, func.sphere, n_jobs=1)
         expected = np.array([2, 8, 18])
         np.testing.assert_array_equal(scores, expected)
 
     def test_compute_objective_parallel(self):
-        """Test parallel execution via joblib"""
+        """
+        Test parallel execution via joblib
+        """
         pop = np.array([[1], [2], [3]])
 
-        def simple_sq(x):
-            return np.sum(x**2)
-
-        scores = utils.compute_objective(pop, simple_sq, n_jobs=2)
+        scores = utils.compute_objective(pop, func.sphere, n_jobs=2)
         expected = np.array([1, 4, 9])
+        np.testing.assert_array_equal(scores, expected)
+
+    def test_compute_objective_fallback(self):
+        """
+        Test fallback to row-by-row when vectorization fails
+        """
+        pop = np.array([[1, 2], [3, 4]])
+
+        # Define a function that CRASHES if given a 2D matrix
+        # This simulates a user function that doesn't support vectorization
+        def strict_vector_func(x):
+            if x.ndim != 1:
+                raise ValueError("I only accept 1D vectors!")
+            return np.sum(x)
+
+        # This should catch the ValueError inside utils and fallback to apply_along_axis
+        scores = utils.compute_objective(pop, strict_vector_func)
+
+        expected = np.array([3, 7])
         np.testing.assert_array_equal(scores, expected)
 
     def test_shape_and_type(self):
         """
         Verify the output dimensions and data type.
         """
-        n_rows, n_cols = 50, 3
-        steps = utils.levy_flight(n_rows, n_cols)
-
-        self.assertEqual(steps.shape, (n_rows, n_cols))
+        n_pop, dim = 50, 3
+        steps = utils.levy_flight(n_pop, dim)
+        self.assertEqual(steps.shape, (n_pop, dim))
         self.assertTrue(np.issubdtype(steps.dtype, np.floating))
 
     def test_reproducibility(self):

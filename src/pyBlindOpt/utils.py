@@ -17,11 +17,14 @@ __status__ = "Development"
 import abc
 import functools
 import inspect
+import logging
 import math
 from collections.abc import Callable
 
 import joblib
 import numpy as np
+
+logger = logging.getLogger(__name__)
 
 
 def inherit_docs(from_obj):
@@ -35,8 +38,14 @@ def inherit_docs(from_obj):
     def decorator(func):
         # 1. Determine the source of the docstring
         if inspect.isclass(from_obj):
-            # Prefer __init__ docstring, fallback to class docstring
-            source_doc = from_obj.__init__.__doc__ or from_obj.__doc__
+            # Check if the class uses the default object.__init__
+            # If so, strictly use the class docstring.
+            if from_obj.__init__ is object.__init__:
+                source_doc = from_obj.__doc__
+            else:
+                # Otherwise, prefer the custom __init__ docstring, fallback to class docstring
+                source_doc = from_obj.__init__.__doc__ or from_obj.__doc__
+
             header = f"\nBase Parameters (from {from_obj.__name__}):\n"
         else:
             source_doc = from_obj.__doc__
@@ -80,16 +89,14 @@ def scale(
             - The maximum value used.
     """
     # Use strict temporary variables to ensure type safety (guaranteed not None)
-    actual_min = np.min(arr) if min_val is None else min_val
-    actual_max = np.max(arr) if max_val is None else max_val
+    actual_min = np.nanmin(arr) if min_val is None else min_val
+    actual_max = np.nanmax(arr) if max_val is None else max_val
 
-    # Avoid division by zero if max == min
     denominator = actual_max - actual_min
 
-    if np.any(denominator == 0):
-        scl_arr = np.zeros_like(arr)
-    else:
-        scl_arr = (arr - actual_min) / denominator
+    scl_arr = np.divide(
+        (arr - actual_min), denominator, out=np.zeros_like(arr), where=denominator != 0
+    )
 
     return scl_arr, actual_min, actual_max
 
@@ -346,34 +353,53 @@ class SobolSampler(Sampler):
 
 class ChaoticSampler(Sampler):
     """
-    Chaotic Map Sampling (Logistic Map).
+    Chaotic Map Sampling (Tent Map).
 
-    Uses a deterministic chaotic system to generate samples.
-    $$ x_{k+1} = r \\cdot x_k (1 - x_k) $$
-    where $r=4.0$.
+    Uses a deterministic chaotic system to
+    generate samples, based on the Tent Map,
+    which provides a uniform distribution:
+    $$ x_{n+1} = \\begin{cases} 2x_n & \\text{if } x_n < 0.5 \\\\ 2(1-x_n) & \\text{if } x_n \\ge 0.5 \\end{cases} $$
+
     Chaos is ergodic and can provide better exploration dynamics.
     """
 
     def sample(self, n_pop: int, bounds: np.ndarray) -> np.ndarray:
         dim = bounds.shape[0]
-        # Standard Logistic Map parameter for chaos
-        r = 4.0
 
-        # Initialize with random start (avoid 0.0, 0.5, 1.0 fixed points)
-        # Shape (D,) one sequence per dimension
+        # Initialize x with random start (avoid 0.0, 0.5, 1.0 fixed points)
+        # We use a slightly tighter range to avoid immediate boundary issues
         x = self.rng.uniform(0.1, 0.9, size=dim)
 
-        # Burn-in: Run map for 100 iterations to decouple from seed
+        # Burn-in: Run map for 100 iterations
+        # This decouples the sequence from the random seed
         for _ in range(100):
-            x = r * x * (1.0 - x)
+            # Vectorized Tent Map logic
+            x = np.where(x < 0.5, 2.0 * x, 2.0 * (1.0 - x))
 
-        # Generate samples
         samples = np.zeros((n_pop, dim))
+
+        # Pre-allocate limit constants for speed
+        epsilon = 1e-10
+
         for i in range(n_pop):
-            x = r * x * (1.0 - x)
+            # 1. Update Map
+            # np.where is faster and cleaner than boolean indexing here
+            x = np.where(x < 0.5, 2.0 * x, 2.0 * (1.0 - x))
+
+            # 2. Robustness Check (Crucial for Tent Map)
+            # Tent map is sensitive to floating point bit-shifts.
+            # Eventually, values might collapse to exactly 0.0.
+            # If that happens, we inject a tiny jitter to restart chaos.
+            if np.any(x < epsilon):
+                zero_mask = x < epsilon
+                # Inject noise only where needed
+                jitter = self.rng.uniform(
+                    epsilon, 0.01, size=np.count_nonzero(zero_mask)
+                )
+                x[zero_mask] = jitter
+
             samples[i] = x
 
-        # Chaotic maps are naturally in [0, 1]
         return self._scale_to_bounds(samples, bounds)
 
 
@@ -388,11 +414,13 @@ def assert_bounds(solution: np.ndarray, bounds: np.ndarray) -> bool:
     Returns:
         bool: True if the solution is within bounds, False otherwise.
     """
-    x = solution.T
-    min_bounds = bounds[:, 0]
-    max_bounds = bounds[:, 1]
-    rv = ((x > min_bounds[:, np.newaxis]) & (x < max_bounds[:, np.newaxis])).any(1)
-    return bool(np.all(rv))
+    # Handle 1D (single solution) and 2D (population) inputs uniformly
+    if solution.ndim == 1:
+        solution = solution[np.newaxis, :]
+    # Check lower and upper bounds
+    check_min = np.all(solution >= bounds[:, 0])
+    check_max = np.all(solution <= bounds[:, 1])
+    return bool(check_min and check_max)
 
 
 def check_bounds(population: np.ndarray, bounds: np.ndarray) -> np.ndarray:
@@ -434,6 +462,9 @@ def global_distances(samples: np.ndarray) -> np.ndarray:
 
     Calculates $\\sum_j ||x_i - x_j||$ for every sample $i$.
     Used to measure isolation/centrality.
+    It uses the Euclidean distance expansion trick to avoid high memory usage.
+    Formula:
+    $$||A - B||^2 = ||A||^2 + ||B||^2 - 2<A, B>$$
 
     Args:
         samples (np.ndarray): Shape (N, D).
@@ -441,14 +472,23 @@ def global_distances(samples: np.ndarray) -> np.ndarray:
     Returns:
         np.ndarray: Shape (N,). The sum of distances for each sample.
     """
-    # 1. Compute Pairwise Differences
-    diff = samples[:, np.newaxis, :] - samples[np.newaxis, :, :]
+    # Compute squared norms of each sample (N,)
+    sq_norms = np.sum(samples**2, axis=1)
 
-    # 2. Euclidean Distance Matrix
-    sq_dist = np.sum(diff**2, axis=-1)
-    dist_matrix = np.sqrt(sq_dist)
+    # Compute the dot product matrix (N, N)
+    dot_products = np.dot(samples, samples.T)
 
-    # 3. Sum rows to get total distance to all others
+    # Apply expansion formula using broadcasting
+    # dist_sq[i, j] = ||x_i||^2 + ||x_j||^2 - 2 <x_i, x_j>
+    sq_dist_matrix = (
+        sq_norms[:, np.newaxis] + sq_norms[np.newaxis, :] - 2 * dot_products
+    )
+
+    # Numerical stability, clip negative zeros
+    sq_dist_matrix = np.maximum(sq_dist_matrix, 0.0)
+
+    # Sqrt and Sum
+    dist_matrix = np.sqrt(sq_dist_matrix)
     return np.sum(dist_matrix, axis=1)
 
 
@@ -552,7 +592,9 @@ def score_2_probs(scores: np.ndarray, temperature: float = 1.0) -> np.ndarray:
 
 
 def compute_objective(
-    population: np.ndarray, function: Callable[[object], float], n_jobs: int = 1
+    population: np.ndarray,
+    function: Callable[[np.ndarray], float | np.ndarray],
+    n_jobs: int = 1,
 ) -> np.ndarray:
     """
     Computes the objective function for a population of solutions.
@@ -574,21 +616,21 @@ def compute_objective(
     if isinstance(population, list):
         population = np.array(population)
 
-    # 1. Optimistic Approach: Vectorized Execution
-    # If the user's function supports (N, D) -> (N,) input, this is instant.
-    try:
-        result = function(population)
-        # Verify result is a valid array of the correct shape (N,) or (N, 1)
-        if isinstance(result, np.ndarray) and result.size == population.shape[0]:
-            return result.flatten()
-    except Exception:
-        # Function does not support matrix input, proceed to row-by-row methods
-        pass
-
-    # 2. Serial Execution (User requested np.apply_along_axis)
+    # Serial Execution (User requested np.apply_along_axis)
     if n_jobs == 1:
+        # Optimistic Approach: Vectorized Execution
+        try:
+            # If the user's function supports (N, D) -> (N,) input
+            result = function(population)
+            # Verify result is a valid array of the correct shape (N,) or (N, 1)
+            if isinstance(result, np.ndarray) and result.size == population.shape[0]:
+                return result.flatten()
+        except (ValueError, TypeError) as e:
+            logger.debug(f"""Function does not support matrix input.
+                proceed to row-by-row methods:
+                {e}""")
+            pass
         # Apply function along axis 1 (rows).
-        # Note: apply_along_axis iterates in Python but handles array wrapping cleanly.
         return np.apply_along_axis(function, 1, population)
 
     # 3. Parallel Execution (Joblib)
@@ -598,8 +640,11 @@ def compute_objective(
             obj_list = joblib.Parallel(backend="loky", n_jobs=n_jobs)(
                 joblib.delayed(function)(c) for c in population
             )
-        except Exception:
+        except Exception as e:
             # Fallback to threading if serialization (pickling) fails
+            logger.debug(
+                f"Fallback to threading if serialization (pickling) fails: {e}"
+            )
             obj_list = joblib.Parallel(backend="threading", n_jobs=n_jobs)(
                 joblib.delayed(function)(c) for c in population
             )
@@ -608,7 +653,7 @@ def compute_objective(
 
 
 def levy_flight(
-    n_rows: int, n_cols: int, beta: float = 1.5, rng: np.random.Generator | None = None
+    n_pop: int, dim: int, beta: float = 1.5, rng: np.random.Generator | None = None
 ) -> np.ndarray:
     """
     Lévy Flight Step Generation.
@@ -619,7 +664,17 @@ def levy_flight(
     **Mantegna's Algorithm:**
     $$ \\text{Step} = \\frac{u}{|v|^{1/\\beta}} $$
     where $u \\sim \\mathcal{N}(0, \\sigma_u^2)$ and $v \\sim \\mathcal{N}(0, 1)$.
+
+    Args:
+        n_pop (int): Number of individuals (rows).
+        dim (int): Number of dimensions (columns).
+        beta (float, optional): Power law exponent (1 < beta <= 2). Defaults to 1.5.
+        rng (np.random.Generator | None, optional): Random number generator.
+
+    Returns:
+        np.ndarray: Matrix of steps with shape (n_pop, dim).
     """
+
     if rng is None:
         rng = np.random.default_rng()
 
@@ -629,8 +684,8 @@ def levy_flight(
         / (math.gamma((1 + beta) / 2) * beta * 2 ** ((beta - 1) / 2))
     ) ** (1 / beta)
 
-    u = rng.normal(0, sigma_u, size=(n_rows, n_cols))
-    v = rng.normal(0, 1, size=(n_rows, n_cols))
+    u = rng.normal(0, sigma_u, size=(n_pop, dim))
+    v = rng.normal(0, 1, size=(n_pop, dim))
 
     # Avoid division by zero
     v[v == 0] = 1e-10
