@@ -169,9 +169,9 @@ class RandomSampler(Sampler):
     """
 
     def sample(self, n_pop: int, bounds: np.ndarray) -> np.ndarray:
-        return self.rng.uniform(
-            low=bounds[:, 0], high=bounds[:, 1], size=(n_pop, bounds.shape[0])
-        )
+        lower = bounds[:, 0]
+        upper = bounds[:, 1]
+        return self.rng.uniform(low=lower, high=upper, size=(n_pop, bounds.shape[0]))
 
 
 class HLCSampler(Sampler):

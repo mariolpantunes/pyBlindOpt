@@ -226,6 +226,54 @@ class TestInit(unittest.TestCase):
         # It must be within [1, 5]
         self.assertTrue(1.0 <= result_quasi[0, 0] <= 5.0)
 
+    # --- Overflow Protection Tests ---
+
+    def test_opposition_overflow_protection(self):
+        """Test that OBL handles bounds close to float limits without overflow"""
+        # Use bounds very close to the float limit
+        bounds = np.asarray([[1e13, 2e13]])
+
+        # Use a population within bounds
+        population = np.array([[1.5e13]])
+
+        # This should not raise overflow errors
+        result = init.opposition_based(
+            functions.sphere, bounds, population=population, n_pop=1, seed=42
+        )
+
+        # Verify result is valid and within bounds
+        self.assertTrue(utils.assert_bounds(result, bounds))
+        self.assertEqual(result.shape, (1, 1))
+
+    def test_quasi_opposition_overflow_protection(self):
+        """Test that QOBL handles bounds close to float limits without overflow"""
+        # Use bounds very close to the float limit
+        bounds = np.asarray([[1e13, 2e13]])
+
+        # Use a population within bounds
+        population = np.array([[1.5e13]])
+
+        # This should not raise overflow errors
+        result = init.quasi_opposition_based(
+            functions.sphere, bounds, population=population, n_pop=1, seed=42
+        )
+
+        # Verify result is valid and within bounds
+        self.assertTrue(utils.assert_bounds(result, bounds))
+        self.assertEqual(result.shape, (1, 1))
+
+    def test_oblesa_overflow_protection(self):
+        """Test that OBLESA handles bounds close to float limits without overflow"""
+        # Use bounds very close to the float limit
+        bounds = np.asarray([[1e13, 2e13]])
+
+        # This should not raise overflow errors
+        result = init.oblesa(functions.sphere, bounds, n_pop=5, seed=42)
+
+        # Verify result is valid and within bounds
+        self.assertTrue(utils.assert_bounds(result, bounds))
+        self.assertEqual(result.shape, (5, 1))
+
 
 if __name__ == "__main__":
     unittest.main()

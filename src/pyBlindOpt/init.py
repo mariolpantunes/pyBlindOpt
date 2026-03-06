@@ -107,7 +107,7 @@ def opposition_based(
     # compute the opposition population
     lower = bounds[:, 0]
     upper = bounds[:, 1]
-    pop_opp = utils.check_bounds(lower + upper - pop, bounds)
+    pop_opp = utils.check_bounds(lower + (upper - pop), bounds)
 
     # compute the fitness of the opposition population
     scores_opp = utils.compute_objective(pop_opp, objective, n_jobs)
@@ -218,7 +218,7 @@ def oblesa(
     ran_pop, n_pop = _parse_population_arg(population, n_pop, bounds, rng)
 
     lower, upper = bounds[:, 0], bounds[:, 1]
-    opp_pop = utils.check_bounds(lower + upper - ran_pop, bounds)
+    opp_pop = utils.check_bounds(lower + (upper - ran_pop), bounds)
 
     combined_samples = np.vstack((ran_pop, opp_pop))
     emp_pop = ess.esa(combined_samples, bounds, n=2 * n_pop, seed=rng, **kwargs)
@@ -290,10 +290,10 @@ def quasi_opposition_based(
 
     # 2. Compute Center and Opposite
     lower, upper = bounds[:, 0], bounds[:, 1]
-    center = (lower + upper) / 2.0
+    center = lower + (upper - lower) / 2.0
 
     # Standard Opposition: x_opp = a + b - x
-    pop_opp = lower + upper - pop
+    pop_opp = lower + (upper - pop)
 
     # 3. Quasi-Opposition Logic
     # We sample uniformly between [Center, Opposite]
