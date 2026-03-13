@@ -431,7 +431,7 @@ def check_bounds(population: np.ndarray, bounds: np.ndarray) -> np.ndarray:
     If not, values are clipped to the nearest bound.
 
     Args:
-        solution (np.ndarray): The solution vector to be validated.
+        solution (np.ndarray): The population vector to be validated.
         bounds (np.ndarray): The bounds of valid solutions (shape: N x 2).
 
     Returns:
@@ -692,3 +692,64 @@ def levy_flight(
 
     step = u / (np.abs(v) ** (1 / beta))
     return step
+
+
+def select_population(
+    population: np.ndarray,
+    scores: np.ndarray,
+    n_pop: int,
+    selection: str = "best",
+    diversity_weight: float = 0.0,
+    rng: np.random.Generator | None = None,
+) -> np.ndarray:
+    """
+    Selects the best individuals from a population based on fitness and diversity.
+
+    Args:
+        population (np.ndarray): The evaluated population.
+        scores (np.ndarray): The objective scores for the population (lower is better).
+        n_pop (int): The number of individuals to select.
+        selection (str): Selection strategy, 'best' or 'random'.
+        diversity_weight (float): Trade-off between fitness (0.0) and diversity (1.0).
+        rng (np.random.Generator | None): Random number generator.
+
+    Returns:
+        np.ndarray: The selected population of shape (n_pop, D).
+    """
+    if rng is None:
+        rng = np.random.default_rng()
+
+    # SHORTCUT: If pure greedy selection, bypass probability math entirely
+    if selection == "best" and diversity_weight == 0.0:
+        # Smallest scores are best
+        idx = np.argpartition(scores, n_pop)[:n_pop]
+        return population[idx]
+
+    # Convert to probabilities for blending/roulette wheel
+    prob_fitness = score_2_probs(scores)
+
+    if diversity_weight > 0:
+        crowding = compute_crowding_distance(population)
+        # Higher crowding distance is better (more diverse), so we negate it
+        prob_dist = score_2_probs(-crowding)
+    else:
+        prob_dist = np.zeros_like(prob_fitness)
+
+    final_probs = (1.0 - diversity_weight) * prob_fitness + diversity_weight * prob_dist
+    final_probs /= np.sum(final_probs)
+
+    if selection == "best":
+        # Highest probability is best
+        idx = np.argpartition(final_probs, -n_pop)[-n_pop:]
+    else:
+        try:
+            idx = rng.choice(
+                population.shape[0], size=n_pop, replace=False, p=final_probs
+            )
+        except ValueError as e:
+            logging.getLogger(__name__).warning(
+                f"Random selection failed ({e}), fallback to best selection"
+            )
+            idx = np.argpartition(final_probs, -n_pop)[-n_pop:]
+
+    return population[idx]

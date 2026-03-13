@@ -274,6 +274,93 @@ class TestInit(unittest.TestCase):
         self.assertTrue(utils.assert_bounds(result, bounds))
         self.assertEqual(result.shape, (5, 1))
 
+    # --- OBLESA In-Depth Selection & OPP Tests ---
+
+    def test_oblesa_standard_best(self):
+        """Test Standard OBL with 'best' selection perfectly extracts lowest fitness."""
+        bounds = np.asarray([[-10.0, 10.0]])
+        # 4 points: 2 near-perfect, 2 terrible
+        initial_pop = np.array([[0.01], [0.02], [9.9], [9.95]])
+
+        # _parse_population_arg will force n_pop=4 based on initial_pop size
+        result = init.oblesa(
+            functions.sphere,
+            bounds,
+            population=initial_pop,
+            opp="standard",
+            selection="best",
+            seed=42,
+        )
+
+        fitness = functions.sphere(result)
+
+        self.assertEqual(result.shape, (4, 1))
+        # The top 4 out of the 16 evaluated points must be the good inputs and their exact opposites.
+        self.assertTrue(
+            np.all(fitness <= 0.0004), f"Expected fitness <= 0.0004, got {fitness}"
+        )
+
+    def test_oblesa_quasi_best(self):
+        """Test Quasi OBL with 'best' selection perfectly extracts lowest fitness."""
+        bounds = np.asarray([[-10.0, 10.0]])
+        initial_pop = np.array([[0.01], [0.02], [9.9], [9.95]])
+
+        result = init.oblesa(
+            functions.sphere,
+            bounds,
+            population=initial_pop,
+            opp="quasi",
+            selection="best",
+            seed=42,
+        )
+
+        fitness = functions.sphere(result)
+
+        self.assertEqual(result.shape, (4, 1))
+        self.assertTrue(
+            np.all(fitness <= 0.0004), f"Expected fitness <= 0.0004, got {fitness}"
+        )
+
+    def test_oblesa_standard_random(self):
+        """Test Standard OBL with 'random' roulette selection heavily favors best fitness."""
+        bounds = np.asarray([[-10.0, 10.0]])
+        initial_pop = np.array([[0.01], [0.02], [9.9], [9.95]])
+
+        result = init.oblesa(
+            functions.sphere,
+            bounds,
+            population=initial_pop,
+            opp="standard",
+            selection="random",
+            seed=42,
+        )
+
+        fitness = functions.sphere(result)
+
+        self.assertEqual(result.shape, (4, 1))
+        self.assertTrue(utils.assert_bounds(result, bounds))
+        self.assertTrue(np.all(fitness < 2.0), f"Expected fitness < 1.0, got {fitness}")
+
+    def test_oblesa_quasi_random(self):
+        """Test Quasi OBL with 'random' roulette selection."""
+        bounds = np.asarray([[-10.0, 10.0]])
+        initial_pop = np.array([[0.01], [0.02], [9.9], [9.95]])
+
+        result = init.oblesa(
+            functions.sphere,
+            bounds,
+            population=initial_pop,
+            opp="quasi",
+            selection="random",
+            seed=42,
+        )
+
+        fitness = functions.sphere(result)
+
+        self.assertEqual(result.shape, (4, 1))
+        self.assertTrue(utils.assert_bounds(result, bounds))
+        self.assertTrue(np.all(fitness < 2.0), f"Expected fitness < 1.0, got {fitness}")
+
 
 if __name__ == "__main__":
     unittest.main()

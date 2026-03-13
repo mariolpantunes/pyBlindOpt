@@ -363,6 +363,39 @@ class TestUtils(unittest.TestCase):
 
         self.assertGreater(range_low, range_high)
 
+    def test_select_population_best(self):
+        """Test that pure greedy selection accurately picks lowest scores."""
+        pop = np.array([[1.0], [2.0], [3.0], [4.0]])
+        scores = np.array([10.0, 1.0, 5.0, 0.5])  # best indices are 3, 1
+
+        selected = utils.select_population(pop, scores, n_pop=2, selection="best")
+
+        # Expected to pick [4.0] and [2.0]
+        self.assertEqual(selected.shape, (2, 1))
+        self.assertTrue(4.0 in selected)
+        self.assertTrue(2.0 in selected)
+
+    def test_select_population_random(self):
+        """Test roulette selection executes without shape errors."""
+        pop = np.array([[1.0], [2.0], [3.0], [4.0]])
+        scores = np.array([10.0, 1.0, 5.0, 0.5])
+
+        # We just verify it executes, returns right shape, and doesn't crash
+        selected = utils.select_population(pop, scores, n_pop=2, selection="random")
+        self.assertEqual(selected.shape, (2, 1))
+
+    def test_select_population_diversity(self):
+        """Test selection when diversity weight is heavily favored."""
+        pop = np.array([[1.0], [1.1], [1.2], [9.0]])
+        scores = np.array(
+            [0.1, 0.1, 0.1, 10.0]
+        )  # 9.0 has terrible fitness but great diversity
+
+        selected = utils.select_population(
+            pop, scores, n_pop=2, selection="best", diversity_weight=1.0
+        )
+        self.assertEqual(selected.shape, (2, 1))
+
 
 if __name__ == "__main__":
     unittest.main()

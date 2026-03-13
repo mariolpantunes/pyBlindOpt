@@ -172,89 +172,6 @@ def round_init(
     return full_pool[selected_indices]
 
 
-@utils.inherit_docs(ess.esa)
-def oblesa(
-    objective: collections.abc.Callable,
-    bounds: np.ndarray,
-    *,
-    population: np.ndarray | utils.Sampler | None = None,
-    n_pop: int = 10,
-    n_jobs: int = 1,
-    seed: int | np.random.Generator | None = None,
-    selection: str = "best",
-    diversity_weight: float = 0.0,
-    **kwargs,
-) -> np.ndarray:
-    """
-    OBLESA (Opposition-Based Learning with Empty Space Search) Initialization.
-
-    Combines OBL with Empty Space Search (`ess.esa`) to ensure
-    the population is not only high-quality but also maximally distributed
-    (low potential energy configuration).
-
-    Args:
-        objective (Callable): The objective function to minimize.
-        bounds (np.ndarray): Search space boundaries of shape (D, 2).
-        population (ndarray | Sampler | None): Initial population or Sampler.
-            If None, RandomSampler is used.
-        n_pop (int): Number of individuals to select for the final population.
-        n_jobs (int): Number of parallel jobs for objective evaluation.
-        seed (int | Generator | None): Random seed or Generator instance.
-        selection (str): Selection strategy, either 'best' (greedy) or 'random'
-            (stochastic selection based on fitness/diversity).
-        diversity_weight (float): Trade-off between fitness (0.0) and spatial
-            diversity (1.0) using crowding distance.
-        **kwargs: Arguments passed directly to `ess.esa` for the repulsion simulation.
-
-    Returns:
-        np.ndarray: Optimized population of shape (n_pop, D).
-    """
-    rng = (
-        np.random.default_rng(seed)
-        if not isinstance(seed, np.random.Generator)
-        else seed
-    )
-
-    ran_pop, n_pop = _parse_population_arg(population, n_pop, bounds, rng)
-
-    lower, upper = bounds[:, 0], bounds[:, 1]
-    opp_pop = utils.check_bounds(lower + (upper - ran_pop), bounds)
-
-    combined_samples = np.vstack((ran_pop, opp_pop))
-    emp_pop = ess.esa(combined_samples, bounds, n=2 * n_pop, seed=rng, **kwargs)
-
-    population = np.vstack((ran_pop, opp_pop, emp_pop))
-    scores = np.zeros(population.shape[0])
-
-    for i in range(0, population.shape[0], n_pop):
-        end = min(i + n_pop, population.shape[0])
-        batch = population[i:end]
-        scores[i:end] = utils.compute_objective(batch, objective, n_jobs)
-
-    prob_fitness = utils.score_2_probs(scores)
-
-    if diversity_weight > 0:
-        crowding = utils.compute_crowding_distance(population)
-        prob_dist = utils.score_2_probs(-crowding)
-    else:
-        prob_dist = np.zeros_like(prob_fitness)
-
-    final_probs = (1.0 - diversity_weight) * prob_fitness + diversity_weight * prob_dist
-    final_probs /= np.sum(final_probs)
-
-    if selection == "best":
-        idx = np.argpartition(final_probs, n_pop)[-n_pop:]
-    else:
-        try:
-            idx = rng.choice(
-                population.shape[0], size=n_pop, replace=False, p=final_probs
-            )
-        except ValueError:
-            idx = np.argpartition(final_probs, n_pop)[-n_pop:]
-
-    return population[idx]
-
-
 def quasi_opposition_based(
     objective: collections.abc.Callable,
     bounds: np.ndarray,
@@ -318,3 +235,86 @@ def quasi_opposition_based(
     top_k_indices = np.argpartition(combined_scores, n_pop)[:n_pop]
 
     return combined_pop[top_k_indices]
+
+
+@utils.inherit_docs(ess.esa)
+def oblesa(
+    objective: collections.abc.Callable,
+    bounds: np.ndarray,
+    *,
+    population: np.ndarray | utils.Sampler | None = None,
+    n_pop: int = 10,
+    n_jobs: int = 1,
+    opp: str = "standard",
+    seed: int | np.random.Generator | None = None,
+    selection: str = "best",
+    diversity_weight: float = 0.0,
+    **kwargs,
+) -> np.ndarray:
+    """
+    OBLESA (Opposition-Based Learning with Empty Space Search) Initialization.
+
+    Combines OBL with Empty Space Search (`ess.esa`) to ensure
+    the population is not only high-quality but also maximally distributed
+    (low potential energy configuration).
+
+    Args:
+        objective (Callable): The objective function to minimize.
+        bounds (np.ndarray): Search space boundaries of shape (D, 2).
+        population (ndarray | Sampler | None): Initial population or Sampler.
+            If None, RandomSampler is used.
+        n_pop (int): Number of individuals to select for the final population.
+        n_jobs (int): Number of parallel jobs for objective evaluation.
+        opp (str): Opposition method: 'standard' (exact symmetry) or 'quasi' (stochastic).
+        seed (int | Generator | None): Random seed or Generator instance.
+        selection (str): Selection strategy, either 'best' (greedy) or 'random'
+            (stochastic selection based on fitness/diversity).
+        diversity_weight (float): Trade-off between fitness (0.0) and spatial
+            diversity (1.0) using crowding distance.
+        **kwargs: Arguments passed directly to `ess.esa` for the repulsion simulation.
+
+    Returns:
+        np.ndarray: Optimized population of shape (n_pop, D).
+    """
+    rng = (
+        np.random.default_rng(seed)
+        if not isinstance(seed, np.random.Generator)
+        else seed
+    )
+
+    ran_pop, n_pop = _parse_population_arg(population, n_pop, bounds, rng)
+
+    lower, upper = bounds[:, 0], bounds[:, 1]
+    opp_pop = lower + (upper - ran_pop)
+    if opp == "standard":
+        opp_pop = utils.check_bounds(opp_pop, bounds)
+    elif opp == "quasi":
+        center = lower + (upper - lower) / 2.0
+        low_bound = np.minimum(center, opp_pop)
+        high_bound = np.maximum(center, opp_pop)
+        pop_quasi = rng.uniform(low_bound, high_bound)
+        opp_pop = utils.check_bounds(pop_quasi, bounds)
+    else:
+        logger.warning(f"Invalid opp options ({opp}), fallback to standard OBL")
+        opp_pop = utils.check_bounds(opp_pop, bounds)
+
+    combined_samples = np.vstack((ran_pop, opp_pop))
+    emp_pop = ess.esa(combined_samples, bounds, n=2 * n_pop, seed=rng, **kwargs)
+
+    population = np.vstack((ran_pop, opp_pop, emp_pop))
+    scores = np.zeros(population.shape[0])
+
+    for i in range(0, population.shape[0], n_pop):
+        end = min(i + n_pop, population.shape[0])
+        batch = population[i:end]
+        scores[i:end] = utils.compute_objective(batch, objective, n_jobs)
+
+    # Delegate the selection math to the new utils method
+    return utils.select_population(
+        population=population,
+        scores=scores,
+        n_pop=n_pop,
+        selection=selection,
+        diversity_weight=diversity_weight,
+        rng=rng,
+    )

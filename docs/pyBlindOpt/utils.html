@@ -141,6 +141,9 @@
             <li>
                     <a class="function" href="#levy_flight">levy_flight</a>
             </li>
+            <li>
+                    <a class="function" href="#select_population">select_population</a>
+            </li>
     </ul>
 
 
@@ -600,7 +603,7 @@ required by various optimization algorithms.</p>
 </span><span id="L-431"><a href="#L-431"><span class="linenos">431</span></a><span class="sd">    If not, values are clipped to the nearest bound.</span>
 </span><span id="L-432"><a href="#L-432"><span class="linenos">432</span></a>
 </span><span id="L-433"><a href="#L-433"><span class="linenos">433</span></a><span class="sd">    Args:</span>
-</span><span id="L-434"><a href="#L-434"><span class="linenos">434</span></a><span class="sd">        solution (np.ndarray): The solution vector to be validated.</span>
+</span><span id="L-434"><a href="#L-434"><span class="linenos">434</span></a><span class="sd">        solution (np.ndarray): The population vector to be validated.</span>
 </span><span id="L-435"><a href="#L-435"><span class="linenos">435</span></a><span class="sd">        bounds (np.ndarray): The bounds of valid solutions (shape: N x 2).</span>
 </span><span id="L-436"><a href="#L-436"><span class="linenos">436</span></a>
 </span><span id="L-437"><a href="#L-437"><span class="linenos">437</span></a><span class="sd">    Returns:</span>
@@ -861,6 +864,67 @@ required by various optimization algorithms.</p>
 </span><span id="L-692"><a href="#L-692"><span class="linenos">692</span></a>
 </span><span id="L-693"><a href="#L-693"><span class="linenos">693</span></a>    <span class="n">step</span> <span class="o">=</span> <span class="n">u</span> <span class="o">/</span> <span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">abs</span><span class="p">(</span><span class="n">v</span><span class="p">)</span> <span class="o">**</span> <span class="p">(</span><span class="mi">1</span> <span class="o">/</span> <span class="n">beta</span><span class="p">))</span>
 </span><span id="L-694"><a href="#L-694"><span class="linenos">694</span></a>    <span class="k">return</span> <span class="n">step</span>
+</span><span id="L-695"><a href="#L-695"><span class="linenos">695</span></a>
+</span><span id="L-696"><a href="#L-696"><span class="linenos">696</span></a>
+</span><span id="L-697"><a href="#L-697"><span class="linenos">697</span></a><span class="k">def</span><span class="w"> </span><span class="nf">select_population</span><span class="p">(</span>
+</span><span id="L-698"><a href="#L-698"><span class="linenos">698</span></a>    <span class="n">population</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
+</span><span id="L-699"><a href="#L-699"><span class="linenos">699</span></a>    <span class="n">scores</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
+</span><span id="L-700"><a href="#L-700"><span class="linenos">700</span></a>    <span class="n">n_pop</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+</span><span id="L-701"><a href="#L-701"><span class="linenos">701</span></a>    <span class="n">selection</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;best&quot;</span><span class="p">,</span>
+</span><span id="L-702"><a href="#L-702"><span class="linenos">702</span></a>    <span class="n">diversity_weight</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.0</span><span class="p">,</span>
+</span><span id="L-703"><a href="#L-703"><span class="linenos">703</span></a>    <span class="n">rng</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">Generator</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+</span><span id="L-704"><a href="#L-704"><span class="linenos">704</span></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+</span><span id="L-705"><a href="#L-705"><span class="linenos">705</span></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+</span><span id="L-706"><a href="#L-706"><span class="linenos">706</span></a><span class="sd">    Selects the best individuals from a population based on fitness and diversity.</span>
+</span><span id="L-707"><a href="#L-707"><span class="linenos">707</span></a>
+</span><span id="L-708"><a href="#L-708"><span class="linenos">708</span></a><span class="sd">    Args:</span>
+</span><span id="L-709"><a href="#L-709"><span class="linenos">709</span></a><span class="sd">        population (np.ndarray): The evaluated population.</span>
+</span><span id="L-710"><a href="#L-710"><span class="linenos">710</span></a><span class="sd">        scores (np.ndarray): The objective scores for the population (lower is better).</span>
+</span><span id="L-711"><a href="#L-711"><span class="linenos">711</span></a><span class="sd">        n_pop (int): The number of individuals to select.</span>
+</span><span id="L-712"><a href="#L-712"><span class="linenos">712</span></a><span class="sd">        selection (str): Selection strategy, &#39;best&#39; or &#39;random&#39;.</span>
+</span><span id="L-713"><a href="#L-713"><span class="linenos">713</span></a><span class="sd">        diversity_weight (float): Trade-off between fitness (0.0) and diversity (1.0).</span>
+</span><span id="L-714"><a href="#L-714"><span class="linenos">714</span></a><span class="sd">        rng (np.random.Generator | None): Random number generator.</span>
+</span><span id="L-715"><a href="#L-715"><span class="linenos">715</span></a>
+</span><span id="L-716"><a href="#L-716"><span class="linenos">716</span></a><span class="sd">    Returns:</span>
+</span><span id="L-717"><a href="#L-717"><span class="linenos">717</span></a><span class="sd">        np.ndarray: The selected population of shape (n_pop, D).</span>
+</span><span id="L-718"><a href="#L-718"><span class="linenos">718</span></a><span class="sd">    &quot;&quot;&quot;</span>
+</span><span id="L-719"><a href="#L-719"><span class="linenos">719</span></a>    <span class="k">if</span> <span class="n">rng</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+</span><span id="L-720"><a href="#L-720"><span class="linenos">720</span></a>        <span class="n">rng</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">default_rng</span><span class="p">()</span>
+</span><span id="L-721"><a href="#L-721"><span class="linenos">721</span></a>
+</span><span id="L-722"><a href="#L-722"><span class="linenos">722</span></a>    <span class="c1"># SHORTCUT: If pure greedy selection, bypass probability math entirely</span>
+</span><span id="L-723"><a href="#L-723"><span class="linenos">723</span></a>    <span class="k">if</span> <span class="n">selection</span> <span class="o">==</span> <span class="s2">&quot;best&quot;</span> <span class="ow">and</span> <span class="n">diversity_weight</span> <span class="o">==</span> <span class="mf">0.0</span><span class="p">:</span>
+</span><span id="L-724"><a href="#L-724"><span class="linenos">724</span></a>        <span class="c1"># Smallest scores are best</span>
+</span><span id="L-725"><a href="#L-725"><span class="linenos">725</span></a>        <span class="n">idx</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">argpartition</span><span class="p">(</span><span class="n">scores</span><span class="p">,</span> <span class="n">n_pop</span><span class="p">)[:</span><span class="n">n_pop</span><span class="p">]</span>
+</span><span id="L-726"><a href="#L-726"><span class="linenos">726</span></a>        <span class="k">return</span> <span class="n">population</span><span class="p">[</span><span class="n">idx</span><span class="p">]</span>
+</span><span id="L-727"><a href="#L-727"><span class="linenos">727</span></a>
+</span><span id="L-728"><a href="#L-728"><span class="linenos">728</span></a>    <span class="c1"># Convert to probabilities for blending/roulette wheel</span>
+</span><span id="L-729"><a href="#L-729"><span class="linenos">729</span></a>    <span class="n">prob_fitness</span> <span class="o">=</span> <span class="n">score_2_probs</span><span class="p">(</span><span class="n">scores</span><span class="p">)</span>
+</span><span id="L-730"><a href="#L-730"><span class="linenos">730</span></a>
+</span><span id="L-731"><a href="#L-731"><span class="linenos">731</span></a>    <span class="k">if</span> <span class="n">diversity_weight</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+</span><span id="L-732"><a href="#L-732"><span class="linenos">732</span></a>        <span class="n">crowding</span> <span class="o">=</span> <span class="n">compute_crowding_distance</span><span class="p">(</span><span class="n">population</span><span class="p">)</span>
+</span><span id="L-733"><a href="#L-733"><span class="linenos">733</span></a>        <span class="c1"># Higher crowding distance is better (more diverse), so we negate it</span>
+</span><span id="L-734"><a href="#L-734"><span class="linenos">734</span></a>        <span class="n">prob_dist</span> <span class="o">=</span> <span class="n">score_2_probs</span><span class="p">(</span><span class="o">-</span><span class="n">crowding</span><span class="p">)</span>
+</span><span id="L-735"><a href="#L-735"><span class="linenos">735</span></a>    <span class="k">else</span><span class="p">:</span>
+</span><span id="L-736"><a href="#L-736"><span class="linenos">736</span></a>        <span class="n">prob_dist</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros_like</span><span class="p">(</span><span class="n">prob_fitness</span><span class="p">)</span>
+</span><span id="L-737"><a href="#L-737"><span class="linenos">737</span></a>
+</span><span id="L-738"><a href="#L-738"><span class="linenos">738</span></a>    <span class="n">final_probs</span> <span class="o">=</span> <span class="p">(</span><span class="mf">1.0</span> <span class="o">-</span> <span class="n">diversity_weight</span><span class="p">)</span> <span class="o">*</span> <span class="n">prob_fitness</span> <span class="o">+</span> <span class="n">diversity_weight</span> <span class="o">*</span> <span class="n">prob_dist</span>
+</span><span id="L-739"><a href="#L-739"><span class="linenos">739</span></a>    <span class="n">final_probs</span> <span class="o">/=</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">final_probs</span><span class="p">)</span>
+</span><span id="L-740"><a href="#L-740"><span class="linenos">740</span></a>
+</span><span id="L-741"><a href="#L-741"><span class="linenos">741</span></a>    <span class="k">if</span> <span class="n">selection</span> <span class="o">==</span> <span class="s2">&quot;best&quot;</span><span class="p">:</span>
+</span><span id="L-742"><a href="#L-742"><span class="linenos">742</span></a>        <span class="c1"># Highest probability is best</span>
+</span><span id="L-743"><a href="#L-743"><span class="linenos">743</span></a>        <span class="n">idx</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">argpartition</span><span class="p">(</span><span class="n">final_probs</span><span class="p">,</span> <span class="o">-</span><span class="n">n_pop</span><span class="p">)[</span><span class="o">-</span><span class="n">n_pop</span><span class="p">:]</span>
+</span><span id="L-744"><a href="#L-744"><span class="linenos">744</span></a>    <span class="k">else</span><span class="p">:</span>
+</span><span id="L-745"><a href="#L-745"><span class="linenos">745</span></a>        <span class="k">try</span><span class="p">:</span>
+</span><span id="L-746"><a href="#L-746"><span class="linenos">746</span></a>            <span class="n">idx</span> <span class="o">=</span> <span class="n">rng</span><span class="o">.</span><span class="n">choice</span><span class="p">(</span>
+</span><span id="L-747"><a href="#L-747"><span class="linenos">747</span></a>                <span class="n">population</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">size</span><span class="o">=</span><span class="n">n_pop</span><span class="p">,</span> <span class="n">replace</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">p</span><span class="o">=</span><span class="n">final_probs</span>
+</span><span id="L-748"><a href="#L-748"><span class="linenos">748</span></a>            <span class="p">)</span>
+</span><span id="L-749"><a href="#L-749"><span class="linenos">749</span></a>        <span class="k">except</span> <span class="ne">ValueError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+</span><span id="L-750"><a href="#L-750"><span class="linenos">750</span></a>            <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="vm">__name__</span><span class="p">)</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span>
+</span><span id="L-751"><a href="#L-751"><span class="linenos">751</span></a>                <span class="sa">f</span><span class="s2">&quot;Random selection failed (</span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">), fallback to best selection&quot;</span>
+</span><span id="L-752"><a href="#L-752"><span class="linenos">752</span></a>            <span class="p">)</span>
+</span><span id="L-753"><a href="#L-753"><span class="linenos">753</span></a>            <span class="n">idx</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">argpartition</span><span class="p">(</span><span class="n">final_probs</span><span class="p">,</span> <span class="o">-</span><span class="n">n_pop</span><span class="p">)[</span><span class="o">-</span><span class="n">n_pop</span><span class="p">:]</span>
+</span><span id="L-754"><a href="#L-754"><span class="linenos">754</span></a>
+</span><span id="L-755"><a href="#L-755"><span class="linenos">755</span></a>    <span class="k">return</span> <span class="n">population</span><span class="p">[</span><span class="n">idx</span><span class="p">]</span>
 </span></pre></div>
 
 
@@ -1881,7 +1945,7 @@ $$ x_{n+1} = \begin{cases} 2x_n &amp; \text{if } x_n &lt; 0.5 \ 2(1-x_n) &amp; \
 </span><span id="check_bounds-432"><a href="#check_bounds-432"><span class="linenos">432</span></a><span class="sd">    If not, values are clipped to the nearest bound.</span>
 </span><span id="check_bounds-433"><a href="#check_bounds-433"><span class="linenos">433</span></a>
 </span><span id="check_bounds-434"><a href="#check_bounds-434"><span class="linenos">434</span></a><span class="sd">    Args:</span>
-</span><span id="check_bounds-435"><a href="#check_bounds-435"><span class="linenos">435</span></a><span class="sd">        solution (np.ndarray): The solution vector to be validated.</span>
+</span><span id="check_bounds-435"><a href="#check_bounds-435"><span class="linenos">435</span></a><span class="sd">        solution (np.ndarray): The population vector to be validated.</span>
 </span><span id="check_bounds-436"><a href="#check_bounds-436"><span class="linenos">436</span></a><span class="sd">        bounds (np.ndarray): The bounds of valid solutions (shape: N x 2).</span>
 </span><span id="check_bounds-437"><a href="#check_bounds-437"><span class="linenos">437</span></a>
 </span><span id="check_bounds-438"><a href="#check_bounds-438"><span class="linenos">438</span></a><span class="sd">    Returns:</span>
@@ -1899,7 +1963,7 @@ If not, values are clipped to the nearest bound.</p>
 <h6 id="arguments">Arguments:</h6>
 
 <ul>
-<li><strong>solution (np.ndarray):</strong>  The solution vector to be validated.</li>
+<li><strong>solution (np.ndarray):</strong>  The population vector to be validated.</li>
 <li><strong>bounds (np.ndarray):</strong>  The bounds of valid solutions (shape: N x 2).</li>
 </ul>
 
@@ -2367,6 +2431,101 @@ where $u \sim \mathcal{N}(0, \sigma_u^2)$ and $v \sim \mathcal{N}(0, 1)$.</p>
 
 <blockquote>
   <p>np.ndarray: Matrix of steps with shape (n_pop, dim).</p>
+</blockquote>
+</div>
+
+
+                </section>
+                <section id="select_population">
+                            <input id="select_population-view-source" class="view-source-toggle-state" type="checkbox" aria-hidden="true" tabindex="-1">
+<div class="attr function">
+            
+        <span class="def">def</span>
+        <span class="name">select_population</span><span class="signature pdoc-code multiline">(<span class="param">	<span class="n">population</span><span class="p">:</span> <span class="n">numpy</span><span class="o">.</span><span class="n">ndarray</span>,</span><span class="param">	<span class="n">scores</span><span class="p">:</span> <span class="n">numpy</span><span class="o">.</span><span class="n">ndarray</span>,</span><span class="param">	<span class="n">n_pop</span><span class="p">:</span> <span class="nb">int</span>,</span><span class="param">	<span class="n">selection</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s1">&#39;best&#39;</span>,</span><span class="param">	<span class="n">diversity_weight</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.0</span>,</span><span class="param">	<span class="n">rng</span><span class="p">:</span> <span class="n">numpy</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">_generator</span><span class="o">.</span><span class="n">Generator</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span></span><span class="return-annotation">) -> <span class="n">numpy</span><span class="o">.</span><span class="n">ndarray</span>:</span></span>
+
+                <label class="view-source-button" for="select_population-view-source"><span>View Source</span></label>
+
+    </div>
+    <a class="headerlink" href="#select_population"></a>
+            <div class="pdoc-code codehilite"><pre><span></span><span id="select_population-698"><a href="#select_population-698"><span class="linenos">698</span></a><span class="k">def</span><span class="w"> </span><span class="nf">select_population</span><span class="p">(</span>
+</span><span id="select_population-699"><a href="#select_population-699"><span class="linenos">699</span></a>    <span class="n">population</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
+</span><span id="select_population-700"><a href="#select_population-700"><span class="linenos">700</span></a>    <span class="n">scores</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
+</span><span id="select_population-701"><a href="#select_population-701"><span class="linenos">701</span></a>    <span class="n">n_pop</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+</span><span id="select_population-702"><a href="#select_population-702"><span class="linenos">702</span></a>    <span class="n">selection</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;best&quot;</span><span class="p">,</span>
+</span><span id="select_population-703"><a href="#select_population-703"><span class="linenos">703</span></a>    <span class="n">diversity_weight</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.0</span><span class="p">,</span>
+</span><span id="select_population-704"><a href="#select_population-704"><span class="linenos">704</span></a>    <span class="n">rng</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">Generator</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+</span><span id="select_population-705"><a href="#select_population-705"><span class="linenos">705</span></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+</span><span id="select_population-706"><a href="#select_population-706"><span class="linenos">706</span></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+</span><span id="select_population-707"><a href="#select_population-707"><span class="linenos">707</span></a><span class="sd">    Selects the best individuals from a population based on fitness and diversity.</span>
+</span><span id="select_population-708"><a href="#select_population-708"><span class="linenos">708</span></a>
+</span><span id="select_population-709"><a href="#select_population-709"><span class="linenos">709</span></a><span class="sd">    Args:</span>
+</span><span id="select_population-710"><a href="#select_population-710"><span class="linenos">710</span></a><span class="sd">        population (np.ndarray): The evaluated population.</span>
+</span><span id="select_population-711"><a href="#select_population-711"><span class="linenos">711</span></a><span class="sd">        scores (np.ndarray): The objective scores for the population (lower is better).</span>
+</span><span id="select_population-712"><a href="#select_population-712"><span class="linenos">712</span></a><span class="sd">        n_pop (int): The number of individuals to select.</span>
+</span><span id="select_population-713"><a href="#select_population-713"><span class="linenos">713</span></a><span class="sd">        selection (str): Selection strategy, &#39;best&#39; or &#39;random&#39;.</span>
+</span><span id="select_population-714"><a href="#select_population-714"><span class="linenos">714</span></a><span class="sd">        diversity_weight (float): Trade-off between fitness (0.0) and diversity (1.0).</span>
+</span><span id="select_population-715"><a href="#select_population-715"><span class="linenos">715</span></a><span class="sd">        rng (np.random.Generator | None): Random number generator.</span>
+</span><span id="select_population-716"><a href="#select_population-716"><span class="linenos">716</span></a>
+</span><span id="select_population-717"><a href="#select_population-717"><span class="linenos">717</span></a><span class="sd">    Returns:</span>
+</span><span id="select_population-718"><a href="#select_population-718"><span class="linenos">718</span></a><span class="sd">        np.ndarray: The selected population of shape (n_pop, D).</span>
+</span><span id="select_population-719"><a href="#select_population-719"><span class="linenos">719</span></a><span class="sd">    &quot;&quot;&quot;</span>
+</span><span id="select_population-720"><a href="#select_population-720"><span class="linenos">720</span></a>    <span class="k">if</span> <span class="n">rng</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+</span><span id="select_population-721"><a href="#select_population-721"><span class="linenos">721</span></a>        <span class="n">rng</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">default_rng</span><span class="p">()</span>
+</span><span id="select_population-722"><a href="#select_population-722"><span class="linenos">722</span></a>
+</span><span id="select_population-723"><a href="#select_population-723"><span class="linenos">723</span></a>    <span class="c1"># SHORTCUT: If pure greedy selection, bypass probability math entirely</span>
+</span><span id="select_population-724"><a href="#select_population-724"><span class="linenos">724</span></a>    <span class="k">if</span> <span class="n">selection</span> <span class="o">==</span> <span class="s2">&quot;best&quot;</span> <span class="ow">and</span> <span class="n">diversity_weight</span> <span class="o">==</span> <span class="mf">0.0</span><span class="p">:</span>
+</span><span id="select_population-725"><a href="#select_population-725"><span class="linenos">725</span></a>        <span class="c1"># Smallest scores are best</span>
+</span><span id="select_population-726"><a href="#select_population-726"><span class="linenos">726</span></a>        <span class="n">idx</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">argpartition</span><span class="p">(</span><span class="n">scores</span><span class="p">,</span> <span class="n">n_pop</span><span class="p">)[:</span><span class="n">n_pop</span><span class="p">]</span>
+</span><span id="select_population-727"><a href="#select_population-727"><span class="linenos">727</span></a>        <span class="k">return</span> <span class="n">population</span><span class="p">[</span><span class="n">idx</span><span class="p">]</span>
+</span><span id="select_population-728"><a href="#select_population-728"><span class="linenos">728</span></a>
+</span><span id="select_population-729"><a href="#select_population-729"><span class="linenos">729</span></a>    <span class="c1"># Convert to probabilities for blending/roulette wheel</span>
+</span><span id="select_population-730"><a href="#select_population-730"><span class="linenos">730</span></a>    <span class="n">prob_fitness</span> <span class="o">=</span> <span class="n">score_2_probs</span><span class="p">(</span><span class="n">scores</span><span class="p">)</span>
+</span><span id="select_population-731"><a href="#select_population-731"><span class="linenos">731</span></a>
+</span><span id="select_population-732"><a href="#select_population-732"><span class="linenos">732</span></a>    <span class="k">if</span> <span class="n">diversity_weight</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+</span><span id="select_population-733"><a href="#select_population-733"><span class="linenos">733</span></a>        <span class="n">crowding</span> <span class="o">=</span> <span class="n">compute_crowding_distance</span><span class="p">(</span><span class="n">population</span><span class="p">)</span>
+</span><span id="select_population-734"><a href="#select_population-734"><span class="linenos">734</span></a>        <span class="c1"># Higher crowding distance is better (more diverse), so we negate it</span>
+</span><span id="select_population-735"><a href="#select_population-735"><span class="linenos">735</span></a>        <span class="n">prob_dist</span> <span class="o">=</span> <span class="n">score_2_probs</span><span class="p">(</span><span class="o">-</span><span class="n">crowding</span><span class="p">)</span>
+</span><span id="select_population-736"><a href="#select_population-736"><span class="linenos">736</span></a>    <span class="k">else</span><span class="p">:</span>
+</span><span id="select_population-737"><a href="#select_population-737"><span class="linenos">737</span></a>        <span class="n">prob_dist</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros_like</span><span class="p">(</span><span class="n">prob_fitness</span><span class="p">)</span>
+</span><span id="select_population-738"><a href="#select_population-738"><span class="linenos">738</span></a>
+</span><span id="select_population-739"><a href="#select_population-739"><span class="linenos">739</span></a>    <span class="n">final_probs</span> <span class="o">=</span> <span class="p">(</span><span class="mf">1.0</span> <span class="o">-</span> <span class="n">diversity_weight</span><span class="p">)</span> <span class="o">*</span> <span class="n">prob_fitness</span> <span class="o">+</span> <span class="n">diversity_weight</span> <span class="o">*</span> <span class="n">prob_dist</span>
+</span><span id="select_population-740"><a href="#select_population-740"><span class="linenos">740</span></a>    <span class="n">final_probs</span> <span class="o">/=</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">final_probs</span><span class="p">)</span>
+</span><span id="select_population-741"><a href="#select_population-741"><span class="linenos">741</span></a>
+</span><span id="select_population-742"><a href="#select_population-742"><span class="linenos">742</span></a>    <span class="k">if</span> <span class="n">selection</span> <span class="o">==</span> <span class="s2">&quot;best&quot;</span><span class="p">:</span>
+</span><span id="select_population-743"><a href="#select_population-743"><span class="linenos">743</span></a>        <span class="c1"># Highest probability is best</span>
+</span><span id="select_population-744"><a href="#select_population-744"><span class="linenos">744</span></a>        <span class="n">idx</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">argpartition</span><span class="p">(</span><span class="n">final_probs</span><span class="p">,</span> <span class="o">-</span><span class="n">n_pop</span><span class="p">)[</span><span class="o">-</span><span class="n">n_pop</span><span class="p">:]</span>
+</span><span id="select_population-745"><a href="#select_population-745"><span class="linenos">745</span></a>    <span class="k">else</span><span class="p">:</span>
+</span><span id="select_population-746"><a href="#select_population-746"><span class="linenos">746</span></a>        <span class="k">try</span><span class="p">:</span>
+</span><span id="select_population-747"><a href="#select_population-747"><span class="linenos">747</span></a>            <span class="n">idx</span> <span class="o">=</span> <span class="n">rng</span><span class="o">.</span><span class="n">choice</span><span class="p">(</span>
+</span><span id="select_population-748"><a href="#select_population-748"><span class="linenos">748</span></a>                <span class="n">population</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">size</span><span class="o">=</span><span class="n">n_pop</span><span class="p">,</span> <span class="n">replace</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">p</span><span class="o">=</span><span class="n">final_probs</span>
+</span><span id="select_population-749"><a href="#select_population-749"><span class="linenos">749</span></a>            <span class="p">)</span>
+</span><span id="select_population-750"><a href="#select_population-750"><span class="linenos">750</span></a>        <span class="k">except</span> <span class="ne">ValueError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+</span><span id="select_population-751"><a href="#select_population-751"><span class="linenos">751</span></a>            <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="vm">__name__</span><span class="p">)</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span>
+</span><span id="select_population-752"><a href="#select_population-752"><span class="linenos">752</span></a>                <span class="sa">f</span><span class="s2">&quot;Random selection failed (</span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">), fallback to best selection&quot;</span>
+</span><span id="select_population-753"><a href="#select_population-753"><span class="linenos">753</span></a>            <span class="p">)</span>
+</span><span id="select_population-754"><a href="#select_population-754"><span class="linenos">754</span></a>            <span class="n">idx</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">argpartition</span><span class="p">(</span><span class="n">final_probs</span><span class="p">,</span> <span class="o">-</span><span class="n">n_pop</span><span class="p">)[</span><span class="o">-</span><span class="n">n_pop</span><span class="p">:]</span>
+</span><span id="select_population-755"><a href="#select_population-755"><span class="linenos">755</span></a>
+</span><span id="select_population-756"><a href="#select_population-756"><span class="linenos">756</span></a>    <span class="k">return</span> <span class="n">population</span><span class="p">[</span><span class="n">idx</span><span class="p">]</span>
+</span></pre></div>
+
+
+            <div class="docstring"><p>Selects the best individuals from a population based on fitness and diversity.</p>
+
+<h6 id="arguments">Arguments:</h6>
+
+<ul>
+<li><strong>population (np.ndarray):</strong>  The evaluated population.</li>
+<li><strong>scores (np.ndarray):</strong>  The objective scores for the population (lower is better).</li>
+<li><strong>n_pop (int):</strong>  The number of individuals to select.</li>
+<li><strong>selection (str):</strong>  Selection strategy, 'best' or 'random'.</li>
+<li><strong>diversity_weight (float):</strong>  Trade-off between fitness (0.0) and diversity (1.0).</li>
+<li><strong>rng (np.random.Generator | None):</strong>  Random number generator.</li>
+</ul>
+
+<h6 id="returns">Returns:</h6>
+
+<blockquote>
+  <p>np.ndarray: The selected population of shape (n_pop, D).</p>
 </blockquote>
 </div>
 
