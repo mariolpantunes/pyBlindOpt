@@ -1,6 +1,7 @@
 # coding: utf-8
 
 import unittest
+import unittest.mock as mock
 
 import numpy as np
 
@@ -99,6 +100,30 @@ class TestOptimizerBase(unittest.TestCase):
 
         # Check if memory was created
         self.assertIsNotNone(opt.memory)
+
+    @mock.patch("pyBlindOpt.optimizer.tqdm.tqdm")
+    def test_verbose_progress_bar_postfix(self, mock_tqdm):
+        """Test if the progress bar updates with the best_score when verbose is True."""
+
+        # 1. Setup the mock so that tqdm acts like a normal iterator for our loop
+        mock_pbar = mock.MagicMock()
+        mock_pbar.__iter__.return_value = [0, 1, 2]  # Simulate 3 epochs
+        mock_tqdm.return_value = mock_pbar
+
+        # 2. Run the optimizer with verbose=True
+        opt = MockOptimizer(lambda x: np.sum(x**2), self.bounds, n_iter=3, verbose=True)
+        opt.optimize()
+
+        # 3. Assertions
+        # Check that tqdm was actually initialized
+        self.assertTrue(mock_tqdm.called)
+
+        # Check that set_postfix was called during the loop
+        self.assertTrue(mock_pbar.set_postfix.called)
+
+        # Check that the final call to set_postfix matches the expected scientific notation format
+        expected_format = f"{opt.best_score:.3e}"
+        mock_pbar.set_postfix.assert_called_with(best_score=expected_format)
 
 
 if __name__ == "__main__":

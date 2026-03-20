@@ -260,7 +260,10 @@ class Optimizer(abc.ABC):
 
         epoch = 0
         try:
-            for epoch in tqdm.tqdm(range(self.n_iter), disable=not self.verbose):
+            # 1. Assign the tqdm iterator to a variable
+            pbar = tqdm.tqdm(range(self.n_iter), disable=not self.verbose)
+
+            for epoch in pbar:
                 # 1. Update params (e.g., decay 'a')
                 self._update_iter_params(epoch)
 
@@ -275,12 +278,21 @@ class Optimizer(abc.ABC):
                 # 4. Update Best/Leaders
                 self._update_best(epoch)
 
+                # 2. Update the progress bar postfix
+                if self.verbose:
+                    # Formatting to scientific notation (.3e)
+                    # keeps the UI clean and prevents the progress bar from jittering.
+                    pbar.set_postfix(best_score=f"{self.best_score:.3e}")
+
                 # 5. Callbacks
                 stop_signal, population_changed = self._process_callbacks(epoch)
 
                 # If callback mutated population, re-evaluate leaders immediately
                 if population_changed:
                     self._update_best(epoch)
+                    # 3. Re-update the postfix if a callback improved the score
+                    if self.verbose:
+                        pbar.set_postfix(best_score=f"{self.best_score:.6e}")
 
                 # 6. Logging
                 self._update_history(epoch)
