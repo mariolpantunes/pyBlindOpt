@@ -4,7 +4,7 @@
 Optimization Callback Utilities.
 
 Provides ready-to-use callbacks that can be injected into the `Optimizer` loop
-to modify behavior (e.g., Early Stopping) or inspect state (e.g., Logging).
+to modify behavior (e.g., Early Stopping).
 """
 
 __author__ = "Mário Antunes"
@@ -14,6 +14,8 @@ __email__ = "mario.antunes@ua.com"
 __url__ = "https://github.com/mariolpantunes/pyblindopt"
 __status__ = "Development"
 
+
+import warnings
 
 import numpy as np
 
@@ -37,7 +39,7 @@ class EarlyStopping:
         self.epoch = 0
         self.threshold = threshold
 
-    def callback(
+    def __call__(
         self, epoch: int, fitness: np.ndarray, population: np.ndarray
     ) -> bool | np.ndarray | None:
         """
@@ -47,9 +49,15 @@ class EarlyStopping:
             bool: True if stop condition is met, False otherwise.
         """
         self.epoch = epoch
-        best_fitness = np.min(fitness)
-        if best_fitness < self.threshold:
+        # Safely get the minimum, ignoring NaNs.
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", category=RuntimeWarning)
+            best_fitness = np.nanmin(fitness)
+
+        # If all values are NaN, or the best fitness hits the threshold, stop.
+        if np.isnan(best_fitness) or best_fitness < self.threshold:
             return True
+
         return False
 
 
@@ -64,21 +72,24 @@ class PatienceStopping:
     Giving up after trying for N days without making any meaningful progress.
     """
 
-    def __init__(self, patience: int = 10, min_delta: float = 1e-6) -> None:
+    def __init__(
+        self, patience: int = 10, min_delta: float = 1e-6, percentage: bool = False
+    ) -> None:
         """
         Args:
-            patience (int): Number of epochs to wait.
-            min_delta (float): Minimum change to qualify as an improvement.
+            patience: Number of epochs to wait without improvement.
+            min_delta: Minimum change to qualify as an improvement.
+            percentage: If True, `min_delta` is treated as a fractional percentage
+                        (e.g., 0.01 for 1% improvement) relative to the best score.
         """
         self.patience = patience
         self.min_delta = min_delta
+        self.percentage = percentage
         self.wait = 0
         self.best_score = np.inf
         self.epoch = 0
 
-    def callback(
-        self, epoch: int, fitness: np.ndarray, population: np.ndarray
-    ) -> bool | np.ndarray | None:
+    def __call__(self, epoch: int, fitness: np.ndarray, population: np.ndarray) -> bool:
         """
         Updates internal counter and checks stop condition.
 
@@ -86,14 +97,34 @@ class PatienceStopping:
             bool: True if patience is exhausted.
         """
         self.epoch = epoch
-        current_best = np.min(fitness)
-        if current_best < (self.best_score - self.min_delta):
+        # Safely get the minimum, ignoring NaNs. 
+        # Catch warnings if all values are NaN.
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", category=RuntimeWarning)
+            current_best = np.nanmin(fitness)
+
+        # If the entire population failed (all NaNs), treat it as stagnation
+        if np.isnan(current_best):
+            self.wait += 1
+            return self.wait >= self.patience
+
+        # Calculate the required threshold for improvement
+        if self.percentage and self.best_score != np.inf:
+            # Require an improvement of min_delta * best_score
+            # We use abs() in case the objective function yields negative scores
+            threshold = self.best_score - (abs(self.best_score) * self.min_delta)
+        else:
+            threshold = self.best_score - self.min_delta
+
+        # Check for improvement
+        if current_best < threshold:
             self.best_score = current_best
             self.wait = 0  # Reset patience
         else:
             self.wait += 1
             if self.wait >= self.patience:
                 return True
+
         return False
 
 
@@ -108,7 +139,7 @@ class CountEpochs:
     def __init__(self) -> None:
         self.epoch = 0
 
-    def callback(
+    def __call__(
         self, epoch: int, fitness: np.ndarray, population: np.ndarray
     ) -> bool | np.ndarray | None:
         """
@@ -136,7 +167,7 @@ class ClampBounds:
         """
         self.bounds = bounds
 
-    def callback(
+    def __call__(
         self, epoch: int, fitness: np.ndarray, population: np.ndarray
     ) -> bool | np.ndarray | None:
         """

@@ -149,14 +149,14 @@ class HeuristicTestMixin(Base):
 
     def test_callback_early_stopping(self):
         """Test EarlyStopping (Target reached)"""
-        c = callback.EarlyStopping(threshold=0.1)
         n_iter = 200
+        c = callback.EarlyStopping(threshold=0.1)
         self.optimizer_func(
             functions.sphere,
             self.bounds_sphere,
             n_iter=n_iter,
             n_pop=20,
-            callback=c.callback,
+            callback=c,
             verbose=False,
         )
         # Check actual epochs run
@@ -177,7 +177,7 @@ class HeuristicTestMixin(Base):
             self.bounds_sphere,
             n_iter=n_iter_max,
             n_pop=20,
-            callback=c.callback,
+            callback=c,
             verbose=False,
         )
 
