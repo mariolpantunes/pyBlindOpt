@@ -374,6 +374,40 @@ only difference between arms is the population they started from.</p>
         P.append("</tr>")
     P.append("</tbody></table></div></section>")
 
+    P.append(f"""<section><h2>Head to head, on quality</h2>
+<p class="prose">Wins and losses against each rival at generation
+{gen + 1}, over {len(cells)} cells (paired Wilcoxon, p&lt;0.05). This is the
+comparison the acceleration table cannot make: at equal <em>generations</em>
+an arm that paid 4N to initialise has spent more calls than one that paid
+2N, so reading it beside the per-call acceleration rate is what separates
+&ldquo;ESS helps&rdquo; from &ldquo;ESS helps enough to pay for
+itself&rdquo;.</p>
+<div class="scroll"><table><thead><tr><th class="l">arm</th>""")
+    RIVALS = ("random", "random4x", "obl2x", "obl", "qobl")
+    for r_ in RIVALS:
+        P.append(f"<th>vs {esc(r_)}</th>")
+    P.append("</tr></thead><tbody>")
+    for label, group in GROUPS:
+        P.append(f'<tr><td class="l dim" colspan="{len(RIVALS)+1}">{esc(label)}</td></tr>')
+        for a in group:
+            P.append(f'<tr><td class="l">{esc(a)}</td>')
+            for r_ in RIVALS:
+                if r_ == a:
+                    P.append('<td class="dim">&mdash;</td>')
+                    continue
+                w = l = 0
+                for (f, d) in cells:
+                    v, o = at(f, d, a), at(f, d, r_)
+                    if wilcoxon_signed_rank(v, o) < 0.05:
+                        if np.median(v) < np.median(o):
+                            w += 1
+                        else:
+                            l += 1
+                cls = "good" if w > l else ("bad" if l > w else "dim")
+                P.append(f'<td class="{cls}">{w}W&ndash;{l}L</td>')
+            P.append("</tr>")
+    P.append("</tbody></table></div></section>")
+
     P.append("""<section><h2>What this benchmark got wrong, three times</h2>
 <p class="prose">Recorded because each defect produced a confident,
 publishable-looking table that was noise, and because the same structural
