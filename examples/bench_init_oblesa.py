@@ -34,6 +34,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import time
 
 import numpy as np
@@ -309,9 +310,14 @@ def main():
                           f"{time.perf_counter() - t0:5.1f}s", flush=True)
                     # Written per cell, not at the end: a run this long
                     # should never lose its per-seed data to a crash, and
-                    # the p-values should be inspectable while it runs.
-                    with open(args.out, "w") as fh:
+                    # the results should be inspectable while it runs.
+                    # Written via a temporary file and renamed, because a
+                    # plain truncate-and-rewrite of a file this size leaves
+                    # a long window in which a reader sees half a document.
+                    tmp = args.out + ".tmp"
+                    with open(tmp, "w") as fh:
                         json.dump({"config": vars(args), "rows": rows}, fh)
+                    os.replace(tmp, args.out)
 
     report(rows, args)
 
