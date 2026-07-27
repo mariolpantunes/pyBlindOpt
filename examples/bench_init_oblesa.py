@@ -52,6 +52,29 @@ FUNCTIONS = {
     "rosenbrock": functions.rosenbrock,
 }
 
+# Four of the five are EVEN -- f(x) == f(-x) to machine precision -- and the
+# bounds are symmetric, so opposition-based learning's opposite of x is
+# exactly -x and carries *identical* fitness. Selecting the best N of 2N then
+# keeps mirror pairs: measured on rastrigin at d=10, 30 of 30 selected points
+# had their mirror also present and only 15 distinct |x| values survived.
+#
+# That invalidates any comparison involving opposition unless the optimum is
+# moved off the centre. It also actively misleads diversity selection, since
+# x and -x are maximally far apart while being fitness-identical, so a
+# spread-seeking rule preferentially keeps both members of a useless pair.
+#
+# `shift` displaces the optimum by a fixed per-(function, dimension) offset,
+# the standard fix and what COCO/bbob and the CEC suites do. It is seeded off
+# the function name so every arm and seed sees the same landscape.
+def shifted(fn, d, frac=0.25):
+    """`fn` with its optimum moved off the domain centre."""
+    rng = np.random.default_rng(abs(hash(fn.__name__)) % (2**32) + d)
+    off = rng.uniform(-frac, frac, d) * 5.0
+    def g(x):
+        return fn(np.asarray(x) - off)
+    g.__name__ = f"{fn.__name__}_shifted"
+    return g
+
 # Straddling the region the EC literature disagrees about (~12 d) and the
 # region torann measured its own wall in (~8 d).
 # Matching the dimensions of "Active Initialization in Population-Based
@@ -79,6 +102,7 @@ ARMS = (
     "oblesa-quasi-mm25", "oblesa-quasi-mm50",       # quasi + maximin
 )
 BASELINE = "random"
+SHIFT = [False]      # set by --shift; module-level so one_run sees it
 
 # Knob settings per OBLESA arm; everything else is the pyBlindOpt default.
 OBLESA_KNOBS = {
@@ -186,7 +210,8 @@ def one_run(arm, fname, d, seed, n_pop, budget):
     every arm: the initial population becomes the only thing that differs.
     """
     bounds = np.array([[-5.0, 5.0]] * d)
-    counted = _Counted(FUNCTIONS[fname])
+    base = FUNCTIONS[fname]
+    counted = _Counted(shifted(base, d) if SHIFT[0] else base)
     rng_init = np.random.default_rng(seed)
     rng_opt = np.random.default_rng(2**31 - seed)
 
@@ -289,7 +314,12 @@ def main():
     ap.add_argument("--functions", nargs="+", default=list(FUNCTIONS))
     ap.add_argument("--arms", nargs="+", default=list(ARMS))
     ap.add_argument("--out", default="examples/out/bench_init_oblesa.json")
+    ap.add_argument("--shift", action="store_true",
+                    help="move each optimum off the domain centre; required "
+                         "for any conclusion about opposition, since four of "
+                         "the five functions are even")
     args = ap.parse_args()
+    SHIFT[0] = args.shift
 
     rows = []
     for n_pop in args.n_pop:
