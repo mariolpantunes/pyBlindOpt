@@ -138,3 +138,7 @@ examples/out/
 .claude/
 .goose/
 .agy/
+
+# Working notes: plans, handoffs, measurement logs. README.md stays.
+*.md
+!README.md
