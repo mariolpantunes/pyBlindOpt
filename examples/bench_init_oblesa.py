@@ -87,13 +87,24 @@ def initial_population(arm, objective, bounds, n_pop, rng):
 
 
 def one_run(arm, fname, d, seed, n_pop, budget):
-    """One (arm, function, dimension, seed) cell, at a fixed total budget."""
+    """One (arm, function, dimension, seed) cell, at a fixed total budget.
+
+    **Two independent generators, and the reason matters.** The arms consume
+    wildly different amounts of randomness during initialization — ESS draws
+    for every particle of every epoch, plain sampling draws once. Feeding the
+    optimizer whatever generator state the initializer happened to leave
+    behind means each arm runs DE on a different random trajectory, so a
+    paired comparison would be measuring two changes at once and attributing
+    both to the initializer. `rng_opt` is therefore seeded identically for
+    every arm: the initial population becomes the only thing that differs.
+    """
     bounds = np.array([[-5.0, 5.0]] * d)
     counted = _Counted(FUNCTIONS[fname])
-    rng = np.random.default_rng(seed)
+    rng_init = np.random.default_rng(seed)
+    rng_opt = np.random.default_rng(2**31 - seed)
 
     t0 = time.perf_counter()
-    pop = initial_population(arm, counted, bounds, n_pop, rng)
+    pop = initial_population(arm, counted, bounds, n_pop, rng_init)
     t_init = time.perf_counter() - t0
     used = counted.n
 
@@ -103,7 +114,8 @@ def one_run(arm, fname, d, seed, n_pop, budget):
     n_iter = max(1, (budget - used) // n_pop)
 
     _, score = de.differential_evolution(
-        counted, bounds, population=pop, n_pop=n_pop, n_iter=n_iter, seed=rng)
+        counted, bounds, population=pop, n_pop=n_pop, n_iter=n_iter,
+        seed=rng_opt)
     return {
         "arm": arm, "function": fname, "d": d, "seed": seed,
         "score": float(score), "init_evals": int(used),
@@ -177,9 +189,12 @@ def main():
                           f"iters={rows[-1]['n_iter']:<5} "
                           f"evals={rows[-1]['total_evals']:<8} "
                           f"{time.perf_counter() - t0:5.1f}s", flush=True)
+                    # Written per cell, not at the end: a run this long
+                    # should never lose its per-seed data to a crash, and
+                    # the p-values should be inspectable while it runs.
+                    with open(args.out, "w") as fh:
+                        json.dump({"config": vars(args), "rows": rows}, fh)
 
-    with open(args.out, "w") as fh:
-        json.dump({"config": vars(args), "rows": rows}, fh, indent=1)
     report(rows, args)
 
 
