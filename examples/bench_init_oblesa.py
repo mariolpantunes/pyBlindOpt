@@ -70,6 +70,25 @@ class _Counted:
         return self.fn(x)
 
 
+class _Trace:
+    """Records best-so-far per generation. Never alters the search.
+
+    The endpoint alone is the wrong statistic here. An initializer acts on
+    generation zero, and 200 generations of DE wash most of that out, so a
+    final score is mostly optimizer variance with the effect under test
+    buried inside it. The curve keeps the early budget — where the effect
+    should live if it exists at all — separable from the late budget.
+    """
+
+    def __init__(self):
+        self.best = []
+
+    def __call__(self, epoch, fitness, population):
+        b = float(np.nanmin(fitness))
+        self.best.append(min(b, self.best[-1]) if self.best else b)
+        return False
+
+
 def initial_population(arm, objective, bounds, n_pop, rng):
     """One arm's initial population. Cost is charged to `objective`."""
     if arm == "random":
@@ -113,15 +132,32 @@ def one_run(arm, fname, d, seed, n_pop, budget):
     # budget left over is (budget - used) and each generation costs n_pop.
     n_iter = max(1, (budget - used) // n_pop)
 
+    trace = _Trace()
     _, score = de.differential_evolution(
         counted, bounds, population=pop, n_pop=n_pop, n_iter=n_iter,
-        seed=rng_opt)
+        seed=rng_opt, callback=trace)
     return {
         "arm": arm, "function": fname, "d": d, "seed": seed,
         "score": float(score), "init_evals": int(used),
         "total_evals": int(counted.n), "n_iter": int(n_iter),
-        "init_seconds": t_init,
+        "init_seconds": t_init, "curve": trace.best,
     }
+
+
+def at_budget(row, n_pop, budget):
+    """Best-so-far once `budget` evaluations have been spent, or `inf`.
+
+    Generation `g` of a run has consumed `init_evals + (g+1)*n_pop`, so arms
+    that paid more to initialize reach a given budget later. This is what
+    makes the curves comparable across arms that do not start level.
+    """
+    curve = row["curve"]
+    if not curve:
+        return row["score"]
+    g = (budget - row["init_evals"]) // n_pop - 1
+    if g < 0:
+        return float("inf")            # arm had not started by this budget
+    return curve[min(int(g), len(curve) - 1)]
 
 
 def wilcoxon_signed_rank(a, b):
@@ -199,41 +235,49 @@ def main():
 
 
 def report(rows, args):
-    """Median score per arm, and paired Wilcoxon against random and OBL.
+    """Arms compared at matched evaluation budgets, not just at the end.
 
-    Lower is better throughout; every arm in a row spent the same number of
-    objective evaluations, so the columns are directly comparable.
+    Lower is better throughout. Each block fixes a fraction of the budget and
+    asks where every arm stood once it had spent that many evaluations, so an
+    initializer that buys an early lead and then loses it is visible as such
+    instead of averaging into nothing.
     """
-    def sel(n_pop, fname, d, arm):
+    fracs = (0.1, 0.25, 0.5, 1.0)
+
+    def sel(n_pop, fname, d, arm, budget):
         got = [r for r in rows if r["function"] == fname and r["d"] == d
                and r["arm"] == arm and r["n_pop"] == n_pop]
-        return np.array([r["score"] for r in sorted(got, key=lambda r: r["seed"])])
+        got.sort(key=lambda r: r["seed"])
+        return np.array([at_budget(r, n_pop, budget) for r in got])
 
     for n_pop in args.n_pop:
-        print(f"\n=== n_pop={n_pop}, budget={args.iters * n_pop} evals/run, "
-              f"{args.seeds} seeds, lower is better ===")
-        print(f"{'function':<11} {'d':>3} "
-              + "".join(f"{a:>13}" for a in args.arms)
-              + f"{'p vs rand':>11}{'p vs obl':>10}{'winner':>9}")
-        for fname in args.functions:
-            for d in args.dims:
-                meds, cols = {}, ""
-                for arm in args.arms:
-                    s = sel(n_pop, fname, d, arm)
-                    meds[arm] = float(np.median(s)) if s.size else float("nan")
-                    cols += f"{meds[arm]:>13.5g}"
-                best = min(meds, key=lambda a: meds[a])
-                p_rand = p_obl = float("nan")
-                if "oblesa" in args.arms:
-                    o = sel(n_pop, fname, d, "oblesa")
-                    if "random" in args.arms:
-                        p_rand = wilcoxon_signed_rank(
-                            o, sel(n_pop, fname, d, "random"))
-                    if "obl" in args.arms:
-                        p_obl = wilcoxon_signed_rank(
-                            o, sel(n_pop, fname, d, "obl"))
-                print(f"{fname:<11} {d:>3} {cols}{p_rand:>11.3f}{p_obl:>10.3f}"
-                      f"{best:>9}")
+        full = args.iters * n_pop
+        for frac in fracs:
+            budget = int(full * frac)
+            print(f"\n=== n_pop={n_pop}, {int(frac * 100)}% budget "
+                  f"({budget} evals), {args.seeds} seeds, lower is better ===")
+            print(f"{'function':<11} {'d':>3} "
+                  + "".join(f"{a:>13}" for a in args.arms)
+                  + f"{'p vs rand':>11}{'p vs obl':>10}{'winner':>9}")
+            for fname in args.functions:
+                for d in args.dims:
+                    meds, cols = {}, ""
+                    for arm in args.arms:
+                        s = sel(n_pop, fname, d, arm, budget)
+                        meds[arm] = float(np.median(s)) if s.size else float("nan")
+                        cols += f"{meds[arm]:>13.5g}"
+                    best = min(meds, key=lambda a: meds[a])
+                    p_rand = p_obl = float("nan")
+                    if "oblesa" in args.arms:
+                        o = sel(n_pop, fname, d, "oblesa", budget)
+                        if "random" in args.arms:
+                            p_rand = wilcoxon_signed_rank(
+                                o, sel(n_pop, fname, d, "random", budget))
+                        if "obl" in args.arms:
+                            p_obl = wilcoxon_signed_rank(
+                                o, sel(n_pop, fname, d, "obl", budget))
+                    print(f"{fname:<11} {d:>3} {cols}{p_rand:>11.3f}"
+                          f"{p_obl:>10.3f}{best:>9}")
 
 
 if __name__ == "__main__":
