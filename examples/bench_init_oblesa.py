@@ -53,7 +53,12 @@ FUNCTIONS = {
 
 # Straddling the region the EC literature disagrees about (~12 d) and the
 # region torann measured its own wall in (~8 d).
-DIMS = (2, 4, 8, 16, 32, 64)
+# Matching the dimensions of "Active Initialization in Population-Based
+# Optimizers" (GECCO Companion '26, Table 3) so the acceleration rates are
+# directly comparable to its published figures. 40 is also the ceiling of
+# pyBlindOpt's Sobol sampler (Joe & Kuo direction numbers), so no arm has to
+# be dropped or substituted at the top of the range.
+DIMS = (2, 5, 10, 20, 40)
 
 # Three groups, and the middle one is the point.
 #
