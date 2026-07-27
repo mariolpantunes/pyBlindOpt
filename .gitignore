@@ -129,3 +129,12 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+
+# Benchmark results: regenerate them, never review them.
+*.json
+examples/out/
+
+# Agent scratch
+.claude/
+.goose/
+.agy/
