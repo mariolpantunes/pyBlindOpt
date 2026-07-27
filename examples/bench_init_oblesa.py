@@ -53,8 +53,33 @@ FUNCTIONS = {
 
 # Straddling the region the EC literature disagrees about (~12 d) and the
 # region torann measured its own wall in (~8 d).
-DIMS = (2, 4, 8, 16, 32)
-ARMS = ("random", "lhs", "sobol", "obl", "oblesa")
+DIMS = (2, 4, 8, 16, 32, 64)
+
+# Three groups, and the middle one is the point.
+#
+#   baselines      what the field already does
+#   cost controls  4N candidates like OBLESA, but without ESS -- these say
+#                  whether ESS finds genuinely empty regions or merely hands
+#                  the selector more candidates to choose from
+#   oblesa knobs   OBLESA exposes controls the other arms do not have, so
+#                  comparing it only at defaults understates it
+ARMS = (
+    "random", "lhs", "sobol",                       # baselines, N calls
+    "random4x", "obl2x",                            # cost controls, 4N calls
+    "obl", "qobl",                                  # opposition, 2N calls
+    "oblesa", "oblesa-quasi",                       # OBLESA, 4N calls
+    "oblesa-div25", "oblesa-div50", "oblesa-rsel",  # OBLESA knobs
+)
+BASELINE = "random"
+
+# Knob settings per OBLESA arm; everything else is the pyBlindOpt default.
+OBLESA_KNOBS = {
+    "oblesa": {},
+    "oblesa-quasi": {"opp": "quasi"},
+    "oblesa-div25": {"diversity_weight": 0.25},
+    "oblesa-div50": {"diversity_weight": 0.50},
+    "oblesa-rsel": {"selection": "random", "diversity_weight": 0.25},
+}
 
 
 class _Counted:
@@ -89,19 +114,44 @@ class _Trace:
         return False
 
 
+def _best_of(pool, objective, n_pop):
+    """Greedy best `n_pop` of an evaluated pool — OBL's own selection rule."""
+    scores = utils.compute_objective(pool, objective, 1)
+    return pool[np.argpartition(scores, n_pop)[:n_pop]]
+
+
 def initial_population(arm, objective, bounds, n_pop, rng):
-    """One arm's initial population. Cost is charged to `objective`."""
+    """One arm's initial population. Cost is charged to `objective`.
+
+    The cost controls exist because OBLESA's advantage has two candidate
+    explanations that the default arms cannot separate: ESS may be locating
+    genuinely under-explored regions, or a 4N pool may simply give greedy
+    selection more to work with. `random4x` and `obl2x` spend the same 4N
+    calls without ESS, so any margin OBLESA keeps over them is attributable
+    to the empty-space search itself.
+    """
+    lo, hi = bounds[:, 0], bounds[:, 1]
     if arm == "random":
         return utils.RandomSampler(rng).sample(n_pop, bounds)
     if arm == "lhs":
         return utils.HLCSampler(rng).sample(n_pop, bounds)
     if arm == "sobol":
         return utils.SobolSampler(rng).sample(n_pop, bounds)
+    if arm == "random4x":
+        return _best_of(utils.RandomSampler(rng).sample(4 * n_pop, bounds),
+                        objective, n_pop)
+    if arm == "obl2x":
+        base = utils.RandomSampler(rng).sample(2 * n_pop, bounds)
+        opp = utils.check_bounds(lo + hi - base, bounds)
+        return _best_of(np.vstack([base, opp]), objective, n_pop)
     if arm == "obl":
-        return init.opposition_based(
+        return init.opposition_based(objective, bounds, n_pop=n_pop, seed=rng)
+    if arm == "qobl":
+        return init.quasi_opposition_based(
             objective, bounds, n_pop=n_pop, seed=rng)
-    if arm == "oblesa":
-        return init.oblesa(objective, bounds, n_pop=n_pop, seed=rng)
+    if arm in OBLESA_KNOBS:
+        return init.oblesa(objective, bounds, n_pop=n_pop, seed=rng,
+                           **OBLESA_KNOBS[arm])
     raise ValueError(f"unknown arm {arm!r}")
 
 
@@ -144,20 +194,35 @@ def one_run(arm, fname, d, seed, n_pop, budget):
     }
 
 
-def at_budget(row, n_pop, budget):
-    """Best-so-far once `budget` evaluations have been spent, or `inf`.
+def at_gen(row, g):
+    """Best-so-far at generation `g` — the equal-iterations comparison."""
+    c = row["curve"]
+    return c[min(g, len(c) - 1)] if c else row["score"]
 
-    Generation `g` of a run has consumed `init_evals + (g+1)*n_pop`, so arms
-    that paid more to initialize reach a given budget later. This is what
-    makes the curves comparable across arms that do not start level.
+
+def vtr_for_cell(base_rows):
+    """The value-to-reach for one (function, dimension) cell.
+
+    A fixed absolute tolerance cannot work here: the same `alpha = 0.1`
+    that is unreachable for rastrigin at d=32 is passed by sphere at d=2
+    within a couple of generations, so it censors the hard cells and
+    saturates the easy ones. Instead the target is *what the baseline
+    actually achieves* — the median final best-so-far of the random arm.
+    Acceleration then answers a question with a stable meaning in every
+    cell: how much sooner does this arm reach the quality random ends at?
+    By construction roughly half the baseline runs reach it, so no cell is
+    all-censored and none is trivially saturated.
     """
-    curve = row["curve"]
-    if not curve:
-        return row["score"]
-    g = (budget - row["init_evals"]) // n_pop - 1
-    if g < 0:
-        return float("inf")            # arm had not started by this budget
-    return curve[min(int(g), len(curve) - 1)]
+    return float(np.median([r["curve"][-1] if r["curve"] else r["score"]
+                            for r in base_rows]))
+
+
+def to_target(row, n_pop, budget, vtr):
+    """(iterations, function calls, reached) to first hit `vtr`."""
+    for g, v in enumerate(row["curve"]):
+        if v <= vtr:
+            return g + 1, row["init_evals"] + (g + 1) * n_pop, True
+    return len(row["curve"]), budget, False
 
 
 def wilcoxon_signed_rank(a, b):
@@ -235,49 +300,71 @@ def main():
 
 
 def report(rows, args):
-    """Arms compared at matched evaluation budgets, not just at the end.
+    """Two questions, kept separate because they are different questions.
 
-    Lower is better throughout. Each block fixes a fraction of the budget and
-    asks where every arm stood once it had spent that many evaluations, so an
-    initializer that buys an early lead and then loses it is visible as such
-    instead of averaging into nothing.
+    *Quality* — where is each arm at the same generation? That isolates the
+    initial population from every accounting choice.
+    *Speed* — how many generations, and how many function calls, to reach the
+    quality the baseline ends at? That is the acceleration rate.
+
+    Lower objective values are better throughout.
     """
-    fracs = (0.1, 0.25, 0.5, 1.0)
-
-    def sel(n_pop, fname, d, arm, budget):
-        got = [r for r in rows if r["function"] == fname and r["d"] == d
-               and r["arm"] == arm and r["n_pop"] == n_pop]
-        got.sort(key=lambda r: r["seed"])
-        return np.array([at_budget(r, n_pop, budget) for r in got])
+    by = {}
+    for r in rows:
+        by.setdefault((r["n_pop"], r["function"], r["d"], r["arm"]), []).append(r)
+    for k in by:
+        by[k].sort(key=lambda r: r["seed"])
+    cells = sorted({k[:3] for k in by
+                    if all((k[0], k[1], k[2], a) in by for a in args.arms)})
+    gen = min(len(r["curve"]) for r in rows) - 1
 
     for n_pop in args.n_pop:
-        full = args.iters * n_pop
-        for frac in fracs:
-            budget = int(full * frac)
-            print(f"\n=== n_pop={n_pop}, {int(frac * 100)}% budget "
-                  f"({budget} evals), {args.seeds} seeds, lower is better ===")
-            print(f"{'function':<11} {'d':>3} "
-                  + "".join(f"{a:>13}" for a in args.arms)
-                  + f"{'p vs rand':>11}{'p vs obl':>10}{'winner':>9}")
-            for fname in args.functions:
-                for d in args.dims:
-                    meds, cols = {}, ""
-                    for arm in args.arms:
-                        s = sel(n_pop, fname, d, arm, budget)
-                        meds[arm] = float(np.median(s)) if s.size else float("nan")
-                        cols += f"{meds[arm]:>13.5g}"
-                    best = min(meds, key=lambda a: meds[a])
-                    p_rand = p_obl = float("nan")
-                    if "oblesa" in args.arms:
-                        o = sel(n_pop, fname, d, "oblesa", budget)
-                        if "random" in args.arms:
-                            p_rand = wilcoxon_signed_rank(
-                                o, sel(n_pop, fname, d, "random", budget))
-                        if "obl" in args.arms:
-                            p_obl = wilcoxon_signed_rank(
-                                o, sel(n_pop, fname, d, "obl", budget))
-                    print(f"{fname:<11} {d:>3} {cols}{p_rand:>11.3f}"
-                          f"{p_obl:>10.3f}{best:>9}")
+        budget = args.iters * n_pop
+        sub = [c for c in cells if c[0] == n_pop]
+        if not sub:
+            continue
+
+        print(f"\n{'=' * 78}\nQUALITY at generation {gen + 1} "
+              f"(n_pop={n_pop}) — median, lower better; * = p<0.05 vs random")
+        print(f"{'function':<11}{'d':>4}  " + "".join(f"{a:>15}" for a in args.arms))
+        for (_, f, d) in sub:
+            base = np.array([at_gen(r, gen) for r in by[(n_pop, f, d, BASELINE)]])
+            line = f"{f:<11}{d:>4}  "
+            for a in args.arms:
+                v = np.array([at_gen(r, gen) for r in by[(n_pop, f, d, a)]])
+                p = wilcoxon_signed_rank(v, base)
+                mark = "*" if (p < 0.05 and np.median(v) < np.median(base)) else " "
+                line += f"{np.median(v):>14.4g}{mark}"
+            print(line)
+
+        agg = {a: {"it": 0, "nfc": 0, "ok": 0, "n": 0} for a in args.arms}
+        print(f"\nSPEED (n_pop={n_pop}) — acceleration rate % vs {BASELINE}, "
+              f"per cell, by function calls")
+        print(f"{'function':<11}{'d':>4}  " + "".join(f"{a:>15}" for a in args.arms))
+        for (_, f, d) in sub:
+            vtr = vtr_for_cell(by[(n_pop, f, d, BASELINE)])
+            st = {}
+            for a in args.arms:
+                trip = [to_target(r, n_pop, budget, vtr)
+                        for r in by[(n_pop, f, d, a)]]
+                st[a] = (sum(x[0] for x in trip), sum(x[1] for x in trip),
+                         sum(x[2] for x in trip), len(trip))
+                for i, key in enumerate(("it", "nfc", "ok")):
+                    agg[a][key] += st[a][i]
+                agg[a]["n"] += st[a][3]
+            base_nfc = st[BASELINE][1]
+            line = f"{f:<11}{d:>4}  "
+            for a in args.arms:
+                line += f"{(1 - st[a][1] / base_nfc) * 100:>15.1f}"
+            print(line)
+
+        print(f"\nAGGREGATE (n_pop={n_pop})")
+        print(f"{'arm':<15}{'AR% iters':>11}{'AR% calls':>11}{'success':>10}")
+        for a in args.arms:
+            print(f"{a:<15}"
+                  f"{(1 - agg[a]['it'] / agg[BASELINE]['it']) * 100:>11.2f}"
+                  f"{(1 - agg[a]['nfc'] / agg[BASELINE]['nfc']) * 100:>11.2f}"
+                  f"{100 * agg[a]['ok'] / agg[a]['n']:>9.1f}%")
 
 
 if __name__ == "__main__":
