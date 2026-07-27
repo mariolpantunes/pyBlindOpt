@@ -27,11 +27,14 @@ OUT = os.path.join(os.path.dirname(__file__), "out")
 # OBLESA's 4N budget without ESS, so they are what decides whether the
 # empty-space search earns its cost or merely enlarges the selection pool.
 GROUPS = (
-    ("baselines (N calls)", ("random", "lhs", "sobol")),
+    ("baselines (N calls)", ("random", "sobol")),
     ("cost controls (4N calls, no ESS)", ("random4x", "obl2x")),
     ("opposition (2N calls)", ("obl", "qobl")),
-    ("OBLESA (4N calls)", ("oblesa", "oblesa-quasi", "oblesa-div25",
-                           "oblesa-div50", "oblesa-rsel")),
+    ("OBLESA, fitness-only selection (4N)", ("oblesa", "oblesa-quasi")),
+    ("OBLESA, crowding blend — the incumbent", ("oblesa-div25",)),
+    ("OBLESA, sequential maximin — the replacement",
+     ("oblesa-mm25", "oblesa-mm50",
+      "oblesa-quasi-mm25", "oblesa-quasi-mm50")),
 )
 ARMS = tuple(a for _, g in GROUPS for a in g)
 BASELINE = "random"
@@ -54,8 +57,12 @@ ARM_GLOSS = {
     "oblesa-div25": "OBLESA selecting on fitness blended with crowding "
                     "distance at weight 0.25.",
     "oblesa-div50": "The same at weight 0.50 — half fitness, half spread.",
-    "oblesa-rsel": "OBLESA with stochastic selection at diversity 0.25, so "
-                   "the pool is sampled by score rather than truncated.",
+    "oblesa-mm25": "OBLESA selecting by sequential maximin over the fittest "
+                   "1.75x n_pop: each point chosen is the one furthest from "
+                   "everything already selected.",
+    "oblesa-mm50": "The same, spreading over the fittest 2.5x n_pop.",
+    "oblesa-quasi-mm25": "Quasi-opposition with maximin selection at 1.75x.",
+    "oblesa-quasi-mm50": "Quasi-opposition with maximin selection at 2.5x.",
 }
 
 

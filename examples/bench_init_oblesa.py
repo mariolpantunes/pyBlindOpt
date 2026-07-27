@@ -69,11 +69,13 @@ DIMS = (2, 5, 10, 20, 40)
 #   oblesa knobs   OBLESA exposes controls the other arms do not have, so
 #                  comparing it only at defaults understates it
 ARMS = (
-    "random", "lhs", "sobol",                       # baselines, N calls
+    "random", "sobol",                              # baselines, N calls
     "random4x", "obl2x",                            # cost controls, 4N calls
     "obl", "qobl",                                  # opposition, 2N calls
-    "oblesa", "oblesa-quasi",                       # OBLESA, 4N calls
-    "oblesa-div25", "oblesa-div50", "oblesa-rsel",  # OBLESA knobs
+    "oblesa", "oblesa-quasi",                       # OBLESA on fitness alone
+    "oblesa-div25",                                 # incumbent: crowding blend
+    "oblesa-mm25", "oblesa-mm50",                   # sequential maximin
+    "oblesa-quasi-mm25", "oblesa-quasi-mm50",       # quasi + maximin
 )
 BASELINE = "random"
 
@@ -81,9 +83,19 @@ BASELINE = "random"
 OBLESA_KNOBS = {
     "oblesa": {},
     "oblesa-quasi": {"opp": "quasi"},
+    # The incumbent diversity rule: NSGA-II crowding distance blended with
+    # fitness as probabilities. Kept as the control the replacement has to
+    # beat, since bench_selection.py showed it is Pareto dominated.
     "oblesa-div25": {"diversity_weight": 0.25},
-    "oblesa-div50": {"diversity_weight": 0.50},
-    "oblesa-rsel": {"selection": "random", "diversity_weight": 0.25},
+    # Sequential maximin over a fitness-truncated pool. diversity_weight is
+    # reinterpreted as the truncation, keep = 1 + 3w, so 0.25 keeps the
+    # fittest 1.75x n_pop and 0.50 keeps 2.5x.
+    "oblesa-mm25": {"selection": "maximin", "diversity_weight": 0.25},
+    "oblesa-mm50": {"selection": "maximin", "diversity_weight": 0.50},
+    "oblesa-quasi-mm25": {"opp": "quasi", "selection": "maximin",
+                          "diversity_weight": 0.25},
+    "oblesa-quasi-mm50": {"opp": "quasi", "selection": "maximin",
+                          "diversity_weight": 0.50},
 }
 
 
