@@ -344,9 +344,9 @@ def fitness_dart_esa(
 # `bounds`, `n` and `seed`, because it forwards anything it does not recognise
 # into its metric kernel and dies on it. Declaring capabilities rather than
 # probing for them is what keeps the backends substitutable.
-dart_esa.accepts = frozenset({"k_cand"})
-random_esa.accepts = frozenset()
-fitness_dart_esa.accepts = frozenset({"k_cand", "lam", "power", "k", "scores"})
+dart_esa.accepts = frozenset({"k_cand"})  # type: ignore[reportFunctionMemberAccess]
+random_esa.accepts = frozenset()  # type: ignore[reportFunctionMemberAccess]
+fitness_dart_esa.accepts = frozenset({"k_cand", "lam", "power", "k", "scores"})  # type: ignore[reportFunctionMemberAccess]
 
 #: Back-compatible alias of the `scores` capability.
-fitness_dart_esa.wants_scores = True
+fitness_dart_esa.wants_scores = True  # type: ignore[reportFunctionMemberAccess]

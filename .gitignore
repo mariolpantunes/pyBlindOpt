@@ -151,3 +151,9 @@ bin/
 slurm/
 examples/report_sweep.py
 examples/emptyspace_reference.py
+
+# Generated documentation. Built by .github/workflows/docs.yml and published
+# straight to Pages -- it exists on GitHub and nowhere else, so generated HTML
+# never lands in a diff, a review, or a stale working tree.
+docs/
+docs_build/

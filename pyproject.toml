@@ -1,3 +1,17 @@
 [build-system]
 requires = ['setuptools>=61']
 build-backend = 'setuptools.build_meta'
+
+[tool.ruff]
+line-length = 120
+
+[tool.basedpyright]
+typeCheckingMode = "standard"
+include = ["src/pyBlindOpt"]
+
+[tool.vulture]
+paths = ["src/pyBlindOpt"]
+min_confidence = 80
+# `**ignored` is deliberate: the empty-space engines accept and drop the
+# relaxation parameters so they stay drop-in for `ess.esa`.
+ignore_names = ["ignored"]

@@ -1,0 +1,98 @@
+name: Generate and Deploy Docs
+
+# Same shape as ess and torann. The documentation is built here and nowhere
+# else: `docs/` and `docs_build/` are ignored, so the only copy that exists is
+# the one this publishes, and the site is a function of `main` rather than of
+# whoever last ran pdoc locally.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Sets permissions of the GITHUB_TOKEN to allow deployment to GitHub Pages
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Allow one concurrent deployment
+concurrency:
+  group: "pages"
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pdoc
+          pip install .
+
+      - name: Generate Docs
+        run: |
+          # pdoc only pages a submodule the package imports *as a module*.
+          # `__init__` pulls callback/functions/init/utils in that way and the
+          # optimizers in as names, so their module docstrings -- which carry
+          # the mathematical formulation of each algorithm -- would never
+          # render. The optimizers are therefore named explicitly, and the
+          # four already covered are not, since naming those warns about
+          # duplicate specs. 21 pages, zero warnings.
+          pdoc --math -d google -o docs_build \
+            pyBlindOpt \
+            pyBlindOpt.abc_opt pyBlindOpt.cs pyBlindOpt.de pyBlindOpt.egwo \
+            pyBlindOpt.emptyspace pyBlindOpt.fa pyBlindOpt.ga pyBlindOpt.gwo \
+            pyBlindOpt.hba pyBlindOpt.hc pyBlindOpt.hho pyBlindOpt.optimizer \
+            pyBlindOpt.pso pyBlindOpt.rs pyBlindOpt.sa \
+            --logo "assets/pyblindopt_logo.svg" \
+            --favicon "assets/pyblindopt_logo.svg"
+          # The logo path is resolved relative to the page referencing it, and
+          # pdoc emits two levels: `pyBlindOpt.html` at the root and
+          # `pyBlindOpt/<submodule>.html` below it. A single copy leaves every
+          # submodule page with a broken logo, so the assets go in both.
+          cp -r assets docs_build/assets
+          cp -r assets docs_build/pyBlindOpt/assets
+          touch docs_build/.nojekyll
+
+      - name: Every page must resolve its logo
+        run: |
+          python - <<'PY'
+          import pathlib, re, sys
+          root = pathlib.Path("docs_build")
+          pages = list(root.rglob("*.html"))
+          missing = [f"{p.relative_to(root)} -> {r}" for p in pages
+                     for r in set(re.findall(r'(?:src|href)="([^"]*logo\.svg)"',
+                                             p.read_text()))
+                     if not (p.parent / r).exists()]
+          if missing:
+              print("::error::logo references that do not resolve:")
+              print("\n".join(missing))
+              sys.exit(1)
+          print(f"checked {len(pages)} pages, all logo references resolve")
+          PY
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v6
+
+      - name: Upload Artifact
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: 'docs_build'
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v5
