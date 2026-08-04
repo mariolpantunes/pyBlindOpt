@@ -142,3 +142,12 @@ examples/out/
 # Working notes: plans, handoffs, measurement logs. README.md stays.
 *.md
 !README.md
+
+# Measurement scaffolding. This is a library; the index carries the library,
+# its tests, and nothing whose job is to produce a number once. Cluster
+# submission, sweep reports and reference implementations used to check a
+# result live on disk and are regenerated when needed.
+bin/
+slurm/
+examples/report_sweep.py
+examples/emptyspace_reference.py

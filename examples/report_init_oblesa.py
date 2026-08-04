@@ -24,17 +24,26 @@ import numpy as np
 
 OUT = os.path.join(os.path.dirname(__file__), "out")
 # Grouped, because the grouping is the argument: the cost controls spend
-# OBLESA's 4N budget without ESS, so they are what decides whether the
-# empty-space search earns its cost or merely enlarges the selection pool.
+# OBLESA's candidates without any empty-space search, so they are what decides
+# whether the search earns its cost or merely enlarges the selection pool.
+# `oblesa-rand` is the sharpest of them -- OBLESA's exact pipeline with the
+# engine swapped for uniform noise, so pool *shape* is held fixed too.
 GROUPS = (
     ("baselines (N calls)", ("random", "sobol")),
-    ("cost controls (4N calls, no ESS)", ("random4x", "obl2x")),
+    ("cost controls, 3N candidates", ("random3x", "obl15x")),
+    ("cost controls, 4N candidates", ("random4x", "obl2x")),
     ("opposition (2N calls)", ("obl", "qobl")),
-    ("OBLESA, fitness-only selection (4N)", ("oblesa", "oblesa-quasi")),
-    ("OBLESA, crowding blend — the incumbent", ("oblesa-div25",)),
-    ("OBLESA, sequential maximin — the replacement",
-     ("oblesa-mm25", "oblesa-mm50",
-      "oblesa-quasi-mm25", "oblesa-quasi-mm50")),
+    ("OBLESA, largest-empty-sphere engine (3N / 4N pool)",
+     ("oblesa-dart", "oblesa-quasi-dart",
+      "oblesa-dart-4n", "oblesa-quasi-dart-4n")),
+    ("OBLESA, selection knobs on the 4N pool",
+     ("oblesa-dart-4n-div25", "oblesa-quasi-dart-4n-div25",
+      "oblesa-dart-4n-prob", "oblesa-quasi-dart-4n-prob",
+      "oblesa-dart-4n-mm25", "oblesa-quasi-dart-4n-mm25")),
+    ("uniform-noise null, matched settings",
+     ("oblesa-rand", "oblesa-quasi-rand", "oblesa-rand-4n",
+      "oblesa-quasi-rand-4n", "oblesa-rand-4n-mm25",
+      "oblesa-quasi-rand-4n-mm25")),
 )
 ARMS = tuple(a for _, g in GROUPS for a in g)
 BASELINE = "random"
@@ -43,8 +52,12 @@ ARM_GLOSS = {
               "rate is measured against.",
     "lhs": "Latin hypercube: stratified per dimension, no fitness used.",
     "sobol": "Sobol low-discrepancy sequence. Quasi-random, no fitness used.",
-    "random4x": "4N uniform random candidates, keep the best N. Spends "
-                "exactly what OBLESA spends, with no structure at all.",
+    "random3x": "3N uniform random candidates, keep the best N. Spends "
+                "exactly what a 3N-pool OBLESA spends, with no structure.",
+    "obl15x": "1.5N random plus their 1.5N opposites, keep the best N: the "
+              "3N-pool cost control with opposition but no empty-space stage.",
+    "random4x": "4N uniform random candidates, keep the best N. The cost "
+                "control for the 4N-pool OBLESA arms.",
     "obl2x": "2N random plus their 2N opposites, keep the best N. OBLESA's "
              "budget and OBLESA's opposition, without the empty-space stage.",
     "obl": "Opposition-based learning: N sampled, N reflected, best N of 2N.",
@@ -63,6 +76,36 @@ ARM_GLOSS = {
     "oblesa-mm50": "The same, spreading over the fittest 2.5x n_pop.",
     "oblesa-quasi-mm25": "Quasi-opposition with maximin selection at 1.75x.",
     "oblesa-quasi-mm50": "Quasi-opposition with maximin selection at 2.5x.",
+    "oblesa-rand": "OBLESA's pipeline with the empty-space engine replaced by "
+                   "uniform noise. Identical pool shape, candidate count and "
+                   "selection rule, so any OBLESA margin over this arm belongs "
+                   "to the empty-space search and to nothing else.",
+    "oblesa-dart": "OBLESA with the empty-space stage replaced by explicit "
+                   "largest-empty-sphere filling: each point goes at the "
+                   "centre of the biggest empty sphere, found by search over a "
+                   "candidate cloud. Same objective as a Voronoi/Delaunay "
+                   "construction, no torus and no force kernel — it tests the "
+                   "*idea* rather than this implementation of it.",
+    "oblesa-quasi-dart": "The same with quasi-opposition.",
+    "oblesa-dart-4n": "The largest-empty-sphere engine sized to the static "
+                      "pool it was placed against: n_ess = 2 * n_pop, so the "
+                      "candidate pool is 4N rather than the paper's 3N.",
+    "oblesa-quasi-dart-4n": "Quasi-opposition on the 4N pool.",
+    "oblesa-dart-4n-div25": "4N pool, fitness blended with NSGA-II crowding "
+                            "distance at weight 0.25.",
+    "oblesa-dart-4n-prob": "4N pool, probabilistic selection over that blended "
+                           "score rather than greedy.",
+    "oblesa-dart-4n-mm25": "4N pool, sequential maximin over the fittest "
+                           "1.75x n_pop.",
+    "oblesa-quasi-dart-4n-div25": "Quasi-opposition, crowding blend.",
+    "oblesa-quasi-dart-4n-prob": "Quasi-opposition, probabilistic selection.",
+    "oblesa-quasi-dart-4n-mm25": "Quasi-opposition, maximin selection.",
+    "oblesa-rand-4n": "The null at the 4N pool size.",
+    "oblesa-quasi-rand-4n": "Quasi-opposition null at the 4N pool size.",
+    "oblesa-rand-4n-mm25": "Null with maximin selection, so the dart arm at "
+                           "the same setting is compared like for like.",
+    "oblesa-quasi-rand-4n-mm25": "Quasi-opposition null, maximin selection.",
+    "oblesa-quasi-rand": "Quasi-opposition null at the 3N pool size.",
 }
 
 
