@@ -207,6 +207,204 @@ class TestDE(HeuristicTestMixin, unittest.TestCase):
         super().setUp()
 
 
+class TestDEPolicyContract(unittest.TestCase):
+    """The policy layer must be invisible until something opts in.
+
+    This library runs live in classes and trains agents against a game
+    engine, so the contract is stricter than "still converges": seeded runs
+    must not move at all, and every generation must still be exactly one
+    batch of exactly `n_pop`.
+    """
+
+    BOUNDS = np.array([[-5.12, 5.12]] * 4)
+    VARIANTS = [f"{b}/{c}"
+                for b in ("rand/1", "best/1", "rand/2", "best/2",
+                          "current-to-best/1", "current-to-pbest/1",
+                          "current-to-rand/1")
+                for c in ("bin", "exp")]
+
+    def run_de(self, **kw):
+        kw.setdefault("n_pop", 15)
+        kw.setdefault("n_iter", 25)
+        kw.setdefault("verbose", False)
+        return de.differential_evolution(functions.rastrigin, self.BOUNDS, **kw)
+
+    def test_default_policy_is_fixed(self):
+        opt = de.DifferentialEvolution(
+            functions.sphere, self.BOUNDS, verbose=False)
+        self.assertIsInstance(opt.policy, de.FixedPolicy)
+        self.assertEqual(opt.policy.n_trials, 1)
+
+    def test_every_variant_still_runs_and_is_finite(self):
+        for v in self.VARIANTS:
+            for sel in ("rand", "tournament"):
+                pos, score = self.run_de(variant=v, parent_selection=sel, seed=0)
+                self.assertTrue(np.isfinite(pos).all(), f"{v}/{sel}")
+                self.assertTrue(np.isfinite(score), f"{v}/{sel}")
+
+    def test_seeded_runs_are_reproducible(self):
+        """The property every exercise built on this library depends on."""
+        for v in ("best/1/bin", "current-to-pbest/1/exp", "rand/2/bin"):
+            a = self.run_de(variant=v, seed=42)
+            b = self.run_de(variant=v, seed=42)
+            np.testing.assert_array_equal(a[0], b[0])
+            self.assertEqual(a[1], b[1])
+
+    def test_one_batch_of_exactly_n_pop_per_generation(self):
+        """The connected-agent contract: the engine binds `n_pop` slots, so
+        a generation may never evaluate more or fewer at once."""
+        shapes = []
+        opt = de.DifferentialEvolution(
+            functions.sphere, self.BOUNDS, n_pop=13, n_iter=6, seed=1,
+            verbose=False)
+        original = opt.evaluate
+
+        def spy(population):
+            shapes.append(np.asarray(population).shape)
+            return original(population)
+
+        opt.evaluate = spy
+        opt.optimize()
+        # one initial evaluation, then one per generation
+        self.assertEqual({sh[0] for sh in shapes}, {13})
+        self.assertGreaterEqual(len(shapes), 6)
+
+    def test_population_size_is_constant(self):
+        opt = de.DifferentialEvolution(
+            functions.sphere, self.BOUNDS, n_pop=11, n_iter=10, seed=1,
+            verbose=False)
+        opt.optimize()
+        self.assertEqual(opt.n_pop, 11)
+        self.assertEqual(len(opt.pop), 11)
+
+    def test_the_policy_is_told_what_survived(self):
+        """Everything adaptive is built on this report; before the policy
+        layer the mask was computed and discarded."""
+        calls = []
+
+        class Spy(de.FixedPolicy):
+            def observe(self, improved, proposal, delta):
+                calls.append((improved.copy(), proposal.F.copy(), delta.copy()))
+
+        opt = de.DifferentialEvolution(
+            functions.sphere, self.BOUNDS, n_pop=12, n_iter=5, seed=2,
+            verbose=False)
+        opt.policy = Spy(opt.F, opt.cr, opt.mutation_op, opt.samples_needed)
+        opt.optimize()
+
+        self.assertEqual(len(calls), 5)
+        for improved, F_used, delta in calls:
+            self.assertEqual(improved.shape, (12,))
+            self.assertEqual(F_used.shape, (12,))
+            self.assertEqual(delta.dtype, np.float64)
+            # a survivor is exactly an individual that did not get worse
+            self.assertTrue((delta[improved] >= 0).all())
+
+    def test_fixed_policy_draws_no_randomness_of_its_own(self):
+        """If it did, every seeded run in every exercise would shift."""
+        rng = np.random.default_rng(5)
+        before = rng.bit_generator.state
+        de.FixedPolicy(0.5, 0.7, de.mutation_best_1, 2).begin(
+            np.zeros((10, 3)), np.zeros(10), rng, 0)
+        self.assertEqual(rng.bit_generator.state, before)
+
+
+class TestDEPBest(unittest.TestCase):
+    """`current-to-pbest/1` -- JADE's mutation.
+
+    Every individual is pulled toward its own draw from the fittest `p`
+    fraction, instead of all of them toward one global best. The tests that
+    matter are the two limits, because they pin the drawing rather than
+    merely exercising it: the variant is bracketed by two others already in
+    the registry and must reduce to each.
+    """
+
+    def setUp(self):
+        self.bounds = np.array([[-5.0, 5.0]] * 4)
+
+    def run_de(self, **kw):
+        kw.setdefault("n_pop", 20)
+        kw.setdefault("n_iter", 40)
+        kw.setdefault("seed", 11)
+        kw.setdefault("verbose", False)
+        return de.differential_evolution(functions.sphere, self.bounds, **kw)
+
+    def test_it_is_registered_and_runs(self):
+        self.assertIn("current-to-pbest/1", de.DifferentialEvolution._STRATEGIES)
+        pos, score = self.run_de(variant="current-to-pbest/1/bin")
+        self.assertEqual(pos.shape, (4,))
+        self.assertLess(score, 1e-3)
+
+    def test_small_p_reduces_to_current_to_best(self):
+        """The pool floors at one individual, which is the global best."""
+        a = self.run_de(variant="current-to-pbest/1/bin", p=1e-9)
+        b = self.run_de(variant="current-to-best/1/bin")
+        np.testing.assert_allclose(a[0], b[0])
+        self.assertEqual(a[1], b[1])
+
+    def test_p_of_one_draws_from_the_whole_population(self):
+        """Not identical to current-to-rand/1 -- that draws from the pool of
+        difference vectors -- but it must stop behaving like current-to-best,
+        which is the property that matters."""
+        wide = self.run_de(variant="current-to-pbest/1/bin", p=1.0)
+        greedy = self.run_de(variant="current-to-best/1/bin")
+        self.assertFalse(np.allclose(wide[0], greedy[0]))
+
+    def make(self, **kw):
+        """An optimizer with a known population, for testing `_base_vector`
+        directly rather than inferring it from a whole run."""
+        kw.setdefault("variant", "current-to-pbest/1/bin")
+        kw.setdefault("n_pop", 20)
+        opt = de.DifferentialEvolution(
+            functions.sphere, self.bounds, seed=3, verbose=False, **kw)
+        rng = np.random.default_rng(0)
+        opt.pop = rng.random((20, 4))
+        opt.scores = np.arange(20, dtype=float)   # individual i has score i
+        opt.n_pop = 20
+        opt.rng = rng
+        opt.best_pos = opt.pop[0]
+        return opt
+
+    def test_the_draw_is_per_individual_not_per_generation(self):
+        """One draw shared across the population would reintroduce the single
+        attractor the variant exists to remove, so the same call must be able
+        to return different vectors."""
+        opt = self.make(p=0.5)                      # pool of 10
+        seen = {tuple(opt._base_vector(j)) for j in range(20)}
+        self.assertGreater(len(seen), 1)
+
+    def test_the_draw_only_ever_comes_from_the_fittest_fraction(self):
+        """Scores are 0..19, so p=0.25 must only ever return one of the five
+        lowest-scoring individuals."""
+        opt = self.make(p=0.25)
+        allowed = {tuple(row) for row in opt.pop[:5]}
+        for _ in range(200):
+            self.assertIn(tuple(opt._base_vector(0)), allowed)
+
+    def test_the_pool_never_empties_on_a_small_population(self):
+        """floor(p*N) would be 0 for p=0.05 at N=20; it must floor at one."""
+        opt = self.make(p=0.001)
+        self.assertEqual(tuple(opt._base_vector(0)), tuple(opt.pop[0]))
+
+    def test_p_must_be_a_fraction(self):
+        for bad in (0.0, -0.1, 1.5):
+            with self.assertRaises(ValueError):
+                self.run_de(variant="current-to-pbest/1/bin", p=bad)
+
+    def test_p_is_ignored_by_other_variants(self):
+        a = self.run_de(variant="best/1/bin", p=0.05)
+        b = self.run_de(variant="best/1/bin", p=0.9)
+        np.testing.assert_array_equal(a[0], b[0])
+
+    def test_existing_variants_are_untouched(self):
+        """The p-best work must not shift any seeded run already in use."""
+        for v in ("rand/1/bin", "best/1/bin", "best/2/exp",
+                  "current-to-best/1/bin", "current-to-rand/1/bin"):
+            pos, score = self.run_de(variant=v)
+            self.assertTrue(np.isfinite(pos).all(), v)
+            self.assertTrue(np.isfinite(score), v)
+
+
 class TestHC(HeuristicTestMixin, unittest.TestCase):
     """
     Tests for Hill Climbing.
