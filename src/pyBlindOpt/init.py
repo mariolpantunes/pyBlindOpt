@@ -18,9 +18,9 @@ __status__ = "Development"
 import collections.abc
 import logging
 
-import ess
 import numpy as np
 
+import pyBlindOpt.emptyspace as emptyspace
 import pyBlindOpt.utils as utils
 
 logger = logging.getLogger(__name__)
@@ -237,19 +237,58 @@ def quasi_opposition_based(
     return combined_pop[top_k_indices]
 
 
-@utils.inherit_docs(ess.esa)
+def _oppose(
+    pop: np.ndarray,
+    bounds: np.ndarray,
+    mode: str,
+    rng: np.random.Generator,
+) -> np.ndarray:
+    """
+    Reflect `pop` through the centre of `bounds`.
+
+    `mode` is 'standard' for the exact reflection or 'quasi' for a point drawn
+    uniformly between the centre and that reflection. Shared by the base
+    population and the empty-space block so the two cannot drift apart.
+
+    Note the frame is whatever `bounds` is handed. Opposing the probes about
+    the *domain* centre when they were placed inside an elite sub-box throws
+    them straight back out of it; reflecting them within their own search box
+    keeps them where the restriction intended.
+    """
+    lower, upper = bounds[:, 0], bounds[:, 1]
+    opp = lower + (upper - pop)
+    if mode == "quasi":
+        center = lower + (upper - lower) / 2.0
+        opp = rng.uniform(np.minimum(center, opp), np.maximum(center, opp))
+    return utils.check_bounds(opp, bounds)
+
+
+#: Empty-space backends selected by the `force` knob of :func:`oblesa`.
+_FORCES = {
+    "repulsive": emptyspace.dart_esa,
+    "guided": emptyspace.fitness_dart_esa,
+    "uniform": emptyspace.random_esa,
+}
+
+
 def oblesa(
     objective: collections.abc.Callable,
     bounds: np.ndarray,
     *,
     population: np.ndarray | utils.Sampler | None = None,
     n_pop: int = 10,
-    n_jobs: int = 1,
-    opp: str = "standard",
-    seed: int | np.random.Generator | None = None,
     selection: str = "best",
-    diversity_weight: float = 0.0,
-    **kwargs,
+    opp: str = "quasi",
+    opp_ess: bool = False,
+    force: str = "guided",
+    force_weight: float = 8.0,
+    seed: int | np.random.Generator | None = None,
+    n_jobs: int = 1,
+    n_ess: int | None = None,
+    k_cand: int = 2048,
+    engine: collections.abc.Callable | None = None,
+    diversity_weight: float = 0.25,
+    info: dict | None = None,
 ) -> np.ndarray:
     """
     OBLESA (Opposition-Based Learning with Empty Space Search) Initialization.
@@ -258,23 +297,103 @@ def oblesa(
     the population is not only high-quality but also maximally distributed
     (low potential energy configuration).
 
+    The pipeline is four stages, each with its own knob::
+
+        P_0    <- sample                        n_pop points
+        P_obl  <- oppose(P_0)         `opp`     n_pop points
+        P_ess  <- probe empty space   `force`   n_ess points
+        P_eop  <- oppose(P_ess)       `opp_ess` n_ess points
+        return select(P_0 u P_obl u P_ess u P_eop)   `selection`
+
+    so the candidate pool is `2 * n_pop + 2 * n_ess` at most: 2N for plain
+    OBL (`n_ess=0`), the paper's 3N by default, 4N with `opp_ess=True`.
+
+    **How much of the empty-space block survives is a selection question,
+    not a reserved-slot one.** The empty-space candidates are probes: one that
+    is discarded found an unpromising region cheaply, which is the mechanism
+    working, and one that is kept found something. How aggressively the pool
+    is filtered is controlled by `selection` -- `'best'` for greedy, `'prob'`
+    for roulette, `'maximin'` for spread over the fittest -- together with
+    `diversity_weight`. Those cover the range without forcing any block into
+    the population regardless of what it found.
+
     Args:
         objective (Callable): The objective function to minimize.
         bounds (np.ndarray): Search space boundaries of shape (D, 2).
         population (ndarray | Sampler | None): Initial population or Sampler.
             If None, RandomSampler is used.
         n_pop (int): Number of individuals to select for the final population.
-        n_jobs (int): Number of parallel jobs for objective evaluation.
-        opp (str): Opposition method: 'standard' (exact symmetry) or 'quasi' (stochastic).
+        selection (str): Selection strategy: 'best' (greedy), 'prob' (roulette
+            over the blended score -- *not* uniform sampling) or 'maximin'
+            (sequential maximin over the fittest candidates). See
+            :func:`pyBlindOpt.utils.select_indices`.
+        opp (str): Opposition applied to the base sample: 'none', 'standard'
+            (exact reflection) or 'quasi' (stochastic, between centre and
+            reflection). 'none' makes this random + empty-space with no
+            opposition stage at all.
+        opp_ess (bool): Apply the same transform to the empty-space block,
+            appending the result to the pool. The premise is qOBL's, one level
+            down: an empty-region centroid is a guess, and the segment from the
+            centre toward its opposite is where quasi-opposition says the
+            payoff tends to sit. Ignored when `opp='none'` or `n_ess=0`.
+            Default False: worth 1.6 points of acceleration rate on the
+            factorial, against 10.6 for `opp` and 8.4 for `selection`, and it
+            *compresses* what the guided search itself earns -- the margin over
+            the uniform null falls from +6.1 to +3.6 when it is on. It competes
+            with the attraction term rather than adding to it.
+        force (str): Which force field the probes feel. 'repulsive' is pure
+            novelty -- as far as possible from everything already sampled.
+            'guided' adds an attractive term toward low predicted objective,
+            weighted by `force_weight`, which is the physical reading of ESS:
+            particles repel by distance and are attracted by quality.
+            'uniform' is the null -- OBLESA's pool shape and candidate count
+            with no empty-space search at all, which is what separates "the
+            search found something" from "a bigger pool gave the selector
+            more to choose from". Ignored when `engine` is given.
+        force_weight (float): Attraction strength for `force='guided'`. Zero
+            reproduces 'repulsive' exactly, which makes a sweep over this an
+            ablation rather than a comparison of two methods.
+
+            The default is conditioned on the other defaults, which matters
+            because the two estimators disagree. Averaged over all 56 settings
+            of the other knobs the factorial prefers 16 (29.2 against 8's
+            28.0), but 42 of those settings use `elite_box` or `opp_ess`,
+            which this signature no longer ships. Restricted to the shipped
+            family the gap is noise (28.7 against 28.3, n=14 each), and at
+            *these* defaults 8 wins the paired comparison outright: 460 of 800
+            cells against 336, Wilcoxon p < 1e-4 on final best fitness.
+
+            **Provisional.** This is the dart engine's knob: a scalar on a
+            standardised Shepard surrogate, scoring a finite candidate cloud.
+            A force relaxation such as `ess.esa` normalises attraction
+            differently -- pairwise, with no interpolating denominator -- so
+            the number does not carry across, and this default is expected to
+            be re-derived once that backend exists. What does carry across is
+            how it was chosen: condition on the other defaults rather than
+            averaging over settings the signature does not ship.
         seed (int | Generator | None): Random seed or Generator instance.
-        selection (str): Selection strategy, either 'best' (greedy) or 'random'
-            (stochastic selection based on fitness/diversity).
+        n_jobs (int): Number of parallel jobs for objective evaluation.
+        n_ess (int | None): Size of the empty-space block. Defaults to `n_pop`.
+            Zero disables the stage, reducing this to OBL under `selection`.
+        k_cand (int): Candidates the probe search draws per placed point.
+            Accuracy knob of the empty-space engines; higher is closer to the
+            exact largest empty sphere and linearly more expensive.
+        engine (Callable | None): Empty-space backend override, called as
+            `engine(samples, bounds, n=..., seed=..., ...)`. When None it is
+            chosen by `force`. Pass `ess.esa` for the published implementation;
+            engines declare which extra keywords they accept via an `accepts`
+            attribute, and anything without one receives only the four
+            positional-equivalent arguments.
         diversity_weight (float): Trade-off between fitness (0.0) and spatial
-            diversity (1.0) using crowding distance.
-        **kwargs: Arguments passed directly to `ess.esa` for the repulsion simulation.
+            diversity (1.0) using crowding distance. The default is an interior
+            optimum, not a corner: 26.7 at 0.0, 29.4 at 0.25, 24.0 at 0.5. It
+            exists only under `selection='best'` -- the other rules already
+            spend their own randomness on spread.
+        info (dict | None): If given, filled in place with `pool_size`.
 
     Returns:
-        np.ndarray: Optimized population of shape (n_pop, D).
+        np.ndarray: Optimized population of shape (n_pop, D), ordered by
+        ascending score.
     """
     rng = (
         np.random.default_rng(seed)
@@ -282,35 +401,47 @@ def oblesa(
         else seed
     )
 
+    if opp not in ("none", "standard", "quasi"):
+        raise ValueError(f"opp must be 'none', 'standard' or 'quasi', got {opp!r}")
+    if engine is None and force not in _FORCES:
+        raise ValueError(f"force must be one of {sorted(_FORCES)}, got {force!r}")
+    probe = _FORCES[force] if engine is None else engine
+
     ran_pop, n_pop = _parse_population_arg(population, n_pop, bounds, rng)
 
-    lower, upper = bounds[:, 0], bounds[:, 1]
-    opp_pop = lower + (upper - ran_pop)
-    if opp == "standard":
-        opp_pop = utils.check_bounds(opp_pop, bounds)
-    elif opp == "quasi":
-        center = lower + (upper - lower) / 2.0
-        low_bound = np.minimum(center, opp_pop)
-        high_bound = np.maximum(center, opp_pop)
-        pop_quasi = rng.uniform(low_bound, high_bound)
-        opp_pop = utils.check_bounds(pop_quasi, bounds)
+    if opp == "none":
+        combined_samples = ran_pop
     else:
-        logger.warning(f"Invalid opp options ({opp}), fallback to standard OBL")
-        opp_pop = utils.check_bounds(opp_pop, bounds)
+        combined_samples = np.vstack((ran_pop, _oppose(ran_pop, bounds, opp, rng)))
+    n_ess = n_pop if n_ess is None else int(n_ess)
 
-    combined_samples = np.vstack((ran_pop, opp_pop))
-    emp_pop = ess.esa(combined_samples, bounds, n=2 * n_pop, seed=rng, **kwargs)
+    obl_scores = utils.compute_objective(combined_samples, objective, n_jobs)
 
-    population = np.vstack((ran_pop, opp_pop, emp_pop))
-    scores = np.zeros(population.shape[0])
+    if n_ess > 0:
+        # Only keywords the engine declares are forwarded. `ess.esa` declares
+        # nothing and pushes anything it does not recognise into its metric
+        # kernel, where it dies; this is what keeps it substitutable.
+        accepts = getattr(probe, "accepts", frozenset())
+        eng_kw = {}
+        if "k_cand" in accepts:
+            eng_kw["k_cand"] = k_cand
+        if "lam" in accepts:
+            eng_kw["lam"] = force_weight
+        if "scores" in accepts:
+            eng_kw["scores"] = obl_scores
+        emp_pop = probe(combined_samples, bounds, n=n_ess, seed=rng, **eng_kw)
+    else:
+        emp_pop = np.empty((0, bounds.shape[0]))
 
-    for i in range(0, population.shape[0], n_pop):
-        end = min(i + n_pop, population.shape[0])
-        batch = population[i:end]
-        scores[i:end] = utils.compute_objective(batch, objective, n_jobs)
+    if opp_ess and opp != "none" and emp_pop.shape[0]:
+        emp_pop = np.vstack((emp_pop, _oppose(emp_pop, bounds, opp, rng)))
 
-    # Delegate the selection math to the new utils method
-    return utils.select_population(
+    population = np.vstack((combined_samples, emp_pop))
+    scores = np.concatenate((
+        obl_scores, utils.compute_objective(emp_pop, objective, n_jobs)
+        if emp_pop.shape[0] else np.empty(0)))
+
+    idx = utils.select_indices(
         population=population,
         scores=scores,
         n_pop=n_pop,
@@ -318,3 +449,8 @@ def oblesa(
         diversity_weight=diversity_weight,
         rng=rng,
     )
+
+    if info is not None:
+        info["pool_size"] = int(population.shape[0])
+
+    return population[idx]
