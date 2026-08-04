@@ -115,15 +115,89 @@ class TestUtils(unittest.TestCase):
         pop_high = sampler.sample(10, bounds_high)
         self.assertEqual(pop_high.shape, (10, 40))
 
-    def test_sobol_dimension_limit(self):
-        """Test that Sobol raises error for unsupported dimensions (>40)"""
-        # Create bounds for 41 dimensions
-        bounds = np.zeros((41, 2))
+    def test_sobol_no_dimension_limit(self):
+        """Sobol has no dimension ceiling: direction numbers are generated."""
+        bounds = np.zeros((64, 2))
+        bounds[:, 1] = 1.0
 
-        sampler = utils.SobolSampler(self.rng)
+        pop = utils.SobolSampler(self.rng).sample(16, bounds)
 
-        with self.assertRaises(ValueError):
-            sampler.sample(10, bounds)
+        self.assertEqual(pop.shape, (16, 64))
+        self.assertTrue(utils.assert_bounds(pop, bounds))
+
+    def test_sobol_primitive_polynomials(self):
+        """
+        Every generated polynomial must be primitive over GF(2) and distinct.
+
+        This is the property the old hard-coded table violated: five of its
+        rows were not primitive and six polynomials were reused across up to
+        four dimensions, which is why dimensions above 19 did not describe a
+        Sobol sequence at all.
+        """
+        polys = utils._primitive_polynomials(80)
+
+        self.assertEqual(len(polys), 80)
+        self.assertEqual(len(set(polys)), 80, "polynomials must be distinct")
+        for s, a in polys:
+            self.assertTrue(
+                utils._is_primitive((1 << s) | (a << 1) | 1, s),
+                f"({s}, {a}) is not primitive over GF(2)",
+            )
+        # Degree must be non-decreasing: the enumeration goes by degree.
+        degrees = [s for s, _ in polys]
+        self.assertEqual(degrees, sorted(degrees))
+
+    def test_sobol_stratification(self):
+        """
+        Each coordinate of a 2^k-point design must be a (0, k, 1)-net.
+
+        With `n = 2**k` points every dimension has to hit each of the `n`
+        equal strata exactly once. The previous Gray-code driver derived its
+        direction index from `i` instead of `i - 1`, shifting the sequence by
+        one point and dropping the origin, so this failed in every dimension.
+        """
+        n = 128
+        bounds = np.zeros((24, 2))
+        bounds[:, 1] = 1.0
+
+        pop = utils.SobolSampler(self.rng).sample(n, bounds)
+        strata = np.floor(pop * n).astype(int)
+
+        for d in range(bounds.shape[0]):
+            self.assertEqual(
+                len(np.unique(strata[:, d])), n, f"dimension {d} does not stratify"
+            )
+
+    def test_sobol_projections_uncorrelated(self):
+        """
+        No coordinate pair may correlate strongly when points outnumber dims.
+
+        Correlated projections are the failure mode of unoptimized direction
+        numbers, and the reason `_sobol_extend` searches for them rather than
+        defaulting to `m_i = 1`. Only asserted for `n >= 4 * d`: with fewer
+        points than dimensions some pair must correlate whatever the design.
+        """
+        for d, n in ((16, 256), (40, 256), (64, 1024)):
+            bounds = np.zeros((d, 2))
+            bounds[:, 1] = 1.0
+            pop = utils.SobolSampler(np.random.default_rng(0)).sample(n, bounds)
+
+            corr = np.corrcoef(pop.T)
+            np.fill_diagonal(corr, 0.0)
+
+            self.assertLess(
+                float(np.abs(corr).max()), 0.5, f"correlated projection at d={d}"
+            )
+
+    def test_sobol_prefix_stable(self):
+        """
+        The direction numbers for `d` dimensions must be a prefix of those for
+        any larger `d`, so the cache can be grown and sliced.
+        """
+        wide = utils._sobol_extend(50)
+        narrow = utils._sobol_extend(12)
+
+        np.testing.assert_array_equal(wide[:12], narrow)
 
     def test_chaotic_sampler(self):
         """Test Chaotic Map Sampler (Logistic Map)"""
