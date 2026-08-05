@@ -283,7 +283,7 @@ class TestDEPolicyContract(unittest.TestCase):
         calls = []
 
         class Spy(de.FixedPolicy):
-            def observe(self, improved, proposal, delta):
+            def observe(self, improved, proposal, delta, replaced):
                 calls.append((improved.copy(), proposal.F.copy(), delta.copy()))
 
         opt = de.DifferentialEvolution(
@@ -306,6 +306,90 @@ class TestDEPolicyContract(unittest.TestCase):
         before = rng.bit_generator.state
         de.FixedPolicy(0.5, 0.7, de.mutation_best_1, 2).begin(
             np.zeros((10, 3)), np.zeros(10), rng, 0)
+        self.assertEqual(rng.bit_generator.state, before)
+
+
+class TestDEArchive(unittest.TestCase):
+    """JADE's optional external archive.
+
+    Defeated parents are kept and used as the *subtracted* difference vector,
+    so it points along the direction of recent progress. The tests pin the
+    bookkeeping, since the quality effect is landscape-dependent by the
+    paper's own account and is not something a unit test should assert.
+    """
+
+    BOUNDS = np.array([[-5.12, 5.12]] * 4)
+
+    def make(self, **kw):
+        kw.setdefault("variant", "current-to-pbest/1/bin")
+        kw.setdefault("n_pop", 20)
+        kw.setdefault("n_iter", 25)
+        kw.setdefault("seed", 1)
+        pol = de.ArchivePolicy(0.5, 0.7, de.mutation_current_to_pbest_1, 2)
+        opt = de.DifferentialEvolution(
+            functions.rastrigin, self.BOUNDS, policy=pol, verbose=False, **kw)
+        return opt, pol
+
+    def test_selectable_by_name(self):
+        opt = de.DifferentialEvolution(
+            functions.sphere, self.BOUNDS, policy="archive", verbose=False)
+        self.assertIsInstance(opt.policy, de.ArchivePolicy)
+
+    def test_it_fills_and_respects_the_cap(self):
+        opt, pol = self.make()
+        opt.optimize()
+        self.assertGreater(len(pol.archive), 0)
+        self.assertLessEqual(len(pol.archive), 20)
+
+    def test_an_explicit_cap_is_honoured(self):
+        pol = de.ArchivePolicy(0.5, 0.7, de.mutation_best_1, 2, cap=5)
+        de.DifferentialEvolution(
+            functions.rastrigin, self.BOUNDS, policy=pol, n_pop=20,
+            n_iter=15, seed=2, verbose=False).optimize()
+        self.assertLessEqual(len(pol.archive), 5)
+
+    def test_it_holds_no_live_population_member(self):
+        """It stores parents that were *replaced*; a row still in the
+        population would mean a survivor was archived by mistake."""
+        opt, pol = self.make()
+        opt.optimize()
+        live = {row.tobytes() for row in opt.pop}
+        self.assertEqual([a for a in pol.archive if a.tobytes() in live], [])
+
+    def test_the_archive_reaches_the_difference_vectors(self):
+        """`augment` must actually substitute, or the archive is dead weight."""
+        pol = de.ArchivePolicy(0.5, 0.7, de.mutation_best_1, 2)
+        pol._n_pop = 1                     # union is almost all archive
+        pol.archive = np.full((4, 3), 99.0)
+        rng = np.random.default_rng(0)
+        cands = np.zeros((2, 3))
+        swapped = sum(bool((pol.augment(cands, rng)[-1] == 99.0).all())
+                      for _ in range(200))
+        self.assertGreater(swapped, 100)
+
+    def test_an_empty_archive_changes_nothing(self):
+        pol = de.ArchivePolicy(0.5, 0.7, de.mutation_best_1, 2)
+        pol.archive = np.empty((0, 3))
+        cands = np.arange(6, dtype=float).reshape(2, 3)
+        np.testing.assert_array_equal(
+            pol.augment(cands, np.random.default_rng(0)), cands)
+
+    def test_runs_are_reproducible(self):
+        outs = []
+        for _ in range(2):
+            opt, _ = self.make()
+            opt.optimize()
+            outs.append(opt.best_pos.copy())
+        np.testing.assert_array_equal(outs[0], outs[1])
+
+    def test_the_default_path_still_receives_no_archive(self):
+        """`FixedPolicy.augment` must not touch the candidates, or every
+        seeded run in every exercise moves."""
+        pol = de.FixedPolicy(0.5, 0.7, de.mutation_best_1, 2)
+        rng = np.random.default_rng(5)
+        before = rng.bit_generator.state
+        cands = np.arange(6, dtype=float).reshape(2, 3)
+        np.testing.assert_array_equal(pol.augment(cands, rng), cands)
         self.assertEqual(rng.bit_generator.state, before)
 
 
@@ -343,9 +427,9 @@ class TestDEEnsemble(unittest.TestCase):
         ok = []
         original = pol.observe
 
-        def spy(improved, proposal, delta):
+        def spy(improved, proposal, delta, replaced):
             before = pol._held.copy()
-            original(improved, proposal, delta)
+            original(improved, proposal, delta, replaced)
             kept = (before == pol._held).all(axis=1)
             ok.append(bool(kept[improved].all()))
 
@@ -361,7 +445,7 @@ class TestDEEnsemble(unittest.TestCase):
         rng = np.random.default_rng(0)
         pol.begin(np.zeros((6, 3)), np.zeros(6), rng, 0)
         before = pol._held.copy()
-        pol.observe(np.zeros(6, dtype=bool), None, np.zeros(6))
+        pol.observe(np.zeros(6, dtype=bool), None, np.zeros(6), np.zeros((6, 3)))
         self.assertFalse(np.array_equal(before, pol._held))
 
     def test_the_whole_pool_is_reachable(self):

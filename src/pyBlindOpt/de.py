@@ -212,9 +212,19 @@ class Policy:
         """Indices individual `j` may draw difference vectors from."""
         return np.delete(np.arange(n_pop), j)
 
-    def observe(self, improved, proposal, delta):
-        """Report the outcome. `improved` is the survivor mask, `delta` the
-        score improvement (positive = better). Stateless policies ignore it."""
+    def augment(self, candidates, rng):
+        """Optionally substitute difference vectors from outside the
+        population. The default returns them untouched **and draws no
+        randomness**, which is what keeps the classical path reproducible."""
+        return candidates
+
+    def observe(self, improved, proposal, delta, replaced):
+        """Report the outcome.
+
+        `improved` is the survivor mask, `delta` the score improvement
+        (positive = better), and `replaced` the parents that lost -- captured
+        before the population is overwritten, since that is the only moment
+        they exist. Stateless policies ignore all of it."""
 
 
 class FixedPolicy(Policy):
@@ -242,6 +252,141 @@ class FixedPolicy(Policy):
             ops=[self.mutation_op] * n,
             samples=[self.samples_needed] * n,
         )
+
+
+class ArchivePolicy(Policy):
+    r"""JADE's optional external archive, with fixed `F` and `cr`.
+
+    When a trial beats its parent, the parent is normally overwritten and
+    lost. This keeps those defeated parents in an archive $A$, and draws the
+    **subtracted** difference vector from $P \cup A$ rather than from $P$:
+
+    $$ v = x_i + F(x_{pbest} - x_i) + F(x_{r1} - \tilde{x}_{r2}),
+       \qquad \tilde{x}_{r2} \sim P \cup A $$
+
+    Only the last term changes; the base and $x_{r1}$ stay in the population.
+
+    **Why a defeated parent is useful.** It marks somewhere the search has
+    just moved *away* from, so subtracting it points the difference vector
+    roughly along the direction of recent progress -- information a random
+    pair does not carry. It also keeps difference vectors varied: with a
+    small population there are few distinct pairs, and they shrink together
+    as it converges, which is exactly when DE stalls.
+
+    It costs nothing to evaluate. Those parents were scored in the generation
+    that discarded them.
+
+    Introduced in Zhang & Sanderson, *JADE: Adaptive Differential Evolution
+    With Optional External Archive* (IEEE TEC, 2009), and carried by SHADE
+    and L-SHADE since. **Optional** is the paper's own word: the reported
+    benefit is larger on harder and higher-dimensional problems and can be
+    neutral on easy unimodal ones, so this is a component to measure rather
+    than assume.
+
+    This is JADE's archive **without** its parameter adaptation -- `F` and
+    `cr` stay fixed. Pair it with `current-to-pbest/1` for JADE's mutation;
+    the adaptation is the remaining third.
+
+    **On its own it is mostly not an improvement, and that is worth knowing
+    before reaching for it.** Measured with `current-to-pbest/1/bin`, $d=10$,
+    40 individuals, 300 generations, 25 seeds, paired so the archive is the
+    only difference (median, and seeds won out of 25):
+
+    | function | off | on | wins |
+    | --- | --- | --- | --- |
+    | sphere | 2.1e-32 | 6.8e-27 | 1/25 |
+    | rastrigin | 9.94 | 12.44 | 6/25 |
+    | ackley | 4.0e-15 | 6.5e-13 | 0/25 |
+    | griewank | 0.0148 | 0.0156 | 12/25 |
+    | **rosenbrock** | 6.93 | **2.51** | **23/25** |
+    | levy | 3.8e-30 | 6.4e-26 | 1/25 |
+    | zakharov | 7.0e-16 | 7.7e-13 | 3/25 |
+    | dixon_price | 0.667 | 0.667 | 8/25 |
+    | styblinski_tang | -391.7 | -391.7 | 5/25 |
+
+    Decisive on rosenbrock -- a narrow curved valley, where a difference
+    vector aimed along recent progress is exactly what is needed -- neutral
+    on three, and worse on five. The pattern fits the mechanism: the archive
+    buys diversity in the difference vectors, and on unimodal landscapes
+    diversity is what you are trying to give up.
+
+    The likely reading is that the archive is a *component* of JADE rather
+    than a standalone upgrade: the paper's results have it working alongside
+    adaptive `F` and `cr`, which can tighten as the archive loosens. Treat
+    these numbers as the baseline to beat once the adaptation lands, not as a
+    verdict on the archive.
+
+    Args:
+        F (float): Differential weight.
+        cr (float): Crossover probability.
+        mutation_op (Callable): Mutation from the chosen `variant`.
+        samples_needed (int): How many difference vectors it takes.
+        cap (int | None): Archive size limit. None caps at the population
+            size, which is what JADE specifies.
+
+    Note:
+        Eviction is **random**, as in the paper. Some later implementations
+        drop the oldest instead; the two behave differently once the
+        population converges, so the choice is recorded rather than left to
+        the reader.
+    """
+
+    def __init__(self, F, cr, mutation_op, samples_needed, cap=None):
+        self.F = F
+        self.cr = cr
+        self.mutation_op = mutation_op
+        self.samples_needed = samples_needed
+        self.cap = cap
+        #: Defeated parents, shape (|A|, D).
+        self.archive = None
+        self._n_pop = 0
+        #: `observe` receives no generator; using a private one would make a
+        #: seeded run irreproducible, so `begin` stashes the optimizer's.
+        self._rng = None
+
+    def begin(self, pop, scores, rng, trial):
+        self._rng = rng
+        n = len(pop)
+        self._n_pop = n
+        if self.archive is None:
+            self.archive = np.empty((0, pop.shape[1]))
+        return Proposal(
+            F=np.full(n, self.F),
+            cr=np.full(n, self.cr),
+            ops=[self.mutation_op] * n,
+            samples=[self.samples_needed] * n,
+        )
+
+    def augment(self, candidates, rng):
+        """Redraw the subtracted vector from the union, with the union's own
+        probability -- it arrives here as a population draw, so it is
+        swapped for an archive member $|A| / (N + |A|)$ of the time."""
+        archive = self.archive
+        n_arch = 0 if archive is None else len(archive)
+        if archive is None or n_arch == 0 or len(candidates) < 2:
+            return candidates
+        if rng.random() < n_arch / (self._n_pop + n_arch):
+            candidates = candidates.copy()
+            candidates[-1] = archive[rng.integers(n_arch)]
+        return candidates
+
+    def observe(self, improved, proposal, delta, replaced):
+        """Absorb the parents that lost, then trim to the cap."""
+        if replaced is None or len(replaced) == 0:
+            return
+        if self.archive is None:
+            self.archive = np.empty((0, replaced.shape[1]))
+        self.archive = np.vstack((self.archive, replaced))
+        cap = self.cap if self.cap is not None else max(self._n_pop, 1)
+        if len(self.archive) > cap and self._rng is not None:
+            # Random eviction, per the paper, from the optimizer's generator
+            # so the run stays reproducible.
+            keep = self._rng.permutation(len(self.archive))[:cap]
+            self.archive = self.archive[np.sort(keep)]
+
+    def __repr__(self):
+        n = 0 if self.archive is None else len(self.archive)
+        return f"ArchivePolicy(F={self.F}, cr={self.cr}, |A|={n})"
 
 
 class EnsemblePolicy(Policy):
@@ -301,19 +446,20 @@ class EnsemblePolicy(Policy):
     def begin(self, pop, scores, rng, trial):
         self._rng = rng
         n = len(pop)
-        if self._held is None or len(self._held) != n:
-            self._held = self._draw(rng, n)
-        idx = self._held[:, 0].astype(int)
+        held = self._held
+        if held is None or len(held) != n:
+            held = self._held = self._draw(rng, n)
+        idx = held[:, 0].astype(int)
         return Proposal(
-            F=self._held[:, 1].copy(),
-            cr=self._held[:, 2].copy(),
+            F=held[:, 1].copy(),
+            cr=held[:, 2].copy(),
             ops=[self._ops[i][0] for i in idx],
             samples=[self._ops[i][1] for i in idx],
         )
 
-    def observe(self, improved, proposal, delta):
+    def observe(self, improved, proposal, delta, replaced):
         """Keep what worked; resample what did not."""
-        if self._held is None:
+        if self._held is None or self._rng is None:
             return
         failed = ~np.asarray(improved, dtype=bool)
         if failed.any():
@@ -471,11 +617,15 @@ class DifferentialEvolution(Optimizer):
         elif policy == "fixed":
             self.policy = FixedPolicy(F, cr, self.mutation_op,
                                       self.samples_needed)
+        elif policy == "archive":
+            self.policy = ArchivePolicy(F, cr, self.mutation_op,
+                                        self.samples_needed)
         elif policy == "ensemble":
             self.policy = EnsemblePolicy()
         else:
             raise ValueError(
-                f"Unknown policy '{policy}'. Supported: 'fixed', 'ensemble', "
+                f"Unknown policy '{policy}'. Supported: 'fixed', 'archive', "
+                f"'ensemble', "
                 f"or a Policy instance."
             )
         self.policy_name = policy if isinstance(policy, str) else type(policy).__name__
@@ -572,7 +722,7 @@ class DifferentialEvolution(Optimizer):
                         available_indices, size=samples_needed, replace=False
                     )
 
-            candidates = self.pop[choices]
+            candidates = self.policy.augment(self.pop[choices], self.rng)
 
             # 3. Mutation
             # Note: For 'best/...' strategies, 'best' is used as base, and 'candidates' are just diffs.
@@ -634,11 +784,16 @@ class DifferentialEvolution(Optimizer):
         improved_mask = offspring_scores <= self.scores
         delta = self.scores - offspring_scores
 
+        # The parents about to be overwritten, captured while they still
+        # exist: an archive-based policy stores exactly these, and after the
+        # assignment below they are gone.
+        replaced = self.pop[improved_mask].copy()
+
         self.pop[improved_mask] = offspring[improved_mask]
         self.scores[improved_mask] = offspring_scores[improved_mask]
 
         if self._proposal is not None:
-            self.policy.observe(improved_mask, self._proposal, delta)
+            self.policy.observe(improved_mask, self._proposal, delta, replaced)
 
 
 def differential_evolution(
