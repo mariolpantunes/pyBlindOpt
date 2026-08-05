@@ -57,6 +57,7 @@ generation:
 | `"jade"` | the archive plus `F` and `cr` learned from the values that produce survivors |
 | `"shade"` | JADE with a memory of `h` settings instead of one running mean, updated by improvement-weighted means, and `p` drawn per individual |
 | `"code"` | three trials per individual from three fixed strategies, best of the triple survives; adapts nothing, and costs **three evaluations per generation** |
+| `"sade"` | learns a probability for each strategy in a pool from how often each produced a survivor, over a rolling window |
 | `"ensemble"` | a pool of strategies and parameters, one triple per individual, **kept while it succeeds and resampled when it fails** |
 
 ```python

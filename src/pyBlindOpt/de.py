@@ -789,6 +789,134 @@ class EnsemblePolicy(Policy):
                 f"|F|={len(self.F_pool)}, |cr|={len(self.cr_pool)})")
 
 
+class SadePolicy(Policy):
+    r"""SaDE: learn *which strategy* to use, rather than which parameters.
+
+    Qin & Suganthan (IEEE TEC 2009) adapt at a different level from JADE and
+    SHADE. Those fix the mutation and learn `F` and `cr`; SaDE fixes nothing
+    about the mutation and learns a probability for each strategy in a pool,
+    from how often each one produced a survivor.
+
+    Each individual draws its strategy from $p_1..p_K$, and after every
+    learning period of `lp` generations the probabilities are rebuilt from the
+    success counts accumulated over that window:
+
+    $$ S_k = \frac{ns_k}{ns_k + nf_k} + \varepsilon, \qquad
+       p_k = \frac{S_k}{\sum_j S_j} $$
+
+    The window is the point. Counting successes since the beginning of the run
+    would let the first few generations, when everything succeeds because the
+    population is bad, decide the probabilities for the rest of it. A rolling
+    window of `lp` generations lets the choice track a landscape that changes
+    character as the population converges -- exploration early, refinement
+    late -- which is the behaviour a single fixed strategy cannot have.
+
+    `F` is drawn per individual from $\mathcal{N}(0.5, 0.3)$ and is *not*
+    adapted: SaDE's position is that `F` is best left stochastic. `cr` is
+    adapted per strategy, each keeping the **median** of the `cr` values that
+    produced survivors in the window. A median rather than a mean because the
+    successful values are frequently bimodal -- a strategy that works both at
+    `cr` 0.1 and at 0.9 has a mean near 0.5, which is the one value that works
+    for neither.
+
+    Population size is unchanged: `n_pop` trials per generation, one batch, so
+    the parallel evaluation contract holds as for `FixedPolicy`.
+
+    Args:
+        strategies (tuple | None): Strategy names, default SaDE's four.
+        lp (int): Learning period in generations. The paper uses 50.
+        eps (float): Floor on a strategy's score, so one that fails throughout
+            a window keeps a small probability instead of being removed. A
+            strategy at probability exactly zero can never be re-tested, and
+            the run cannot recover from a window that misjudged it.
+
+    Note:
+        `variant`'s mutation and `F`/`cr` are ignored; the crossover is not.
+    """
+
+    DEFAULT_STRATEGIES = ("rand/1", "current-to-best/1", "rand/2",
+                          "current-to-rand/1")
+
+    def __init__(self, strategies=None, lp=50, eps=0.01):
+        if lp < 1:
+            raise ValueError(f"lp must be >= 1, got {lp}")
+        self.strategy_keys = tuple(self.DEFAULT_STRATEGIES
+                                   if strategies is None else strategies)
+        if not self.strategy_keys:
+            raise ValueError("SaDE needs at least one strategy")
+        unknown = (set(self.strategy_keys)
+                   - set(DifferentialEvolution._STRATEGIES))
+        if unknown:
+            raise ValueError(f"unknown strategies: {sorted(unknown)}")
+        self._ops = [DifferentialEvolution._STRATEGIES[k]
+                     for k in self.strategy_keys]
+        k = len(self._ops)
+        self.lp = int(lp)
+        self.eps = float(eps)
+        self.probs = np.full(k, 1.0 / k)
+        self.cr_m = np.full(k, 0.5)
+        #: Rolling windows, one deque-like list per generation in the period.
+        self._ns = np.zeros((self.lp, k))
+        self._nf = np.zeros((self.lp, k))
+        self._cr_success = [[] for _ in range(k)]
+        self._gen = 0
+        self._assign = None
+
+    def begin(self, pop, scores, rng, trial):
+        n = len(pop)
+        k = len(self._ops)
+        idx = rng.choice(k, size=n, p=self.probs)
+        self._assign = idx
+        # F is stochastic by design and never adapted; clipped rather than
+        # resampled because a normal's tails are light enough that clipping
+        # does not pile mass on the boundary the way a Cauchy's would.
+        F = np.clip(0.5 + 0.3 * rng.standard_normal(n), 0.05, 2.0)
+        cr = np.clip(self.cr_m[idx] + 0.1 * rng.standard_normal(n), 0.0, 1.0)
+        return Proposal(
+            F=F, cr=cr,
+            ops=[self._ops[i][0] for i in idx],
+            samples=[self._ops[i][1] for i in idx],
+        )
+
+    def observe(self, improved, proposal, delta, replaced):
+        idx = self._assign
+        if idx is None:
+            return
+        won = np.asarray(improved, dtype=bool)
+        slot = self._gen % self.lp
+        self._ns[slot] = 0.0
+        self._nf[slot] = 0.0
+        for k in range(len(self._ops)):
+            mine = idx == k
+            if not mine.any():
+                continue
+            self._ns[slot, k] = int((mine & won).sum())
+            self._nf[slot, k] = int((mine & ~won).sum())
+            good = proposal.cr[mine & won]
+            if good.size:
+                self._cr_success[k].extend(good.tolist())
+
+        self._gen += 1
+        if self._gen % self.lp:
+            return
+
+        ns = self._ns.sum(axis=0)
+        nf = self._nf.sum(axis=0)
+        with np.errstate(invalid="ignore", divide="ignore"):
+            rate = np.where(ns + nf > 0, ns / (ns + nf), 0.0)
+        score = rate + self.eps
+        self.probs = score / score.sum()
+        for k in range(len(self._ops)):
+            if self._cr_success[k]:
+                self.cr_m[k] = float(np.median(self._cr_success[k]))
+            self._cr_success[k] = []
+
+    def __repr__(self):
+        probs = ", ".join(f"{k}={p:.2f}" for k, p
+                          in zip(self.strategy_keys, self.probs))
+        return f"SadePolicy(lp={self.lp}, {probs})"
+
+
 # ==============================================================================
 # 4. Optimizer Class
 # ==============================================================================
@@ -828,6 +956,9 @@ class DifferentialEvolution(Optimizer):
     * `code`: `CodePolicy` -- three trials per individual from three fixed
       strategies, best of the triple survives. Adapts nothing, and costs
       three evaluations per generation rather than one.
+    * `sade`: `SadePolicy` -- learns a probability for each strategy in a
+      pool from how often each produced a survivor, over a rolling window.
+      Adapts which mutation to use rather than its parameters.
     * `ensemble`: `EnsemblePolicy` -- a pool of strategies and parameters,
       one triple per individual, kept while it succeeds and resampled when
       it fails.
@@ -969,12 +1100,14 @@ class DifferentialEvolution(Optimizer):
                 )
         elif policy == "code":
             self.policy = CodePolicy()
+        elif policy == "sade":
+            self.policy = SadePolicy()
         elif policy == "ensemble":
             self.policy = EnsemblePolicy()
         else:
             raise ValueError(
                 f"Unknown policy '{policy}'. Supported: 'fixed', 'archive', "
-                f"'jade', 'shade', 'code', 'ensemble', "
+                f"'jade', 'shade', 'code', 'sade', 'ensemble', "
                 f"or a Policy instance."
             )
         self.policy_name = policy if isinstance(policy, str) else type(policy).__name__

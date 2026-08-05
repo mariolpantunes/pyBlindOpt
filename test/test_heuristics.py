@@ -718,6 +718,115 @@ class TestDECode(unittest.TestCase):
         self.assertLess(code, fixed)
 
 
+class TestDESade(unittest.TestCase):
+    """SaDE: a probability per strategy, learned from a rolling window.
+
+    The window is what is tested hardest. Counting successes since generation
+    zero would let the opening generations -- when almost anything improves a
+    bad population -- fix the probabilities for the whole run.
+    """
+
+    BOUNDS = np.array([[-5.12, 5.12]] * 6)
+
+    def _run_gens(self, pol, n_gens, winners, n=8, rng=None):
+        """Drive `n_gens` generations where `winners` is the success mask."""
+        rng = rng or np.random.default_rng(0)
+        for _ in range(n_gens):
+            pr = pol.begin(np.zeros((n, 4)), np.zeros(n), rng, 0)
+            pol.observe(winners(pol), pr, np.ones(n), np.zeros((0, 4)))
+
+    def test_selectable_by_name(self):
+        opt = de.DifferentialEvolution(functions.sphere, self.BOUNDS,
+                                       policy="sade", verbose=False)
+        self.assertIsInstance(opt.policy, de.SadePolicy)
+
+    def test_probabilities_start_uniform_and_stay_a_distribution(self):
+        pol = de.SadePolicy(lp=4)
+        np.testing.assert_allclose(pol.probs, 0.25)
+        self._run_gens(pol, 12, lambda p: np.arange(8) % 2 == 0)
+        self.assertAlmostEqual(float(pol.probs.sum()), 1.0)
+        self.assertTrue((pol.probs > 0).all())
+
+    def test_nothing_moves_before_the_window_closes(self):
+        pol = de.SadePolicy(lp=5)
+        before = pol.probs.copy()
+        self._run_gens(pol, 4, lambda p: np.ones(8, dtype=bool))
+        np.testing.assert_array_equal(pol.probs, before)
+        self._run_gens(pol, 1, lambda p: np.ones(8, dtype=bool))
+        self.assertAlmostEqual(float(pol.probs.sum()), 1.0)
+
+    def test_a_strategy_that_never_wins_keeps_a_floor(self):
+        """Probability exactly zero is absorbing -- the strategy can never be
+        re-tested, so a window that misjudged it can never be corrected."""
+        pol = de.SadePolicy(strategies=("rand/1", "best/1"), lp=2, eps=0.01)
+        rng = np.random.default_rng(3)
+        for _ in range(20):
+            pr = pol.begin(np.zeros((40, 4)), np.zeros(40), rng, 0)
+            assign = pol._assign
+            assert assign is not None
+            # only strategy 0 ever succeeds
+            pol.observe(assign == 0, pr, np.ones(40), np.zeros((0, 4)))
+        self.assertGreater(pol.probs[0], pol.probs[1])
+        self.assertGreater(pol.probs[1], 0.0)
+
+    def test_cr_memory_is_the_median_of_what_won(self):
+        """A median, not a mean: successful cr is often bimodal, and the mean
+        of 0.1 and 0.9 is the one value that works for neither."""
+        pol = de.SadePolicy(strategies=("rand/1",), lp=1)
+        rng = np.random.default_rng(0)
+        pr = pol.begin(np.zeros((5, 4)), np.zeros(5), rng, 0)
+        pr = de.Proposal(F=pr.F, cr=np.array([0.1, 0.1, 0.8, 0.9, 0.9]),
+                         ops=pr.ops, samples=pr.samples)
+        pol.observe(np.ones(5, dtype=bool), pr, np.ones(5), np.zeros((0, 4)))
+        self.assertAlmostEqual(pol.cr_m[0], 0.8)
+
+    def test_the_window_forgets(self):
+        """A strategy that stops working must lose ground even if it won
+        every generation before the window."""
+        pol = de.SadePolicy(strategies=("rand/1", "best/1"), lp=3)
+        rng = np.random.default_rng(5)
+
+        def phase(winner, gens):
+            for _ in range(gens):
+                pr = pol.begin(np.zeros((40, 4)), np.zeros(40), rng, 0)
+                a = pol._assign
+                assert a is not None
+                pol.observe(a == winner, pr, np.ones(40), np.zeros((0, 4)))
+
+        phase(0, 9)
+        early = pol.probs.copy()
+        phase(1, 9)
+        self.assertGreater(early[0], early[1])
+        self.assertGreater(pol.probs[1], pol.probs[0])
+
+    def test_configuration_is_validated(self):
+        with self.assertRaises(ValueError):
+            de.SadePolicy(lp=0)
+        with self.assertRaises(ValueError):
+            de.SadePolicy(strategies=())
+        with self.assertRaises(ValueError):
+            de.SadePolicy(strategies=("no-such-strategy",))
+
+    def test_runs_are_reproducible(self):
+        kw = dict(policy="sade", n_pop=20, n_iter=30, seed=4, verbose=False)
+        a = de.differential_evolution(functions.rastrigin, self.BOUNDS, **kw)
+        b = de.differential_evolution(functions.rastrigin, self.BOUNDS, **kw)
+        np.testing.assert_array_equal(a[0], b[0])
+
+    def test_it_beats_the_default_on_ackley(self):
+        """Measured at d=10 over 10 seeds, 200 generations: SaDE 2.0e-04
+        against best/1/bin's 1.155. Asserted with headroom."""
+        def median(**kw):
+            return float(np.median([
+                de.differential_evolution(
+                    functions.ackley, np.array([[-32.768, 32.768]] * 10),
+                    n_pop=30, n_iter=200, seed=s, verbose=False, **kw)[1]
+                for s in range(6)]))
+
+        self.assertLess(median(variant="rand/1/bin", policy="sade"),
+                        median(variant="best/1/bin"))
+
+
 class TestDEEnsemble(unittest.TestCase):
     """`EnsemblePolicy` -- a pool of strategies and parameters, per individual.
 
