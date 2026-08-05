@@ -354,6 +354,27 @@ def build(data, path):
     dims = sorted({d for _, d in cells})
     gen = min(len(r["curve"]) for r in rows) - 1
 
+    # ---- what initialization actually costs in seconds -------------------
+    # Acceleration is counted in iterations, so it charges nothing for the
+    # time spent building the population -- and the engines differ by more
+    # than 3x there. Reported beside it rather than instead of it: for the
+    # live-agent case, where one evaluation costs seconds, initialization is
+    # free and iterations are the right unit. On a cheap analytic benchmark
+    # it is most of the wall clock, and AR alone would flatter the slowest
+    # engine most.
+    init_s = {a: [] for a in ARMS}
+    for r in rows:
+        if r["arm"] in init_s:
+            init_s[r["arm"]].append(float(r.get("init_seconds", 0.0)))
+    init_med = {a: (float(np.median(v)) if v else 0.0)
+                for a, v in init_s.items()}
+    init_by_dim = {d: {} for d in dims}
+    for d in dims:
+        for a in ARMS:
+            v = [float(r.get("init_seconds", 0.0))
+                 for (f, dd) in cells if dd == d for r in by[(f, d, a)]]
+            init_by_dim[d][a] = float(np.median(v)) if v else 0.0
+
     # ---- speed: acceleration to the per-cell target ---------------------
     agg = {a: {"it": 0, "nfc": 0, "ok": 0, "n": 0} for a in ARMS}
     by_dim = {d: {a: {"it": 0, "nfc": 0} for a in ARMS} for d in dims}
@@ -478,23 +499,61 @@ the random arm reaches there, so it is attainable everywhere and means the
 same thing in every cell. <em>Quality wins</em> counts cells where the arm is
 significantly better than random at generation {gen + 1}, which removes every
 accounting choice from the comparison.</p>
+<p class="prose"><strong>init s</strong> is the median wall-clock time to
+build one population. Acceleration is counted in iterations and so charges
+nothing for it, which is the right unit when an objective evaluation is
+expensive &mdash; but the engines differ by several-fold there, and reading
+the two columns together is what separates &ldquo;reaches the target in fewer
+iterations&rdquo; from &ldquo;reaches it sooner&rdquo;.</p>
 <div class="scroll"><table><thead><tr><th class="l">arm</th>
-<th>AR % (iterations)</th><th>AR % (calls)</th><th>success</th>
-<th>quality wins</th></tr></thead><tbody>""")
+<th>AR % (iterations)</th><th>AR % (calls)</th><th>init s</th>
+<th>success</th><th>quality wins</th></tr></thead><tbody>""")
+    slowest = max(init_med.values()) if init_med else 0.0
     for label, group in GROUPS:
-        P.append(f'<tr><td class="l dim" colspan="5">{esc(label)}</td></tr>')
+        P.append(f'<tr><td class="l dim" colspan="6">{esc(label)}</td></tr>')
         for a in group:
             i_, n_ = ar(a, "it"), ar(a, "nfc")
             c1 = "good" if i_ > 1 else ("bad" if i_ < -1 else "dim")
             c2 = "good" if n_ > 1 else ("bad" if n_ < -1 else "dim")
+            t_ = init_med.get(a, 0.0)
+            c3 = "bad" if slowest and t_ > 0.5 * slowest else "dim"
             P.append(f'<tr><td class="l">{esc(a)}</td>'
                      f'<td class="{c1}">{i_:+.2f}</td>'
                      f'<td class="{c2}">{n_:+.2f}</td>'
+                     f'<td class="{c3}">{t_:.3f}</td>'
                      f'<td>{sr[a]:.1f}%</td>'
                      f'<td class="dim">{wins[a]}/{len(cells)}</td></tr>')
-    P.append("</tbody></table></div></section>")
+    P.append("</tbody></table></div>")
 
-    P.append(f"""<section><h2>Does the advantage grow with dimension?</h2>
+    # ---- break-even ------------------------------------------------------
+    # Initialization is negligible exactly when the optimizer's own evaluation
+    # bill dwarfs it. That crossover is a property of the objective, not of
+    # the initializer, so it is stated as one number the reader can compare
+    # their own problem against.
+    evals = n_pop * (gen + 1)
+    # Only arms that actually build something. The samplers and the opposition
+    # arms initialise in microseconds, so including them makes the "cheapest"
+    # end of the range 0.00 ms, which is true and says nothing.
+    be = sorted(((t / evals, a) for a, t in init_med.items() if t >= 1e-3),
+                reverse=True)
+    if be:
+        worst_ms, worst_arm = be[0][0] * 1e3, be[0][1]
+        best_ms, best_arm = be[-1][0] * 1e3, be[-1][1]
+        P.append(f"""<section><h2>When the initialization is free</h2>
+<p class="prose">A run here spends {evals:,} objective evaluations after
+initialization. So the slowest arm ({esc(worst_arm)}, {init_med[worst_arm]:.3f}s)
+stops being more than half the wall clock once one evaluation costs about
+<strong>{worst_ms:.2f} ms</strong>; the cheapest engine that builds anything
+({esc(best_arm)}, {init_med[best_arm]:.3f}s) needs
+<strong>{best_ms:.2f} ms</strong>.</p>
+<p class="prose">Above those thresholds the iteration-based acceleration rate
+is the honest measure and the initialization is a rounding error &mdash; which
+is the case pyBlindOpt is built for, where an evaluation trains an agent.
+Below them the ranking by acceleration and the ranking by time apart, and an
+arm can win every cell here while finishing last in real time.</p></section>""")
+    P.append("</section>")
+
+    P.append("""<section><h2>Does the advantage grow with dimension?</h2>
 <p class="prose">The claim motivating the whole index effort is that
 empty-space search should matter <em>more</em> as dimension rises, because
 that is where random coverage degrades fastest. If ESS is working, the
@@ -512,6 +571,30 @@ table. Acceleration rate in iterations, by dimension.</p>
                 v = ar(a, "it", by_dim[d])
                 c = "good" if v > 1 else ("bad" if v < -1 else "dim")
                 P.append(f'<td class="{c}">{v:+.1f}</td>')
+            P.append("</tr>")
+    P.append("</tbody></table></div>")
+
+    # Cost by dimension, next to acceleration by dimension. The two move in
+    # opposite directions for the search-based engines -- they buy the most
+    # iterations exactly where they cost the most seconds -- and that trade is
+    # invisible unless the columns sit side by side.
+    P.append("""<p class="prose">And what each costs to build, in seconds,
+at the same dimensions. The search-based engines buy the most iterations
+where they also cost the most, so the two tables are read together.</p>
+<div class="scroll"><table><thead><tr><th class="l">arm</th>""")
+    for d in dims:
+        P.append(f"<th>d={d}</th>")
+    P.append("</tr></thead><tbody>")
+    for label, group in GROUPS:
+        P.append(f'<tr><td class="l dim" colspan="{len(dims)+1}">'
+                 f'{esc(label)}</td></tr>')
+        for a in group:
+            P.append(f'<tr><td class="l">{esc(a)}</td>')
+            for d in dims:
+                t_ = init_by_dim[d].get(a, 0.0)
+                worst = max(init_by_dim[d].values()) if init_by_dim[d] else 0.0
+                c = "bad" if worst and t_ > 0.5 * worst else "dim"
+                P.append(f'<td class="{c}">{t_:.3f}</td>')
             P.append("</tr>")
     P.append("</tbody></table></div></section>")
 
