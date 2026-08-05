@@ -272,6 +272,7 @@ def _ess_engine(
     seed=None,
     scores: np.ndarray | None = None,
     attraction_weight: float = 0.5,
+    placement_weight: float | None = None,
     k_cand: int = 64,
     **ignored,
 ) -> np.ndarray:
@@ -314,6 +315,10 @@ def _ess_engine(
         scores (np.ndarray | None): Objective values for `samples`, lower
             better. Without them this is pure repulsion.
         attraction_weight (float): Pull strength in ESS's units. The default
+        placement_weight (float | None): Attraction weight for ESS's placement
+            step alone. None pairs it with `attraction_weight`, which is the
+            sensible default; they are separable so the guided placement and
+            the guided relaxation can be measured apart.
             is ESS's own measured optimum; it is **not** `force_weight`, see
             above.
         k_cand (int): Candidates per placement, forwarded as `init_pool`.
@@ -341,6 +346,7 @@ def _ess_engine(
         kw = {
             "attractiveness": -np.asarray(scores, dtype=float),
             "attraction_weight": attraction_weight,
+            "placement_weight": placement_weight,
             "attraction_metric": "cauchy",
             "attraction_kwargs": {"power": 1.0},
         }
