@@ -55,7 +55,11 @@ repos:
 
       - id: unittest
         name: unittest
-        entry: python -m unittest discover -s test
+        # PYTHONPATH=src, not a bare `python`: CI runs `pip install .` first,
+        # but a commit hook has no such step and the interpreter on PATH is
+        # whoever's -- usually one without this package installed. Testing the
+        # working tree is also the more useful thing to check before a commit.
+        entry: env PYTHONPATH=src python -m unittest discover -s test
         language: system
         types: [python]
         pass_filenames: false
