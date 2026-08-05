@@ -212,13 +212,27 @@ class Policy:
 
     n_trials = 1
 
+    #: Cached ``arange(n_pop)`` for `pool`. A class attribute so the existing
+    #: policies, which do not all call ``super().__init__``, still find it.
+    _arange = None
+
     def begin(self, pop, scores, rng, trial):
         """Parameters for every individual in this round of trials."""
         raise NotImplementedError
 
     def pool(self, j, n_pop, rng):
-        """Indices individual `j` may draw difference vectors from."""
-        return np.delete(np.arange(n_pop), j)
+        """Indices individual `j` may draw difference vectors from.
+
+        `np.delete(np.arange(n_pop), j)` built two arrays and a boolean mask
+        per individual, per generation. Slicing a cached range around `j`
+        produces the identical ascending index list for a fraction of the
+        work, and identical values matter here: they are fed to `rng.choice`,
+        so any reordering would silently change every subsequent draw.
+        """
+        base = self._arange
+        if base is None or len(base) != n_pop:
+            base = self._arange = np.arange(n_pop)
+        return np.concatenate((base[:j], base[j + 1:]))
 
     def augment(self, candidates, rng):
         """Optionally substitute difference vectors from outside the
@@ -576,7 +590,6 @@ class ShadePolicy(JadePolicy):
         if self.archive is None:
             self.archive = np.empty((0, pop.shape[1]))
         slots = rng.integers(0, self.h, n)
-        self._slots = slots
         # p_i in [2/N, 0.2]: the lower end is two individuals, the smallest
         # p-best pool that is still a choice rather than a single point.
         lo = min(2.0 / n, 0.2)
@@ -1111,6 +1124,8 @@ class DifferentialEvolution(Optimizer):
                 f"or a Policy instance."
             )
         self.policy_name = policy if isinstance(policy, str) else type(policy).__name__
+        #: Per-generation memo for `_base_vector`; see there.
+        self._pbest_cache = {}
         #: Filled by `_generate_offspring`, consumed by `_selection`.
         self._proposal = None
 
@@ -1151,6 +1166,10 @@ class DifferentialEvolution(Optimizer):
         proposal = self.policy.begin(self.pop, self.scores, self.rng,
                                      round_idx)
         self._proposal = proposal
+        # Scores are fixed for the whole round, so the p-best partition for a
+        # given pool size is too. Cleared here rather than kept, because the
+        # next round's scores will differ.
+        self._pbest_cache = {}
 
         for j in range(n_pop):
             # 1. Identify valid pool (cannot include self)
@@ -1253,7 +1272,19 @@ class DifferentialEvolution(Optimizer):
         prop = getattr(self, "_proposal", None)
         p_j = self.p if prop is None or prop.p is None else float(prop.p[j])
         n_best = max(1, int(p_j * self.n_pop))
-        top = np.argpartition(self.scores, n_best - 1)[:n_best]
+
+        # One partition per distinct pool size per generation, not one per
+        # individual. With a fixed `p` every individual asks for the same
+        # `n_best`, so this is N partitions replaced by one; SHADE draws `p`
+        # per individual and still only pays for the distinct sizes.
+        #
+        # `argpartition` is deterministic, so a cached result is the same
+        # array the uncached call would have returned -- which is what keeps
+        # the `rng.choice` below, and therefore the whole run, unchanged.
+        top = self._pbest_cache.get(n_best)
+        if top is None:
+            top = np.argpartition(self.scores, n_best - 1)[:n_best]
+            self._pbest_cache[n_best] = top
         return self.pop[self.rng.choice(top)]
 
     def _evolve_once(self, epoch: int):
@@ -1292,7 +1323,13 @@ class DifferentialEvolution(Optimizer):
             if prop is None:          # no policy proposal: nothing to track
                 continue
             if best_off is None or best_sc is None or best_prop is None:
-                best_off, best_sc, best_prop = off, sc, prop
+                # Copy F and cr: the loop below overwrites the winning entries
+                # in place, and a policy is free to hand back arrays it also
+                # keeps. CodePolicy builds fresh ones, so this is defensive
+                # rather than a fix -- but it is the difference between a
+                # future policy being slow and being silently wrong.
+                best_off, best_sc = off, sc
+                best_prop = prop._replace(F=prop.F.copy(), cr=prop.cr.copy())
                 continue
             win = sc < best_sc
             best_off[win] = off[win]
