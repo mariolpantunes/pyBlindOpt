@@ -46,9 +46,16 @@ and the case where the region turns out to be good already shows up in the two
 metrics above. A survival count would penalise the mechanism for working as
 intended.
 
-This is the deliberately dirty first pass: one optimizer, few seeds, stock
-defaults, the current L1 torann. It answers "does the effect exist at all"
-before anyone designs the full factorial.
+**The optimizer is an axis, not a constant.** The 86-arm sweep found the
+engine effect 2.6x larger under `best/1/bin` DE than under JADE — 0.066 of
+normalised rank against 0.025 — which is the whole difficulty with a
+single-optimizer initialization result: a large effect can mean the
+initializer is good or only that the optimizer cannot recover from a bad
+start, and one optimizer cannot separate those. Five are run here, spanning
+that recovery ability from `de` and `ga`, which adapt nothing, through `cs`
+and `egwo`, which adapt their step size, to `jade`, which adapts `F` and `CR`
+per individual from its own success history. All five see the *same* initial
+population, and each is scored only against its own random baseline.
 """
 
 from __future__ import annotations
@@ -60,8 +67,11 @@ import time
 
 import numpy as np
 
+import pyBlindOpt.cs as cs
 import pyBlindOpt.de as de
+import pyBlindOpt.egwo as egwo
 import pyBlindOpt.functions as functions
+import pyBlindOpt.ga as ga
 import pyBlindOpt.init as init
 import pyBlindOpt.utils as utils
 
@@ -224,51 +234,108 @@ BASELINE_ARMS = (
 )
 
 BASELINE = "random"   # the arm AR is measured against, GECCO Companion '26 Eq. 3
+
+
+def baseline_for(arm):
+    """The random arm this one is compared against — **its own optimizer's**.
+
+    AR (Eq. 3) is a ratio of iteration counts, and iterations are not
+    commensurate across optimizers: one GA generation and one JADE generation
+    do different amounts of work and reach the target at different rates for
+    reasons that have nothing to do with initialization. Dividing every arm by
+    a single `random@de` would fold that difference into every non-DE number
+    and report it as an initializer effect. Each optimizer is therefore its own
+    control, which is also what makes "does a dumber search gain more from a
+    better start" a readable comparison rather than an artefact.
+    """
+    _, opt = split_arm(arm)
+    return f"{BASELINE}@{opt}" if "@" in arm else BASELINE
 SHIFT = [True]        # cleared by --no-shift; module-level so one_run sees it
 SHIFT_FRAC = [0.8]
 
-#: Engine level -> the knobs that select it. The question this sweep exists
-#: to answer is whether `ess.esa` -- dart placement *plus* a repulsive and
-#: attractive relaxation -- beats the dart engines it would replace, so the
-#: incumbents stay in as comparators rather than being assumed obsolete.
+#: Engine level -> the knobs that select it.
 #:
-#: `force_weight` and `attraction_weight` are **not** the same quantity and
-#: are deliberately not swept together: the first is dart's lambda on a
-#: standardised surrogate, the second scales a pairwise force and is bounded
-#: by a collapse condition. Each engine is swept in its own units.
+#: **This is the attraction ladder, and it exists because the 86-arm sweep
+#: measured attraction at exactly two points.** `dart` is lambda = 0 (pure
+#: repulsion) and `dartg` was lambda = 8; between them sits the entire engine
+#: effect -- 0.5317 to 0.4655 in mean normalised rank under `de`, larger than
+#: any other axis in that sweep -- and its shape in between, and beyond 8,
+#: was never observed. A two-point measurement cannot locate an optimum, only
+#: a direction, so 8.0 is a default with no evidence that it is the right
+#: default. The ladder brackets it on both sides.
+#:
+#: `null` stays as the no-search control at every point of the grid, which is
+#: what lets a margin be attributed to the search rather than to pool size.
+#: The `ess` relaxation engines are dropped: all three attraction weights
+#: landed within 0.013 of each other and of the null, so they measured
+#: nothing, and each one costs roughly twice a dart arm in wall clock.
+#:
+#: `force_weight` is dart's lambda on a *standardised* surrogate -- the
+#: fitness term is z-scored before it is added to the novelty term -- so the
+#: levels are ratios of attraction to repulsion, comparable across functions
+#: and dimensions, and a geometric ladder is the right spacing for them.
 _ENGINE_LEVELS = {
-    "null":  {"force": "uniform"},
-    "dart":  {"force": "repulsive"},
-    "dartg": {"force": "guided", "force_weight": 8.0},
-    "ess05": {"force": "ess", "attraction_weight": 0.5},
-    "ess10": {"force": "ess", "attraction_weight": 1.0},
-    "ess20": {"force": "ess", "attraction_weight": 2.0},
+    "null": {"force": "uniform"},
+    "g000": {"force": "repulsive"},                      # lambda = 0
+    "g001": {"force": "guided", "force_weight": 1.0},
+    "g002": {"force": "guided", "force_weight": 2.0},
+    "g004": {"force": "guided", "force_weight": 4.0},
+    "g008": {"force": "guided", "force_weight": 8.0},    # the old default
+    "g016": {"force": "guided", "force_weight": 16.0},
+    "g032": {"force": "guided", "force_weight": 32.0},
 }
 
-#: Probe-block size as a multiple of `n_pop`. Never varied before, and the
-#: ESS-over-dart margin was measured to *grow* as this shrinks, so it is the
-#: axis most likely to be mis-set at its current default of 1.
-_NESS_LEVELS = {"n1": 1.0, "n2": 2.0}
+#: Probe-block size as a multiple of `n_pop`, now fixed. `n2` beat `n1` under
+#: both optimizers in the 86-arm sweep (0.4961/0.4926 against 0.5039/0.5074)
+#: -- a small margin, but the only one in that sweep with a consistent sign,
+#: so the axis is settled and its budget goes to attraction.
+_N_ESS_MULT = 2.0
 
-#: Selection rule with its diversity weight. Three levels rather than the
-#: previous seven: the earlier factorial put `best` 6.6 points ahead of
-#: `maximin` and 8.4 ahead of `prob`, so the budget is better spent
-#: elsewhere. 0.25 was the interior optimum and 0.0/0.5 bracket it.
+#: Selection rule with its diversity weight, crossed against attraction
+#: rather than swept for its own sake. The 86-arm sweep found this axis
+#: **spent**: 0.5015 / 0.4913 / 0.5072 under `de` and 0.4962 / 0.4995 /
+#: 0.5043 under `jade`, a 0.016 spread against attraction's 0.066, and the
+#: per-dimension breakdown reverses sign -- `s50` is best at d=16 and d=32
+#: under `de` and worst at d=8 and d=100. That is noise, not an optimum.
+#:
+#: It stays crossed because "spent" is a claim about the *main* effect. If
+#: the best attraction weight moves with the diversity weight, the two knobs
+#: have to be tuned together and neither can be read alone; the 86-arm sweep
+#: could not see that, having only two attraction levels to move between.
 _SELECTION_LEVELS = {
     "s00": ("best", 0.00),
     "s25": ("best", 0.25),
     "s50": ("best", 0.50),
 }
 
-#: The optimizer itself. **Every OBLESA measurement to date used
-#: `best/1/bin`** -- now known to be the only DE arm that fails outright on
-#: multimodal landscapes, and the one most sensitive to where the population
-#: starts, which is exactly what an initializer changes. A second, less
-#: greedy optimizer is what stops any conclusion here being an artefact of
-#: that choice.
+#: The optimizer itself, as `(entry point, fixed keywords)`.
+#:
+#: **Every OBLESA measurement before the 86-arm sweep used `best/1/bin`** --
+#: the only DE arm that fails outright on multimodal landscapes, and the one
+#: most sensitive to where the population starts, which is exactly what an
+#: initializer changes. That sweep then showed the choice is not incidental:
+#: the engine axis spans 0.066 of normalised rank under `de` and 0.025 under
+#: `jade`, so a single optimizer cannot separate "this initializer is good"
+#: from "this optimizer cannot recover from a bad start".
+#:
+#: The five here span that recovery ability rather than sampling one point of
+#: it. `de` and `ga` carry no adaptation at all; `cs` and `egwo` adapt their
+#: step but not their parameters; `jade` adapts `F` and `CR` per individual
+#: from its own success history and is the strongest recoverer in the repo.
+#: If initialization matters more the dumber the search, the effect must
+#: order along that axis -- and if it does not, that is the finding.
+#:
+#: Every arm is compared only against the *same optimizer's* random baseline
+#: (AR, Eq. 3, is a within-optimizer ratio), so the five needing different
+#: numbers of evaluations per iteration costs nothing here.
 OPTIMIZERS = {
-    "de": {"variant": "best/1/bin", "policy": "fixed"},
-    "jade": {"variant": "current-to-pbest/1/bin", "policy": "jade"},
+    "de": (de.differential_evolution,
+           {"variant": "best/1/bin", "policy": "fixed"}),
+    "jade": (de.differential_evolution,
+             {"variant": "current-to-pbest/1/bin", "policy": "jade"}),
+    "ga": (ga.genetic_algorithm, {}),
+    "cs": (cs.cuckoo_search, {}),
+    "egwo": (egwo.enhanced_grey_wolf_optimization, {}),
 }
 
 #: Knobs held fixed, with the evidence for each, so the budget goes to what
@@ -280,25 +347,24 @@ _FIXED = {
 
 OBLESA_KNOBS = {}
 for _elab, _eng in _ENGINE_LEVELS.items():
-    for _nlab, _nmul in _NESS_LEVELS.items():
-        for _slab, (_sel, _dw) in _SELECTION_LEVELS.items():
-            _name = f"ob_{_elab}_{_nlab}_{_slab}"
-            OBLESA_KNOBS[_name] = dict(
-                _FIXED, selection=_sel, diversity_weight=_dw,
-                _n_ess_mult=_nmul, **_eng,
-            )
+    for _slab, (_sel, _dw) in _SELECTION_LEVELS.items():
+        OBLESA_KNOBS[f"ob_{_elab}_{_slab}"] = dict(
+            _FIXED, selection=_sel, diversity_weight=_dw,
+            _n_ess_mult=_N_ESS_MULT, **_eng,
+        )
 
+#: The initializers. Every one is run under every optimizer in `OPTIMIZERS`,
+#: on the *same* initial population, so the two axes can be read jointly; a
+#: result row is named `<initializer>@<optimizer>`. The crossing is implicit
+#: rather than an arm list because the population is what costs, and it is
+#: built once per initializer -- see `one_cell`.
 ARMS_INIT = BASELINE_ARMS + tuple(OBLESA_KNOBS)
-
-#: Every initializer is run under every optimizer, so the two axes can be
-#: read jointly. An arm name is `<initializer>@<optimizer>`.
-ARMS = tuple(f"{a}@{o}" for a in ARMS_INIT for o in OPTIMIZERS)
 
 #: What each arm reports as its engine, for grouping in the report.
 ENGINE_LABEL = {
     name: {"uniform": "uniform-random-null",
            "repulsive": "dart-largest-empty-sphere",
-           "guided": "dart-fitness-guided",
+           "guided": f"dart-fitness-guided-lambda{kw.get('force_weight', 0):g}",
            "ess": "ess-relaxation"}[kw["force"]]
     for name, kw in OBLESA_KNOBS.items()
 }
@@ -485,48 +551,53 @@ def objective_for(fname, d):
             else unshifted(fname, d))
 
 
-def one_run(arm, fname, d, seed, n_pop, n_iter):
-    """One (arm, function, dimension, seed) cell, at a fixed iteration count.
+def one_cell(init_arm, fname, d, seed, n_pop, n_iter, optimizers):
+    """One initial population, run through each named optimizer.
+
+    **The population is built once and shared, and that is not merely a
+    saving.** It is 97-98% of a run's wall clock at d=100 — 8.2 s of an 8.4 s
+    run — and it is a deterministic function of the initializer, the landscape
+    and the seed, so recomputing it per optimizer would spend five times the
+    sweep's budget reproducing the same array. It also makes the optimizer
+    axis exactly paired: every optimizer sees the identical `n_pop x d` matrix,
+    so a difference between them cannot be initialization noise.
 
     **Two independent generators, and the reason matters.** The arms consume
-    wildly different amounts of randomness during initialization — ESS draws
-    for every particle of every epoch, plain sampling draws once. Feeding the
-    optimizer whatever generator state the initializer happened to leave
-    behind means each arm runs DE on a different random trajectory, so a
+    wildly different amounts of randomness during initialization — the dart
+    engine draws `k_cand` candidates per placement, plain sampling draws once.
+    Feeding the optimizer whatever generator state the initializer happened to
+    leave behind means each arm runs on a different random trajectory, so a
     paired comparison would be measuring two changes at once and attributing
-    both to the initializer. `rng_opt` is therefore seeded identically for
-    every arm: the initial population becomes the only thing that differs.
+    both to the initializer. `rng_opt` is therefore reseeded identically for
+    every arm *and* every optimizer: the initial population becomes the only
+    thing that differs.
 
     **Every arm gets the same `n_iter`.** Initialization is preprocessing and
     is measured but not charged — see the module docstring for why subtracting
     it manufactured the result it was supposed to guard against.
+
+    Yields:
+        dict: one result row per optimizer, in `optimizers` order.
     """
-    _, opt_key = split_arm(arm)
     bounds = np.array([[-5.0, 5.0]] * d)
-    counted = _Counted(objective_for(fname, d))
+    objective = objective_for(fname, d)
+    counted = _Counted(objective)
     rng_init = np.random.default_rng(seed)
-    rng_opt = np.random.default_rng(2**31 - seed)
 
     t0 = time.perf_counter()
     ess_stats, ess_info = {}, {}
     pop = initial_population(
-        arm, counted, bounds, n_pop, rng_init, ess_stats, ess_info)
+        init_arm, counted, bounds, n_pop, rng_init, ess_stats, ess_info)
     t_init = time.perf_counter() - t0
-    used = counted.n
+    init_evals = counted.n
 
-    init_scores = utils.compute_objective(pop, objective_for(fname, d), 1)
-
-    trace = _Trace()
-    _, score = de.differential_evolution(
-        counted, bounds, population=pop, n_pop=n_pop, n_iter=n_iter,
-        seed=rng_opt, callback=trace, **OPTIMIZERS[opt_key])
-    return {
-        "arm": arm, "optimizer": opt_key, "function": fname, "d": d, "seed": seed,
-        "score": float(score), "init_evals": int(used),
-        "total_evals": int(counted.n), "n_iter": int(n_iter),
-        "init_seconds": t_init, "curve": trace.best,
+    init_scores = utils.compute_objective(pop, objective, 1)
+    shared = {
+        "function": fname, "d": d, "seed": seed, "n_pop": n_pop,
+        "init_evals": int(init_evals), "n_iter": int(n_iter),
+        "init_seconds": t_init,
         # Generation-zero quality, so what the initializer handed over stays
-        # separable from what DE then did with it.
+        # separable from what the optimizer then did with it.
         "pop_best": float(np.min(init_scores)),
         "pop_median": float(np.median(init_scores)),
         # Recorded but not reported. Empty-space candidates are probes: one
@@ -543,6 +614,33 @@ def one_run(arm, fname, d, seed, n_pop, n_iter):
                 if k in ("epochs_total", "radius", "engine", "query_s",
                          "force_s", "step_s", "update_s", "setup_s")},
     }
+
+    for opt_key in optimizers:
+        optimize, opt_kw = OPTIMIZERS[opt_key]
+        trace = _Trace()
+        # A fresh counter per optimizer: `total_evals` is that optimizer's
+        # own budget, and a shared one would accumulate across the five.
+        counted = _Counted(objective)
+        counted.n = init_evals
+        # A copy, though `test_optimizer.py` pins that none of them writes
+        # through: the sharing below is the point of this function, and it
+        # should not depend on a property of thirteen other modules holding.
+        _, score = optimize(
+            counted, bounds, population=pop.copy(), n_pop=n_pop, n_iter=n_iter,
+            seed=np.random.default_rng(2**31 - seed), callback=trace, **opt_kw)
+        yield {
+            "arm": f"{init_arm}@{opt_key}", "optimizer": opt_key,
+            "score": float(score), "total_evals": int(counted.n),
+            "curve": trace.best, **shared,
+        }
+
+
+def one_run(arm, fname, d, seed, n_pop, n_iter):
+    """One `<initializer>@<optimizer>` cell — the serial path's single row."""
+    init_arm, opt_key = split_arm(arm)
+    row, = one_cell(init_arm, fname, d, seed, n_pop, n_iter, [opt_key])
+    row["arm"] = arm
+    return row
 
 
 def at_gen(row, g):
@@ -627,7 +725,12 @@ def main():
     ap.add_argument("--dims", type=int, nargs="+", default=list(DIMS))
     ap.add_argument("--functions", nargs="+", default=list(DEFAULT_FUNCTIONS),
                     help=f"any of: {' '.join(FUNCTIONS)}")
-    ap.add_argument("--arms", nargs="+", default=list(ARMS))
+    ap.add_argument("--arms", nargs="+", default=list(ARMS_INIT),
+                    help="initializers. Each is crossed with every "
+                         "--optimizers entry on one shared initial "
+                         "population, so results are named init@optimizer")
+    ap.add_argument("--optimizers", nargs="+", default=list(OPTIMIZERS),
+                    help=f"any of: {' '.join(OPTIMIZERS)}")
     ap.add_argument("--out", default="examples/out/bench_init_oblesa.json")
     ap.add_argument("--no-shift", action="store_true",
                     help="leave each optimum at the domain centre. Off by "
@@ -641,33 +744,34 @@ def main():
                     help="success threshold f_min - f* <= alpha; f* is 0 for "
                          "every function here, shifted or not")
     ap.add_argument("--arm-index", type=int, default=None,
-                    help="run exactly one arm, selected by position in --arms, "
-                         "and write it to its own file under --out-dir. This is "
-                         "the Slurm array mode: one task per arm, no shared "
+                    help="run exactly one task, selected by position in the "
+                         "(initializer, dimension) list --list-arm-names "
+                         "prints, and write it to its own file under "
+                         "--out-dir. This is the Slurm array mode: no shared "
                          "output file, and resume for free")
     ap.add_argument("--out-dir", default="examples/out/sweep",
-                    help="directory for per-arm JSONL, used by --arm-index")
+                    help="directory for per-task JSONL, used by --arm-index")
     ap.add_argument("--list-arms", action="store_true",
-                    help="print the arm count and exit, so the array size is "
+                    help="print the task count and exit, so the array size is "
                          "read off the same table the run uses")
     ap.add_argument("--list-arm-names", action="store_true",
-                    help="print one arm name per line and exit. Use this, not "
+                    help="print one task name per line and exit. Use this, not "
                          "--list-arms, to decide which files in --out-dir "
                          "belong to the current grid: --list-arms prints a "
                          "count, so filtering against it silently matches "
                          "nothing and sweeps every file into the stale pile")
     ap.add_argument("--force", action="store_true",
-                    help="recompute an arm whose output file is already complete")
+                    help="recompute a task whose output file is already complete")
     args = ap.parse_args()
     SHIFT[0] = not args.no_shift
     SHIFT_FRAC[0] = args.shift_frac
 
     if args.list_arms:
-        print(len(args.arms))
+        print(len(sweep_tasks(args)))
         return
 
     if args.list_arm_names:
-        print("\n".join(args.arms))
+        print("\n".join(f"{a}_d{d}" for a, d in sweep_tasks(args)))
         return
 
     if args.arm_index is not None:
@@ -680,16 +784,22 @@ def main():
             for d in args.dims:
                 for arm in args.arms:
                     t0 = time.perf_counter()
+                    cell = []
                     for seed in range(args.seeds):
-                        row = one_run(arm, fname, d, seed, n_pop, args.iters)
-                        row["n_pop"] = n_pop
-                        rows.append(row)
-                    cell = rows[-args.seeds:]
+                        cell.extend(one_cell(arm, fname, d, seed, n_pop,
+                                             args.iters, args.optimizers))
+                    rows.extend(cell)
+                    # One median per optimizer, not one across them: the five
+                    # reach wildly different values on the same population,
+                    # so a pooled median would be a statistic of the optimizer
+                    # mix rather than of the initializer under test.
+                    med = " ".join(
+                        f"{o}={np.median([r['score'] for r in cell if r['optimizer'] == o]):.4g}"
+                        for o in args.optimizers)
                     print(f"  n_pop={n_pop:<5} {fname:<11} d={d:<3} {arm:<22} "
-                          f"median={np.median([r['score'] for r in cell]):<13.6g} "
                           f"pop_best={np.median([r['pop_best'] for r in cell]):<12.5g} "
-                          f"init={rows[-1]['init_evals']:<6} "
-                          f"{time.perf_counter() - t0:5.1f}s", flush=True)
+                          f"init={cell[-1]['init_evals']:<6} "
+                          f"{time.perf_counter() - t0:5.1f}s  {med}", flush=True)
                     # Written per cell, not at the end: a run this long
                     # should never lose its per-seed data to a crash, and
                     # the results should be inspectable while it runs.
@@ -704,10 +814,29 @@ def main():
     report(rows, args)
 
 
-def run_one_arm(args):
-    """One arm over the whole grid, into its own file. The Slurm array unit.
+def sweep_tasks(args):
+    """The array's task list: one entry per `(initializer, dimension)`.
 
-    Splitting the sweep by arm rather than by cell is what makes this scale.
+    **Not one per arm.** An arm is `<initializer>@<optimizer>`, and splitting
+    on that would recompute the same initial population once per optimizer —
+    97-98% of a run's cost at d=100, for an array that runs five optimizers.
+    The initializer is the unit that owns the expensive work, so it is the
+    unit the array is cut along, and `one_cell` runs every optimizer on the
+    population it built.
+
+    Dimension is the second half of the key because the initializer alone
+    would leave the array too narrow to fill a node — 31 tasks against 62
+    usable threads — and because cost varies ~7x across the dimension range,
+    so mixing dimensions into one task makes every task as slow as its worst.
+    Crossed, they give 155 balanced-enough tasks.
+    """
+    return [(a, d) for a in args.arms for d in args.dims]
+
+
+def run_one_arm(args):
+    """One `(initializer, dimension)` over the grid, into its own file.
+
+    Splitting the sweep by task rather than by cell is what makes this scale.
     The shared-file design rewrote the entire results document after every
     cell, so at a few hundred arms the serialization cost would have overtaken
     the optimization it was recording. Here each task owns one file, writes it
@@ -716,40 +845,43 @@ def run_one_arm(args):
     It also gives resume for nothing: a task whose file already holds the
     expected number of rows is finished, so resubmitting the identical array
     recomputes exactly the tasks that did not complete. A dropped connection
-    or a pre-empted node stops costing anything but the arms that were
+    or a pre-empted node stops costing anything but the tasks that were
     actually in flight.
     """
-    arm = args.arms[args.arm_index]
+    tasks = sweep_tasks(args)
+    init_arm, d = tasks[args.arm_index]
+    optimizers = list(args.optimizers)
     expected = (len(args.n_pop) * len(args.functions)
-                * len(args.dims) * args.seeds)
+                * args.seeds * len(optimizers))
     os.makedirs(args.out_dir, exist_ok=True)
-    path = os.path.join(args.out_dir, f"{arm}.jsonl")
+    path = os.path.join(args.out_dir, f"{init_arm}_d{d}.jsonl")
+    label = f"{init_arm} d={d}"
 
     if not args.force and os.path.exists(path):
         with open(path) as fh:
             done = sum(1 for line in fh if line.strip())
         if done >= expected:
-            print(f"[skip] {arm}: {done}/{expected} rows already present")
+            print(f"[skip] {label}: {done}/{expected} rows already present")
             return
-        print(f"[redo] {arm}: {done}/{expected} rows, recomputing")
+        print(f"[redo] {label}: {done}/{expected} rows, recomputing")
 
     t_arm = time.perf_counter()
+    knobs = OBLESA_KNOBS.get(init_arm, {})
     tmp = path + ".tmp"
     with open(tmp, "w") as fh:
         for n_pop in args.n_pop:
             for fname in args.functions:
-                for d in args.dims:
-                    t0 = time.perf_counter()
-                    for seed in range(args.seeds):
-                        row = one_run(arm, fname, d, seed, n_pop, args.iters)
-                        row["n_pop"] = n_pop
-                        row["arm_knobs"] = OBLESA_KNOBS.get(arm, {})
+                t0 = time.perf_counter()
+                for seed in range(args.seeds):
+                    for row in one_cell(init_arm, fname, d, seed, n_pop,
+                                        args.iters, optimizers):
+                        row["arm_knobs"] = knobs
                         fh.write(json.dumps(row) + "\n")
-                    fh.flush()
-                    print(f"  {arm:<24} {fname:<12} d={d:<4} n_pop={n_pop:<4} "
-                          f"{time.perf_counter() - t0:6.1f}s", flush=True)
+                fh.flush()
+                print(f"  {label:<24} {fname:<12} n_pop={n_pop:<4} "
+                      f"{time.perf_counter() - t0:6.1f}s", flush=True)
     os.replace(tmp, path)
-    print(f"[done] {arm}: {expected} rows in "
+    print(f"[done] {label}: {expected} rows in "
           f"{(time.perf_counter() - t_arm) / 60.0:.1f} min -> {path}")
 
 
@@ -765,15 +897,33 @@ def report(rows, args):
     next to it.
     Lower objective values are better throughout.
     """
+    # `args.arms` names initializers; a *column* is one crossed with one
+    # optimizer, which is the unit every table below compares.
+    columns = [f"{a}@{o}" for a in args.arms for o in args.optimizers]
+
     by = {}
     for r in rows:
         by.setdefault((r["n_pop"], r["function"], r["d"], r["arm"]), []).append(r)
     for k in by:
         by[k].sort(key=lambda r: r["seed"])
+
+    # Everything below is measured against a baseline arm, so a column whose
+    # baseline was not run has no comparison to report. Saying so beats
+    # crashing on a KeyError, and beats silently reporting it against some
+    # other optimizer's random.
+    have = set(columns)
+    orphans = [c for c in columns if baseline_for(c) not in have]
+    if orphans:
+        print(f"note: no baseline arm for {', '.join(orphans)} — omitted")
+        columns = [c for c in columns if baseline_for(c) in have]
+    if not columns:
+        print("note: nothing to report — no arm has its baseline in this run")
+        return
+
     cells = sorted({k[:3] for k in by
-                    if all((k[0], k[1], k[2], a) in by for a in args.arms)})
+                    if all((k[0], k[1], k[2], c) in by for c in columns)})
     gen = min(len(r["curve"]) for r in rows) - 1
-    width = max(len(a) for a in args.arms) + 2
+    width = max(len(c) for c in columns) + 2
 
     def col(text):
         return f"{text:>{width}}"
@@ -785,11 +935,12 @@ def report(rows, args):
 
         print(f"\n{'=' * 78}\nQUALITY at generation {gen + 1} "
               f"(n_pop={n_pop}) — median, lower better; * = p<0.05 vs random")
-        print(f"{'function':<11}{'d':>4}  " + "".join(col(a) for a in args.arms))
+        print(f"{'function':<11}{'d':>4}  " + "".join(col(a) for a in columns))
         for (_, f, d) in sub:
-            base = np.array([at_gen(r, gen) for r in by[(n_pop, f, d, BASELINE)]])
             line = f"{f:<11}{d:>4}  "
-            for a in args.arms:
+            for a in columns:
+                base = np.array([at_gen(r, gen)
+                                 for r in by[(n_pop, f, d, baseline_for(a))]])
                 v = np.array([at_gen(r, gen) for r in by[(n_pop, f, d, a)]])
                 p = wilcoxon_signed_rank(v, base)
                 mark = "*" if (p < 0.05 and np.median(v) < np.median(base)) else " "
@@ -798,10 +949,10 @@ def report(rows, args):
 
         print(f"\nINITIAL POPULATION (n_pop={n_pop}) — median best at "
               f"generation 0, lower better")
-        print(f"{'function':<11}{'d':>4}  " + "".join(col(a) for a in args.arms))
+        print(f"{'function':<11}{'d':>4}  " + "".join(col(a) for a in columns))
         for (_, f, d) in sub:
             line = f"{f:<11}{d:>4}  "
-            for a in args.arms:
+            for a in columns:
                 line += col(f"{np.median([r['pop_best'] for r in by[(n_pop, f, d, a)]]):.4g}")
             print(line)
 
@@ -818,33 +969,36 @@ def report(rows, args):
              lambda base_rows: args.alpha),
             ("baseline median (per cell)", vtr_for_cell),
         ):
-            agg = {a: {"it": 0, "ok": 0, "n": 0} for a in args.arms}
-            print(f"\nSPEED (n_pop={n_pop}) — AR% by iterations vs {BASELINE}, "
-                  f"target = {label}")
-            print(f"{'function':<11}{'d':>4}  " + "".join(col(a) for a in args.arms))
+            agg = {a: {"it": 0, "ok": 0, "n": 0} for a in columns}
+            print(f"\nSPEED (n_pop={n_pop}) — AR% by iterations vs each "
+                  f"optimizer's own random arm, target = {label}")
+            print(f"{'function':<11}{'d':>4}  " + "".join(col(a) for a in columns))
             for (_, f, d) in sub:
-                vtr = target_of(by[(n_pop, f, d, BASELINE)])
                 st = {}
-                for a in args.arms:
+                for a in columns:
+                    # The target is set by the arm's own baseline too: a cell's
+                    # "what random reaches here" differs per optimizer, so one
+                    # shared VTR would be unreachable for the weaker searches
+                    # and trivial for the stronger ones.
+                    vtr = target_of(by[(n_pop, f, d, baseline_for(a))])
                     pairs = [to_target(r, vtr) for r in by[(n_pop, f, d, a)]]
                     st[a] = (sum(x[0] for x in pairs), sum(x[1] for x in pairs),
                              len(pairs))
                     agg[a]["it"] += st[a][0]
                     agg[a]["ok"] += st[a][1]
                     agg[a]["n"] += st[a][2]
-                base_it = st[BASELINE][0]
                 line = f"{f:<11}{d:>4}  "
-                for a in args.arms:
-                    line += col(f"{(1 - st[a][0] / base_it) * 100:.1f}")
+                for a in columns:
+                    line += col(f"{(1 - st[a][0] / st[baseline_for(a)][0]) * 100:.1f}")
                 print(line)
 
             print(f"\nAGGREGATE (n_pop={n_pop}, target = {label})")
             print(f"{'arm':<24}{'AR% iters':>11}{'success':>10}{'init_evals':>12}")
-            for a in args.arms:
+            for a in columns:
                 init_ev = np.mean([r["init_evals"] for c in sub
                                    for r in by[(n_pop, c[1], c[2], a)]])
                 print(f"{a:<24}"
-                      f"{(1 - agg[a]['it'] / agg[BASELINE]['it']) * 100:>11.2f}"
+                      f"{(1 - agg[a]['it'] / agg[baseline_for(a)]['it']) * 100:>11.2f}"
                       f"{100 * agg[a]['ok'] / agg[a]['n']:>9.1f}%"
                       f"{init_ev:>12.0f}")
 

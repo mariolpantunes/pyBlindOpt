@@ -126,6 +126,10 @@ ARM_GLOSS = {
 
 #: Engine level -> what placed the empty-space block, for arms named by the
 #: sweep convention `ob_<engine>_<n_ess>_<selection>@<optimizer>`.
+#: Engine labels that are not a rung of the attraction ladder. Everything
+#: matching `g<digits>` is one, and is described from its own number rather
+#: than from a table -- the ladder is the axis under test, so a dictionary
+#: here would need editing every time a rung is added or moved.
 _ENGINE_GLOSS = {
     "null": "uniform noise in place of any empty-space search — the control "
             "that separates “the search found something” from "
@@ -146,13 +150,40 @@ _ENGINE_SHORT = {
 }
 
 
+def _lambda_of(engine):
+    """`"g008"` -> 8.0, the attraction weight. None if not a ladder rung."""
+    if len(engine) > 1 and engine[0] == "g" and engine[1:].isdigit():
+        return float(engine[1:])
+    return None
+
+
+def engine_gloss(engine, short=False):
+    """Describe an engine label, from the table or from its own lambda."""
+    lam = _lambda_of(engine)
+    if lam is None:
+        table = _ENGINE_SHORT if short else _ENGINE_GLOSS
+        return table.get(engine, engine)
+    if lam == 0:
+        return ("dart, unguided" if short else
+                "dart-throwing for the largest empty sphere, with no "
+                "attraction at all — the λ = 0 end of the ladder")
+    return (f"dart, λ = {lam:g}" if short else
+            f"dart-throwing biased toward fitter regions, attraction weight "
+            f"λ = {lam:g} against a z-scored fitness surrogate")
+
+
 def parse_arm(a):
-    """`ob_<engine>_<n_ess>_<sel>@<opt>` -> its parts, or None if not one."""
+    """`ob_<engine>_<sel>@<opt>` -> its parts, or None if not one.
+
+    Also accepts the earlier `ob_<engine>_<n_ess>_<sel>` shape, so a report
+    can still be rendered against the sweep that used it.
+    """
     init, _, opt = a.partition("@")
     parts = init.split("_")
-    if not init.startswith("ob_") or len(parts) != 4:
+    if not init.startswith("ob_") or len(parts) not in (3, 4):
         return None
-    return {"engine": parts[1], "n_ess": parts[2], "sel": parts[3],
+    n_ess = parts[2] if len(parts) == 4 else "n2"
+    return {"engine": parts[1], "n_ess": n_ess, "sel": parts[-1],
             "opt": opt, "init": init}
 
 
@@ -173,7 +204,7 @@ def gloss(a):
     if not p:
         return f"{init}, driven by {a.partition('@')[2] or 'DE'}."
     mult = {"n1": "1", "n2": "2"}.get(p["n_ess"], p["n_ess"])
-    return (f"OBLESA with {_ENGINE_GLOSS.get(p['engine'], p['engine'])}; "
+    return (f"OBLESA with {engine_gloss(p['engine'])}; "
             f"empty-space block of {mult}N; selection "
             f"{_SEL_GLOSS.get(p['sel'], p['sel'])}; optimizer {p['opt']}.")
 
@@ -200,7 +231,7 @@ def derive_groups(arms):
     if base:
         out.append(("baselines and cost controls", tuple(base)))
     for eng in sorted(byeng):
-        out.append((f"OBLESA, engine ‘{eng}’ ({_ENGINE_SHORT.get(eng, eng)})",
+        out.append((f"OBLESA, engine ‘{eng}’ ({engine_gloss(eng, short=True)})",
                     tuple(byeng[eng])))
     return tuple(out)
 
