@@ -309,6 +309,106 @@ class TestDEPolicyContract(unittest.TestCase):
         self.assertEqual(rng.bit_generator.state, before)
 
 
+class TestDEEnsemble(unittest.TestCase):
+    """`EnsemblePolicy` -- a pool of strategies and parameters, per individual.
+
+    The learning rule is the whole algorithm: a triple that produced a
+    surviving trial is kept, one that failed is resampled. Random switching
+    with no memory would be a different and weaker method, so that invariant
+    is what these tests pin.
+    """
+
+    BOUNDS = np.array([[-5.12, 5.12]] * 5)
+
+    def test_selectable_by_name_and_by_instance(self):
+        a = de.DifferentialEvolution(
+            functions.sphere, self.BOUNDS, policy="ensemble", verbose=False)
+        self.assertIsInstance(a.policy, de.EnsemblePolicy)
+        b = de.DifferentialEvolution(
+            functions.sphere, self.BOUNDS,
+            policy=de.EnsemblePolicy(strategies=["rand/1"]), verbose=False)
+        self.assertEqual(b.policy.strategy_keys, ["rand/1"])
+
+    def test_unknown_policy_is_refused(self):
+        with self.assertRaises(ValueError) as cm:
+            de.DifferentialEvolution(
+                functions.sphere, self.BOUNDS, policy="nope", verbose=False)
+        self.assertIn("ensemble", str(cm.exception))
+
+    def test_every_survivor_keeps_its_triple(self):
+        """The learning rule. Note the converse does *not* hold: a resampled
+        triple can coincidentally redraw the same values out of a finite
+        pool, so this asserts survivors are kept, not that only they are."""
+        pol = de.EnsemblePolicy()
+        ok = []
+        original = pol.observe
+
+        def spy(improved, proposal, delta):
+            before = pol._held.copy()
+            original(improved, proposal, delta)
+            kept = (before == pol._held).all(axis=1)
+            ok.append(bool(kept[improved].all()))
+
+        pol.observe = spy
+        de.DifferentialEvolution(
+            functions.rastrigin, self.BOUNDS, policy=pol, n_pop=24,
+            n_iter=15, seed=1, verbose=False).optimize()
+        self.assertTrue(ok and all(ok))
+
+    def test_failures_are_resampled(self):
+        """Otherwise a bad triple would be held forever."""
+        pol = de.EnsemblePolicy()
+        rng = np.random.default_rng(0)
+        pol.begin(np.zeros((6, 3)), np.zeros(6), rng, 0)
+        before = pol._held.copy()
+        pol.observe(np.zeros(6, dtype=bool), None, np.zeros(6))
+        self.assertFalse(np.array_equal(before, pol._held))
+
+    def test_the_whole_pool_is_reachable(self):
+        pol = de.EnsemblePolicy()
+        rng = np.random.default_rng(2)
+        drawn = pol._draw(rng, 3000)
+        self.assertEqual(sorted(set(drawn[:, 0].astype(int))),
+                         list(range(len(pol._ops))))
+        self.assertEqual(sorted(set(drawn[:, 1])), sorted(pol.F_pool))
+        self.assertEqual(sorted(set(drawn[:, 2])), sorted(pol.cr_pool))
+
+    def test_custom_pools_are_honoured(self):
+        pol = de.EnsemblePolicy(strategies=["best/1"], F_pool=[0.3],
+                                cr_pool=[0.9])
+        rng = np.random.default_rng(0)
+        pr = pol.begin(np.zeros((8, 3)), np.zeros(8), rng, 0)
+        np.testing.assert_array_equal(pr.F, np.full(8, 0.3))
+        np.testing.assert_array_equal(pr.cr, np.full(8, 0.9))
+
+    def test_runs_are_reproducible(self):
+        a = de.differential_evolution(
+            functions.rastrigin, self.BOUNDS, policy="ensemble", n_pop=20,
+            n_iter=30, seed=9, verbose=False)
+        b = de.differential_evolution(
+            functions.rastrigin, self.BOUNDS, policy="ensemble", n_pop=20,
+            n_iter=30, seed=9, verbose=False)
+        np.testing.assert_array_equal(a[0], b[0])
+
+    def test_it_beats_a_single_greedy_strategy_on_a_multimodal_landscape(self):
+        """The reason the ensemble exists. Margins come from a measured run,
+        not a guess: over 8 seeds at this budget the ensemble solved
+        rastrigin on every one (median 0.0) where best/1/bin had median 1.99
+        and a worst case of 5.97. Asserted with generous headroom, because a
+        threshold picked by intuition is how a suite becomes flaky.
+        """
+        def median_of(**kw):
+            return float(np.median([
+                de.differential_evolution(
+                    functions.rastrigin, self.BOUNDS, n_pop=40, n_iter=250,
+                    seed=s, verbose=False, **kw)[1]
+                for s in range(8)
+            ]))
+
+        self.assertLess(median_of(policy="ensemble"),
+                        median_of(variant="best/1/bin") * 0.5)
+
+
 class TestDEPBest(unittest.TestCase):
     """`current-to-pbest/1` -- JADE's mutation.
 

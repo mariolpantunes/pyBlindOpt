@@ -244,6 +244,86 @@ class FixedPolicy(Policy):
         )
 
 
+class EnsemblePolicy(Policy):
+    r"""An ensemble of strategies and parameters, per individual (EPSDE).
+
+    No single mutation strategy or `(F, cr)` pair is best across landscapes,
+    or even across the phases of one run: greedy strategies close fast and
+    stall, exploratory ones do the opposite. Rather than ask the caller to
+    pick, this holds a pool of each and lets the population find out.
+
+    Every individual carries its own `(strategy, F, cr)` triple. **A triple
+    that produced a surviving trial is kept; one that failed is resampled.**
+    That is the whole learning rule, and it is what separates an ensemble
+    from switching at random -- combinations that work on the landscape in
+    front of you accumulate, because success is the only thing that lets one
+    persist.
+
+    The pools default to the ones EPSDE was published with. Strategies span
+    the range deliberately: `rand/1` explores, `best/2` exploits with two
+    difference vectors, `current-to-rand/1` is rotationally invariant.
+
+    Args:
+        strategies (list | None): Strategy keys from
+            `DifferentialEvolution._STRATEGIES`. None uses the default pool.
+        F_pool (list | None): Values `F` may take.
+        cr_pool (list | None): Values `cr` may take.
+
+    Note:
+        The crossover from `variant` still applies -- this ensembles the
+        mutation and the parameters, not the recombination.
+    """
+
+    DEFAULT_STRATEGIES = ("rand/1", "best/2", "current-to-rand/1")
+    DEFAULT_F = (0.4, 0.5, 0.6, 0.7, 0.8, 0.9)
+    DEFAULT_CR = (0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9)
+
+    def __init__(self, strategies=None, F_pool=None, cr_pool=None):
+        self.strategy_keys = list(strategies or self.DEFAULT_STRATEGIES)
+        self.F_pool = np.asarray(F_pool or self.DEFAULT_F, dtype=float)
+        self.cr_pool = np.asarray(cr_pool or self.DEFAULT_CR, dtype=float)
+        self._ops = [DifferentialEvolution._STRATEGIES[k]
+                     for k in self.strategy_keys]
+        #: Per-individual (strategy index, F, cr); grown on first use.
+        self._held = None
+        #: `observe` gets no generator of its own, and using a private one
+        #: would make a seeded run irreproducible, so `begin` stashes the
+        #: optimizer's.
+        self._rng = None
+
+    def _draw(self, rng, n):
+        return np.column_stack((
+            rng.integers(0, len(self._ops), size=n).astype(float),
+            rng.choice(self.F_pool, size=n),
+            rng.choice(self.cr_pool, size=n),
+        ))
+
+    def begin(self, pop, scores, rng, trial):
+        self._rng = rng
+        n = len(pop)
+        if self._held is None or len(self._held) != n:
+            self._held = self._draw(rng, n)
+        idx = self._held[:, 0].astype(int)
+        return Proposal(
+            F=self._held[:, 1].copy(),
+            cr=self._held[:, 2].copy(),
+            ops=[self._ops[i][0] for i in idx],
+            samples=[self._ops[i][1] for i in idx],
+        )
+
+    def observe(self, improved, proposal, delta):
+        """Keep what worked; resample what did not."""
+        if self._held is None:
+            return
+        failed = ~np.asarray(improved, dtype=bool)
+        if failed.any():
+            self._held[failed] = self._draw(self._rng, int(failed.sum()))
+
+    def __repr__(self):
+        return (f"EnsemblePolicy(strategies={self.strategy_keys}, "
+                f"|F|={len(self.F_pool)}, |cr|={len(self.cr_pool)})")
+
+
 # ==============================================================================
 # 4. Optimizer Class
 # ==============================================================================
@@ -268,6 +348,17 @@ class DifferentialEvolution(Optimizer):
     **Supported Crossovers:**
     * `bin`: Binomial (independent swaps).
     * `exp`: Exponential (block swaps).
+
+    **Supported Policies** (`policy=`, orthogonal to `variant`):
+    * `fixed`: constant `F` and `cr`, one strategy. Classical DE.
+    * `ensemble`: `EnsemblePolicy` -- a pool of strategies and parameters,
+      one triple per individual, kept while it succeeds and resampled when
+      it fails.
+
+    `variant` says *which* mutation and crossover; `policy` says how they are
+    controlled from one generation to the next. Keeping them separate is
+    deliberate: the adaptive methods in the literature do not add mutations,
+    they choose among the ones already here.
     """
 
     # Strategy Mapping: "Name" -> (Function, Required_Sample_Count)
@@ -297,6 +388,7 @@ class DifferentialEvolution(Optimizer):
         F: float = 0.5,
         cr: float = 0.7,
         p: float = 0.1,
+        policy: str | Policy = "fixed",
         **kwargs,
     ):
         r"""
@@ -320,6 +412,20 @@ class DifferentialEvolution(Optimizer):
                 `current-to-best/1`, and $p = 1$ draws from the whole
                 population, which is `current-to-rand/1`'s pull. Values around
                 0.05-0.2 are the usual range.
+            policy (str | Policy): How `F`, `cr` and the mutation strategy are
+                chosen each generation. `variant` says *which* mutation and
+                crossover; this says how they are controlled, and the two are
+                deliberately separate arguments rather than one string.
+
+                * ``'fixed'`` (default) -- constant `F` and `cr`, one
+                  strategy. Classical DE, and the behaviour this class has
+                  always had.
+                * ``'ensemble'`` -- `EnsemblePolicy`: a pool of strategies and
+                  parameters, one triple per individual, kept while it
+                  succeeds and resampled when it fails. Overrides the
+                  strategy from `variant`, `F` and `cr`; the crossover still
+                  applies.
+                * a `Policy` instance, for a custom rule.
         """
         if not 0.0 < p <= 1.0:
             raise ValueError(f"p must be in (0, 1], got {p}")
@@ -360,7 +466,19 @@ class DifferentialEvolution(Optimizer):
                 f"Error: {e}"
             )
 
-        self.policy = FixedPolicy(F, cr, self.mutation_op, self.samples_needed)
+        if isinstance(policy, Policy):
+            self.policy = policy
+        elif policy == "fixed":
+            self.policy = FixedPolicy(F, cr, self.mutation_op,
+                                      self.samples_needed)
+        elif policy == "ensemble":
+            self.policy = EnsemblePolicy()
+        else:
+            raise ValueError(
+                f"Unknown policy '{policy}'. Supported: 'fixed', 'ensemble', "
+                f"or a Policy instance."
+            )
+        self.policy_name = policy if isinstance(policy, str) else type(policy).__name__
         #: Filled by `_generate_offspring`, consumed by `_selection`.
         self._proposal = None
 
@@ -531,6 +649,7 @@ def differential_evolution(
     F: float = 0.5,
     cr: float = 0.7,
     p: float = 0.1,
+    policy: str = "fixed",
     **kwargs,
 ) -> tuple:
     """
@@ -553,6 +672,7 @@ def differential_evolution(
         variant=variant,
         parent_selection=parent_selection,
         p=p,
+        policy=policy,
         F=F,
         cr=cr,
         **kwargs,
