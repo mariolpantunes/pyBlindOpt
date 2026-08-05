@@ -178,6 +178,11 @@ class Proposal(typing.NamedTuple):
     cr: np.ndarray
     ops: list
     samples: list
+    #: Per-individual greediness for the p-best strategies, or None to use the
+    #: optimizer's single `p`. SHADE draws a fresh one per individual per
+    #: generation, which is what makes its greediness self-scaling rather than
+    #: another constant to tune.
+    p: np.ndarray | None = None
 
 
 class Policy:
@@ -447,12 +452,26 @@ class JadePolicy(ArchivePolicy):
         self.mu_cr = float(mu_cr)
         self.c = float(c)
 
-    def _draw_F(self, rng, n):
-        """Cauchy, resampling the non-positive tail rather than clamping."""
+    def _draw_F(self, rng, n, centre=None):
+        """Cauchy, resampling the non-positive tail rather than clamping.
+
+        Args:
+            rng (np.random.Generator): Source of randomness.
+            n (int): How many values to draw.
+            centre (float | np.ndarray | None): Location of the Cauchy. A
+                scalar is JADE's single adapted mean; an array of length `n`
+                is SHADE drawing each individual from its own memory slot.
+                None uses `self.mu_F`.
+
+        Returns:
+            np.ndarray: `n` values in (0, 1].
+        """
+        carr = np.asarray(self.mu_F if centre is None else centre, dtype=float)
         out = np.empty(n)
         todo = np.arange(n)
         for _ in range(100):
-            draw = self.mu_F + 0.1 * rng.standard_cauchy(len(todo))
+            loc = carr[todo] if carr.ndim else float(carr)
+            draw = loc + 0.1 * rng.standard_cauchy(len(todo))
             np.minimum(draw, 1.0, out=draw)
             ok = draw > 0.0
             out[todo[ok]] = draw[ok]
@@ -491,6 +510,113 @@ class JadePolicy(ArchivePolicy):
         n = 0 if self.archive is None else len(self.archive)
         return (f"JadePolicy(mu_F={self.mu_F:.3f}, mu_cr={self.mu_cr:.3f}, "
                 f"c={self.c}, |A|={n})")
+
+
+class ShadePolicy(JadePolicy):
+    r"""SHADE: JADE's adaptation, but with a memory instead of a running mean.
+
+    JADE keeps one $\mu_F$ and one $\mu_{cr}$ and decays them toward whatever
+    just worked. That is a single point of failure: one generation in which the
+    only survivors used a small `F` drags the centre down, and because small
+    steps keep succeeding at the higher rate, it tends not to come back. SHADE
+    (Tanabe & Fukunaga, CEC 2013) replaces the pair with `h` slots:
+
+    $$ F_i \sim \text{Cauchy}(M_F[r_i],\,0.1), \qquad
+       cr_i \sim \mathcal{N}(M_{cr}[r_i],\,0.1), \qquad
+       r_i \sim \mathcal{U}\{1..h\} $$
+
+    Each individual draws from a randomly chosen slot, and **one** slot is
+    rewritten per generation, cycling. The other `h-1` still hold the settings
+    that worked earlier, so a bad generation costs one slot rather than the
+    whole distribution -- and because individuals keep sampling the old slots,
+    a setting that stops working is abandoned gradually rather than at once.
+
+    Two further differences from `JadePolicy`, both load-bearing:
+
+    * **The means are weighted by how much each trial improved.** With
+      $w_k = \Delta f_k / \sum_j \Delta f_j$, $M_F$ takes the weighted Lehmer
+      mean and $M_{cr}$ the weighted arithmetic mean. An unweighted mean counts
+      a trial that barely improved the same as one that halved the objective,
+      which is how the adaptation ends up chasing the *frequent* settings
+      rather than the *effective* ones -- the same failure the plain Lehmer
+      mean exists to correct, one level up.
+    * **`p` is drawn per individual**, $p_i \sim \mathcal{U}[2/N,\,0.2]$,
+      rather than fixed. Greediness then scales with population size on its own
+      and stops being another constant to tune.
+
+    Population size is unchanged: `n_pop` trials per generation, all
+    independent, so the parallel evaluation contract holds exactly as for
+    `FixedPolicy`.
+
+    Args:
+        mutation_op (Callable): Mutation from the chosen `variant`.
+        samples_needed (int): How many difference vectors it takes.
+        h (int): Memory slots. The paper's default is 6 and is insensitive
+            over roughly 5-10.
+        cap (int | None): Archive cap; see `ArchivePolicy`.
+
+    Note:
+        `F` and `cr` passed to the optimizer are **ignored**, as for JADE, and
+        so is `p` -- SHADE draws its own. Defined on `current-to-pbest/1`.
+    """
+
+    def __init__(self, mutation_op, samples_needed, h=6, cap=None):
+        if h < 1:
+            raise ValueError(f"h must be >= 1, got {h}")
+        super().__init__(mutation_op, samples_needed, cap=cap)
+        self.h = int(h)
+        self.M_F = np.full(self.h, 0.5)
+        self.M_cr = np.full(self.h, 0.5)
+        self.k = 0
+
+    def begin(self, pop, scores, rng, trial):
+        n = len(pop)
+        self._rng = rng
+        self._n_pop = n
+        if self.archive is None:
+            self.archive = np.empty((0, pop.shape[1]))
+        slots = rng.integers(0, self.h, n)
+        self._slots = slots
+        # p_i in [2/N, 0.2]: the lower end is two individuals, the smallest
+        # p-best pool that is still a choice rather than a single point.
+        lo = min(2.0 / n, 0.2)
+        return Proposal(
+            F=self._draw_F(rng, n, centre=self.M_F[slots]),
+            cr=np.clip(self.M_cr[slots] + 0.1 * rng.standard_normal(n),
+                       0.0, 1.0),
+            ops=[self.mutation_op] * n,
+            samples=[self.samples_needed] * n,
+            p=rng.uniform(lo, 0.2, n),
+        )
+
+    def observe(self, improved, proposal, delta, replaced):
+        # ArchivePolicy, not JadePolicy: the archive update is wanted, the
+        # scalar mu_F/mu_cr decay is not -- the memory replaces it.
+        ArchivePolicy.observe(self, improved, proposal, delta, replaced)
+        won = np.asarray(improved, dtype=bool)
+        if not won.any():
+            return
+        w = np.asarray(delta, dtype=float)[won]
+        w = np.clip(w, 0.0, None)
+        total = w.sum()
+        if total <= 0:
+            # Every survivor tied its parent, so no trial is evidence that its
+            # settings were better. Leave the memory alone rather than write a
+            # uniform average of an uninformative generation.
+            return
+        w = w / total
+        s_F, s_cr = proposal.F[won], proposal.cr[won]
+        denom = float((w * s_F).sum())
+        if denom > 0:
+            self.M_F[self.k] = float((w * s_F ** 2).sum() / denom)
+        self.M_cr[self.k] = float((w * s_cr).sum())
+        self.k = (self.k + 1) % self.h
+
+    def __repr__(self):
+        n = 0 if self.archive is None else len(self.archive)
+        return (f"ShadePolicy(h={self.h}, k={self.k}, "
+                f"M_F~{self.M_F.mean():.3f}, M_cr~{self.M_cr.mean():.3f}, "
+                f"|A|={n})")
 
 
 class EnsemblePolicy(Policy):
@@ -607,6 +733,9 @@ class DifferentialEvolution(Optimizer):
     * `jade`: `JadePolicy` -- the archive plus `F` and `cr` adapted from the
       values that produce survivors. Pair with `current-to-pbest/1/bin` for
       the published algorithm.
+    * `shade`: `ShadePolicy` -- JADE with a memory of `h` settings instead of
+      one running mean, updated by improvement-weighted means, and `p` drawn
+      per individual. Same pairing.
     * `ensemble`: `EnsemblePolicy` -- a pool of strategies and parameters,
       one triple per individual, kept while it succeeds and resampled when
       it fails.
@@ -738,13 +867,20 @@ class DifferentialEvolution(Optimizer):
                     "current-to-pbest/1; the adaptation still runs, but this "
                     "is not the published algorithm.", variant,
                 )
+        elif policy == "shade":
+            self.policy = ShadePolicy(self.mutation_op, self.samples_needed)
+            if strategy_key != "current-to-pbest/1":
+                logger.warning(
+                    "policy='shade' with variant '%s'. SHADE is defined on "
+                    "current-to-pbest/1; the adaptation still runs, but this "
+                    "is not the published algorithm.", variant,
+                )
         elif policy == "ensemble":
             self.policy = EnsemblePolicy()
         else:
             raise ValueError(
                 f"Unknown policy '{policy}'. Supported: 'fixed', 'archive', "
-                f"'jade', "
-                f"'ensemble', "
+                f"'jade', 'shade', 'ensemble', "
                 f"or a Policy instance."
             )
         self.policy_name = policy if isinstance(policy, str) else type(policy).__name__
@@ -884,7 +1020,11 @@ class DifferentialEvolution(Optimizer):
         if not self.uses_pbest:
             return self.best_pos
 
-        n_best = max(1, int(self.p * self.n_pop))
+        # A policy may set its own greediness per individual (SHADE does);
+        # otherwise the optimizer's single `p` applies to everyone.
+        prop = getattr(self, "_proposal", None)
+        p_j = self.p if prop is None or prop.p is None else float(prop.p[j])
+        n_best = max(1, int(p_j * self.n_pop))
         top = np.argpartition(self.scores, n_best - 1)[:n_best]
         return self.pop[self.rng.choice(top)]
 

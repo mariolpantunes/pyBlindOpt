@@ -55,6 +55,7 @@ generation:
 | `"fixed"` (default) | constant `F` and `cr`, one strategy -- classical DE |
 | `"archive"` | JADE's external archive of defeated parents, widening the pool the subtracted difference vector is drawn from |
 | `"jade"` | the archive plus `F` and `cr` learned from the values that produce survivors |
+| `"shade"` | JADE with a memory of `h` settings instead of one running mean, updated by improvement-weighted means, and `p` drawn per individual |
 | `"ensemble"` | a pool of strategies and parameters, one triple per individual, **kept while it succeeds and resampled when it fails** |
 
 ```python
@@ -84,17 +85,17 @@ where `best/1/bin` had a median of 1.99 and a worst case of 5.97.
 There is no arm that wins everywhere, and the differences are large enough
 to matter. Median of 25 seeds, `d=10`, 40 individuals, 300 generations:
 
-| function | `best/1` (default) | p-best | p-best + archive | JADE |
-| --- | --- | --- | --- | --- |
-| sphere | **9.0e-43** | 2.1e-32 | 6.8e-27 | 3.8e-16 |
-| rastrigin | 7.96 | 9.94 | 12.44 | **0.0031** |
-| ackley | 1.0e-10 | **4.0e-15** | 6.5e-13 | 2.8e-07 |
-| griewank | 0.0984 | **0.0148** | 0.0156 | 0.0342 |
-| rosenbrock | 6.77 | 6.93 | 2.51 | **0.95** |
-| levy | 0.0895 | **3.8e-30** | 6.4e-26 | 1.7e-14 |
-| zakharov | **3.3e-20** | 7.0e-16 | 7.7e-13 | 2.2e-11 |
-| dixon_price | **0.667** | 0.667 | 0.667 | 0.667 |
-| styblinski_tang | -363.4 | **-391.7** | -391.7 | -391.7 |
+| function | `best/1` (default) | p-best | p-best + archive | JADE | SHADE |
+| --- | --- | --- | --- | --- | --- |
+| sphere | **9.0e-43** | 2.1e-32 | 6.8e-27 | 3.8e-16 | 2.4e-19 |
+| rastrigin | 7.96 | 9.94 | 12.44 | 0.0031 | **0.00015** |
+| ackley | 1.0e-10 | **4.0e-15** | 6.5e-13 | 2.8e-07 | 2.2e-09 |
+| griewank | 0.0984 | **0.0148** | 0.0156 | 0.0342 | 0.0334 |
+| rosenbrock | 6.77 | 6.93 | 2.51 | 0.95 | **4.1e-05** |
+| levy | 0.0895 | **3.8e-30** | 6.4e-26 | 1.7e-14 | 4.8e-18 |
+| zakharov | **3.3e-20** | 7.0e-16 | 7.7e-13 | 2.2e-11 | 1.7e-16 |
+| dixon_price | **0.667** | 0.667 | 0.667 | 0.667 | 0.667 |
+| styblinski_tang | -363.4 | **-391.7** | -391.7 | -391.7 | -391.7 |
 
 The pattern is consistent: **the default is best where the landscape rewards
 greed and worst where it punishes it.** `best/1/bin` reaches machine
@@ -106,6 +107,19 @@ precision on sphere and zakharov, and is the only arm that fails outright --
 on rosenbrock, and pays for it with precision on the easy functions: its
 heavy-tailed `F` keeps large steps available, which is what escapes local
 optima and also what stops it converging to 1e-40 on a bowl.
+
+**SHADE dominates JADE** on this grid: better on seven functions, tied on the
+two where every adaptive arm reaches the same answer, worse on none. The
+margin is largest on rosenbrock, 0.95 to 4.1e-05, whose curved valley is
+exactly the case where one running mean is the wrong model -- the `F` that
+works along the valley is not the `F` that works across it, and JADE has only
+one number to hold both. A memory of six can hold both, and individuals keep
+drawing from whichever slot suits them.
+
+It also recovers much of what JADE gave up for that robustness: three orders
+of magnitude on sphere and five on zakharov, without losing rastrigin. It does
+not reach `best/1`'s 9.0e-43 on a bowl, and nothing adaptive will -- keeping
+large steps available is the cost of being able to escape.
 
 The archive is worth a note of its own. On its own it is mostly *harmful* --
 it made rastrigin worse, 9.94 to 12.44 -- because it buys diversity among

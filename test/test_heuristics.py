@@ -489,6 +489,134 @@ class TestDEJade(unittest.TestCase):
         self.assertLess(jade, default * 0.25)
 
 
+class TestDEShade(unittest.TestCase):
+    """SHADE: a memory of `h` settings instead of JADE's single running mean.
+
+    Driven through `observe` with known values for the same reason as the JADE
+    suite -- a directional assertion on a stochastic run is how a suite becomes
+    flaky.
+    """
+
+    BOUNDS = np.array([[-5.12, 5.12]] * 6)
+
+    def _proposal(self, F, cr):
+        n = len(F)
+        return de.Proposal(F=np.asarray(F, float), cr=np.asarray(cr, float),
+                           ops=[None] * n, samples=[2] * n)
+
+    def test_selectable_by_name(self):
+        opt = de.DifferentialEvolution(
+            functions.sphere, self.BOUNDS, variant="current-to-pbest/1/bin",
+            policy="shade", verbose=False)
+        self.assertIsInstance(opt.policy, de.ShadePolicy)
+
+    def test_it_warns_when_paired_with_another_mutation(self):
+        with self.assertLogs("pyBlindOpt.de", level="WARNING") as log:
+            de.DifferentialEvolution(
+                functions.sphere, self.BOUNDS, variant="best/1/bin",
+                policy="shade", verbose=False)
+        self.assertIn("current-to-pbest/1", "".join(log.output))
+
+    def test_one_slot_is_written_per_generation(self):
+        """The point of the memory: a bad generation costs one slot, not the
+        whole distribution, and the index cycles."""
+        pol = de.ShadePolicy(de.mutation_current_to_pbest_1, 2, h=4)
+        pr = self._proposal([0.9, 0.9], [0.3, 0.3])
+        for expected_k in (1, 2, 3, 0):
+            pol.observe(np.array([True, True]), pr, np.ones(2),
+                        np.zeros((2, 6)))
+            self.assertEqual(pol.k, expected_k)
+        # exactly the four slots touched, none left at the 0.5 default
+        self.assertTrue((pol.M_F != 0.5).all())
+
+    def test_the_means_are_weighted_by_improvement(self):
+        """A trial that barely improved must not count as much as one that
+        halved the objective; an unweighted mean chases frequent settings
+        rather than effective ones."""
+        pol = de.ShadePolicy(de.mutation_current_to_pbest_1, 2, h=1)
+        pr = self._proposal([0.2, 0.9], [0.2, 0.9])
+        # second trial improved 99x more, so both means must sit near 0.9
+        pol.observe(np.array([True, True]), pr, np.array([0.01, 0.99]),
+                    np.zeros((2, 6)))
+        self.assertGreater(pol.M_cr[0], 0.85)
+        self.assertGreater(pol.M_F[0], 0.85)
+
+    def test_F_uses_the_weighted_lehmer_mean(self):
+        pol = de.ShadePolicy(de.mutation_current_to_pbest_1, 2, h=1)
+        F = np.array([0.2, 0.9])
+        w = np.array([0.5, 0.5])
+        pol.observe(np.array([True, True]), self._proposal(F, [0.5, 0.5]),
+                    np.array([1.0, 1.0]), np.zeros((2, 6)))
+        lehmer = (w * F ** 2).sum() / (w * F).sum()
+        self.assertAlmostEqual(pol.M_F[0], lehmer)
+        self.assertGreater(lehmer, float((w * F).sum()))
+
+    def test_nothing_is_written_when_nothing_survives(self):
+        pol = de.ShadePolicy(de.mutation_current_to_pbest_1, 2, h=3)
+        before = (pol.M_F.copy(), pol.M_cr.copy(), pol.k)
+        pol.observe(np.zeros(3, dtype=bool), self._proposal([0.9] * 3,
+                    [0.9] * 3), np.zeros(3), np.zeros((0, 6)))
+        np.testing.assert_array_equal(pol.M_F, before[0])
+        np.testing.assert_array_equal(pol.M_cr, before[1])
+        self.assertEqual(pol.k, before[2])
+
+    def test_a_generation_of_exact_ties_leaves_the_memory_alone(self):
+        """Survivors that only tied their parents are not evidence that their
+        settings were better, so writing a slot would be writing noise."""
+        pol = de.ShadePolicy(de.mutation_current_to_pbest_1, 2, h=3)
+        before = pol.M_F.copy()
+        pol.observe(np.array([True, True]), self._proposal([0.9, 0.1],
+                    [0.9, 0.1]), np.zeros(2), np.zeros((2, 6)))
+        np.testing.assert_array_equal(pol.M_F, before)
+        self.assertEqual(pol.k, 0)
+
+    def test_drawn_parameters_stay_in_range(self):
+        pol = de.ShadePolicy(de.mutation_current_to_pbest_1, 2, h=6)
+        pr = pol.begin(np.zeros((5000, 4)), np.zeros(5000),
+                       np.random.default_rng(0), 0)
+        self.assertTrue((pr.F > 0).all() and (pr.F <= 1).all())
+        self.assertTrue((pr.cr >= 0).all() and (pr.cr <= 1).all())
+
+    def test_p_is_drawn_per_individual(self):
+        """SHADE's greediness scales with population size on its own; a single
+        shared `p` would reintroduce the constant it exists to remove."""
+        pol = de.ShadePolicy(de.mutation_current_to_pbest_1, 2)
+        pr = pol.begin(np.zeros((200, 4)), np.zeros(200),
+                       np.random.default_rng(1), 0)
+        self.assertIsNotNone(pr.p)
+        assert pr.p is not None
+        self.assertEqual(pr.p.shape, (200,))
+        self.assertGreater(len(np.unique(pr.p)), 100)
+        self.assertTrue((pr.p >= 2.0 / 200).all() and (pr.p <= 0.2).all())
+
+    def test_memory_size_is_validated(self):
+        with self.assertRaises(ValueError):
+            de.ShadePolicy(de.mutation_current_to_pbest_1, 2, h=0)
+
+    def test_runs_are_reproducible(self):
+        kw = dict(variant="current-to-pbest/1/bin", policy="shade", n_pop=20,
+                  n_iter=30, seed=4, verbose=False)
+        a = de.differential_evolution(functions.rastrigin, self.BOUNDS, **kw)
+        b = de.differential_evolution(functions.rastrigin, self.BOUNDS, **kw)
+        np.testing.assert_array_equal(a[0], b[0])
+
+    def test_it_improves_on_jade(self):
+        """Measured on rastrigin at d=10, n_pop=30, 150 iterations over 12
+        seeds: SHADE 2.87 median against JADE 8.11 and best/1/bin 9.45.
+        Asserted with headroom, since the ordering is the claim, not the gap.
+        """
+        def median(**kw):
+            return float(np.median([
+                de.differential_evolution(
+                    functions.rastrigin, np.array([[-5.12, 5.12]] * 10),
+                    n_pop=30, n_iter=150, seed=s, verbose=False, **kw)[1]
+                for s in range(8)]))
+
+        shade = median(variant="current-to-pbest/1/bin", policy="shade")
+        jade = median(variant="current-to-pbest/1/bin", policy="jade")
+        self.assertLess(shade, jade)
+
+
 class TestDEEnsemble(unittest.TestCase):
     """`EnsemblePolicy` -- a pool of strategies and parameters, per individual.
 
