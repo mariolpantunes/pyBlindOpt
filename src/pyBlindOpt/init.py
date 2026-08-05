@@ -264,10 +264,97 @@ def _oppose(
 
 
 #: Empty-space backends selected by the `force` knob of :func:`oblesa`.
+def _ess_engine(
+    samples: np.ndarray,
+    bounds: np.ndarray,
+    *,
+    n: int,
+    seed=None,
+    scores: np.ndarray | None = None,
+    attraction_weight: float = 0.5,
+    k_cand: int = 64,
+    **ignored,
+) -> np.ndarray:
+    """The EmptySpaceSearch relaxation, behind this module's engine contract.
+
+    `ess.esa` is the production empty-space engine: dart-throwing to place the
+    points, then a force relaxation that the dart engines here deliberately do
+    not have. This adapts it rather than changing it, because the `accepts`
+    capability protocol is pyBlindOpt's convention and ESS should not have to
+    know about it.
+
+    Two mappings the adapter owns:
+
+    * **Polarity.** ESS's contract is *higher is more attractive*; it is not
+      told whether the caller minimises, and cannot guess. OBLESA minimises,
+      so the scores are negated here. Getting this backwards would pull probes
+      toward the *worst* regions and still return a plausible-looking
+      population, which makes it the one line in the substitution worth
+      staring at.
+    * **`force_weight` is deliberately not forwarded.** It is dart's lambda: a
+      scalar on a standardised Shepard surrogate scoring a finite candidate
+      cloud. ESS's `attraction_weight` scales a pairwise force and is bounded
+      by a collapse condition -- at OBLESA's default of 8.0 ESS refuses the
+      configuration outright, correctly. Two different quantities that happen
+      to both mean "how much attraction", so this uses ESS's own default and
+      leaves tuning to a caller that knows which engine it is talking to
+      (`engine=functools.partial(...)`). `k_cand` does carry over, as
+      `init_pool`; both are candidates per placement.
+
+    The attraction law is `cauchy` rather than ESS's default of "same as the
+    repulsion", because two identical laws are proportional and can never
+    cross -- attraction would only weaken the push instead of pulling. See
+    `ess.esa`.
+
+    Args:
+        samples (np.ndarray): Points already occupying the space, shape (M, D).
+        bounds (np.ndarray): Search space bounds, shape (D, 2).
+        n (int): How many points to place.
+        seed: Random seed or Generator.
+        scores (np.ndarray | None): Objective values for `samples`, lower
+            better. Without them this is pure repulsion.
+        attraction_weight (float): Pull strength in ESS's units. The default
+            is ESS's own measured optimum; it is **not** `force_weight`, see
+            above.
+        k_cand (int): Candidates per placement, forwarded as `init_pool`.
+        **ignored: Accepted and dropped, for signature compatibility.
+
+    Returns:
+        np.ndarray: The `n` placed points, shape (n, D).
+
+    Raises:
+        ImportError: If EmptySpaceSearch is not installed.
+    """
+    del ignored
+    try:
+        # Optional dependency, imported here so the package works without
+        # it; only `force='ess'` needs it.
+        import ess  # type: ignore[reportMissingImports]
+    except ImportError as exc:  # pragma: no cover - environment dependent
+        raise ImportError(
+            "force='ess' needs the EmptySpaceSearch package: "
+            "pip install EmptySpaceSearch"
+        ) from exc
+
+    kw = {}
+    if scores is not None:
+        kw = {
+            "attractiveness": -np.asarray(scores, dtype=float),
+            "attraction_weight": attraction_weight,
+            "attraction_metric": "cauchy",
+            "attraction_kwargs": {"power": 1.0},
+        }
+    return ess.esa(samples, bounds, n=n, seed=seed, init_pool=k_cand, **kw)
+
+
+_ess_engine.accepts = frozenset({"scores", "k_cand"})  # type: ignore[reportFunctionMemberAccess]
+
+
 _FORCES = {
     "repulsive": emptyspace.dart_esa,
     "guided": emptyspace.fitness_dart_esa,
     "uniform": emptyspace.random_esa,
+    "ess": _ess_engine,
 }
 
 
@@ -349,7 +436,13 @@ def oblesa(
             'uniform' is the null -- OBLESA's pool shape and candidate count
             with no empty-space search at all, which is what separates "the
             search found something" from "a bigger pool gave the selector
-            more to choose from". Ignored when `engine` is given.
+            more to choose from".
+
+            'ess' is the EmptySpaceSearch relaxation, which places points the
+            same way 'guided' does and then relaxes them under a repulsive
+            and attractive force. It needs the optional `EmptySpaceSearch`
+            dependency. The dart engines remain so the substitution can be
+            measured rather than assumed. Ignored when `engine` is given.
         force_weight (float): Attraction strength for `force='guided'`. Zero
             reproduces 'repulsive' exactly, which makes a sweep over this an
             ablation rather than a comparison of two methods.

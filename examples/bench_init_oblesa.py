@@ -227,51 +227,79 @@ BASELINE = "random"   # the arm AR is measured against, GECCO Companion '26 Eq. 
 SHIFT = [True]        # cleared by --no-shift; module-level so one_run sees it
 SHIFT_FRAC = [0.8]
 
-#: force level -> (force, force_weight). `repulsive` is `guided` at weight 0
-#: and is kept as a separate label only because it names the ablation's origin.
-_FORCE_LEVELS = {
-    "u": ("uniform", 0.0),
-    "r": ("repulsive", 0.0),
-    "g01": ("guided", 1.0),
-    "g04": ("guided", 4.0),
-    "g08": ("guided", 8.0),
-    "g16": ("guided", 16.0),
-    "g32": ("guided", 32.0),
+#: Engine level -> the knobs that select it. The question this sweep exists
+#: to answer is whether `ess.esa` -- dart placement *plus* a repulsive and
+#: attractive relaxation -- beats the dart engines it would replace, so the
+#: incumbents stay in as comparators rather than being assumed obsolete.
+#:
+#: `force_weight` and `attraction_weight` are **not** the same quantity and
+#: are deliberately not swept together: the first is dart's lambda on a
+#: standardised surrogate, the second scales a pairwise force and is bounded
+#: by a collapse condition. Each engine is swept in its own units.
+_ENGINE_LEVELS = {
+    "null":  {"force": "uniform"},
+    "dart":  {"force": "repulsive"},
+    "dartg": {"force": "guided", "force_weight": 8.0},
+    "ess05": {"force": "ess", "attraction_weight": 0.5},
+    "ess10": {"force": "ess", "attraction_weight": 1.0},
+    "ess20": {"force": "ess", "attraction_weight": 2.0},
 }
 
-#: selection label -> (selection, diversity_weight). `maximin` at weight 0 is
-#: omitted deliberately: `keep = 1 + 3w` then considers exactly `n_pop`
-#: candidates and must take all of them, making it identical to `best` at
-#: weight 0 -- the same arm under two names, not a second measurement.
+#: Probe-block size as a multiple of `n_pop`. Never varied before, and the
+#: ESS-over-dart margin was measured to *grow* as this shrinks, so it is the
+#: axis most likely to be mis-set at its current default of 1.
+_NESS_LEVELS = {"n1": 1.0, "n2": 2.0}
+
+#: Selection rule with its diversity weight. Three levels rather than the
+#: previous seven: the earlier factorial put `best` 6.6 points ahead of
+#: `maximin` and 8.4 ahead of `prob`, so the budget is better spent
+#: elsewhere. 0.25 was the interior optimum and 0.0/0.5 bracket it.
 _SELECTION_LEVELS = {
-    "best00": ("best", 0.00),
-    "best25": ("best", 0.25),
-    "best50": ("best", 0.50),
-    "prob00": ("prob", 0.00),
-    "prob50": ("prob", 0.50),
-    "mmin25": ("maximin", 0.25),
-    "mmin50": ("maximin", 0.50),
+    "s00": ("best", 0.00),
+    "s25": ("best", 0.25),
+    "s50": ("best", 0.50),
+}
+
+#: The optimizer itself. **Every OBLESA measurement to date used
+#: `best/1/bin`** -- now known to be the only DE arm that fails outright on
+#: multimodal landscapes, and the one most sensitive to where the population
+#: starts, which is exactly what an initializer changes. A second, less
+#: greedy optimizer is what stops any conclusion here being an artefact of
+#: that choice.
+OPTIMIZERS = {
+    "de": {"variant": "best/1/bin", "policy": "fixed"},
+    "jade": {"variant": "current-to-pbest/1/bin", "policy": "jade"},
+}
+
+#: Knobs held fixed, with the evidence for each, so the budget goes to what
+#: is genuinely unknown for this engine.
+_FIXED = {
+    "opp": "quasi",        # 31.6 vs 21.0 for standard; largest single effect
+    "opp_ess": False,      # worth 1.6, and compresses the guided margin
 }
 
 OBLESA_KNOBS = {}
-for _opp, _o in (("standard", "s"), ("quasi", "q")):
-    for _oe in (False, True):
-        for _flab, (_force, _fw) in _FORCE_LEVELS.items():
-            for _slab, (_sel, _dw) in _SELECTION_LEVELS.items():
-                _name = f"ob_{_o}{'e' if _oe else '_'}_{_flab}_{_slab}"
-                OBLESA_KNOBS[_name] = {
-                    "opp": _opp, "opp_ess": _oe,
-                    "force": _force, "force_weight": _fw,
-                    "selection": _sel, "diversity_weight": _dw,
-                }
+for _elab, _eng in _ENGINE_LEVELS.items():
+    for _nlab, _nmul in _NESS_LEVELS.items():
+        for _slab, (_sel, _dw) in _SELECTION_LEVELS.items():
+            _name = f"ob_{_elab}_{_nlab}_{_slab}"
+            OBLESA_KNOBS[_name] = dict(
+                _FIXED, selection=_sel, diversity_weight=_dw,
+                _n_ess_mult=_nmul, **_eng,
+            )
 
-ARMS = BASELINE_ARMS + tuple(OBLESA_KNOBS)
+ARMS_INIT = BASELINE_ARMS + tuple(OBLESA_KNOBS)
+
+#: Every initializer is run under every optimizer, so the two axes can be
+#: read jointly. An arm name is `<initializer>@<optimizer>`.
+ARMS = tuple(f"{a}@{o}" for a in ARMS_INIT for o in OPTIMIZERS)
 
 #: What each arm reports as its engine, for grouping in the report.
 ENGINE_LABEL = {
     name: {"uniform": "uniform-random-null",
            "repulsive": "dart-largest-empty-sphere",
-           "guided": "dart-fitness-guided"}[kw["force"]]
+           "guided": "dart-fitness-guided",
+           "ess": "ess-relaxation"}[kw["force"]]
     for name, kw in OBLESA_KNOBS.items()
 }
 
@@ -387,6 +415,7 @@ def initial_population(arm, objective, bounds, n_pop, rng, stats=None, info=None
     exact pipeline with the engine swapped for uniform noise -- the only one of
     the three that holds pool *shape* fixed as well as pool size.
     """
+    arm, _ = split_arm(arm)
     lo, hi = bounds[:, 0], bounds[:, 1]
     if arm == "random":
         return utils.RandomSampler(rng).sample(n_pop, bounds)
@@ -419,12 +448,35 @@ def initial_population(arm, objective, bounds, n_pop, rng, stats=None, info=None
         # them, and each knob is genuinely the only thing that varies along
         # its own axis.
         kw = dict(OBLESA_KNOBS[arm])
+        # `_n_ess_mult` is an arm-table convention, not an `oblesa` argument.
+        mult = kw.pop("_n_ess_mult", 1.0)
+        kw["n_ess"] = max(1, int(round(mult * n_pop)))
+        # `attraction_weight` reaches ess.esa through the engine adapter,
+        # which oblesa does not forward by name -- bind it here instead.
+        if kw.get("force") == "ess" and "attraction_weight" in kw:
+            import functools
+            kw["engine"] = functools.partial(
+                init._ess_engine,
+                attraction_weight=kw.pop("attraction_weight"))
+            kw["engine"].accepts = init._ess_engine.accepts
+            kw.pop("force", None)
         if stats is not None and arm in ENGINE_LABEL:
             stats["engine"] = ENGINE_LABEL[arm]
         if info is not None:
             kw["info"] = info
         return init.oblesa(objective, bounds, n_pop=n_pop, seed=rng, **kw)
     raise ValueError(f"unknown arm {arm!r}")
+
+
+def split_arm(arm):
+    """`"<initializer>@<optimizer>"` -> the two parts.
+
+    The two axes are crossed rather than merged so an initializer can be read
+    across optimizers and vice versa. Bare names default to the classical
+    optimizer, which keeps older arm lists working.
+    """
+    init_arm, _, opt = arm.partition("@")
+    return init_arm, (opt or "de")
 
 
 def objective_for(fname, d):
@@ -449,6 +501,7 @@ def one_run(arm, fname, d, seed, n_pop, n_iter):
     is measured but not charged — see the module docstring for why subtracting
     it manufactured the result it was supposed to guard against.
     """
+    _, opt_key = split_arm(arm)
     bounds = np.array([[-5.0, 5.0]] * d)
     counted = _Counted(objective_for(fname, d))
     rng_init = np.random.default_rng(seed)
@@ -466,9 +519,9 @@ def one_run(arm, fname, d, seed, n_pop, n_iter):
     trace = _Trace()
     _, score = de.differential_evolution(
         counted, bounds, population=pop, n_pop=n_pop, n_iter=n_iter,
-        seed=rng_opt, callback=trace)
+        seed=rng_opt, callback=trace, **OPTIMIZERS[opt_key])
     return {
-        "arm": arm, "function": fname, "d": d, "seed": seed,
+        "arm": arm, "optimizer": opt_key, "function": fname, "d": d, "seed": seed,
         "score": float(score), "init_evals": int(used),
         "total_evals": int(counted.n), "n_iter": int(n_iter),
         "init_seconds": t_init, "curve": trace.best,
