@@ -97,7 +97,7 @@ class PatienceStopping:
             bool: True if patience is exhausted.
         """
         self.epoch = epoch
-        # Safely get the minimum, ignoring NaNs. 
+        # Safely get the minimum, ignoring NaNs.
         # Catch warnings if all values are NaN.
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", category=RuntimeWarning)
