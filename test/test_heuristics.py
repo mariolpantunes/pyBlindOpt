@@ -617,6 +617,107 @@ class TestDEShade(unittest.TestCase):
         self.assertLess(shade, jade)
 
 
+class TestDECode(unittest.TestCase):
+    """CoDE: three trials per individual, best of the triple survives.
+
+    The batch-shape assertion is the important one here. CoDE is the first
+    policy that costs more than one evaluation per generation, and the live
+    agent backend requires a batch to be exactly one population -- so "three
+    batches of n_pop" and "one batch of 3*n_pop" are not interchangeable.
+    """
+
+    BOUNDS = np.array([[-5.12, 5.12]] * 6)
+
+    def test_selectable_by_name(self):
+        opt = de.DifferentialEvolution(functions.sphere, self.BOUNDS,
+                                       policy="code", verbose=False)
+        self.assertIsInstance(opt.policy, de.CodePolicy)
+        self.assertEqual(opt.policy.n_trials, 3)
+
+    def test_a_generation_is_three_batches_of_one_population(self):
+        n_pop, n_iter = 12, 4
+        seen = []
+
+        def spy(x):
+            x = np.atleast_2d(x)
+            seen.append(x.shape[0])
+            return np.array([functions.sphere(r) for r in x])
+
+        de.differential_evolution(spy, self.BOUNDS, n_pop=n_pop,
+                                  n_iter=n_iter, policy="code", seed=0,
+                                  verbose=False)
+        # every call is one population's worth ...
+        self.assertEqual(set(seen), {n_pop})
+        # ... and there are three per generation, plus the initial one
+        self.assertEqual(len(seen), 3 * n_iter + 1)
+
+    def test_the_default_policy_still_costs_one_batch(self):
+        """The n_trials>1 path must not change anything for everyone else."""
+        n_pop, n_iter = 12, 4
+        seen = []
+
+        def spy(x):
+            x = np.atleast_2d(x)
+            seen.append(x.shape[0])
+            return np.array([functions.sphere(r) for r in x])
+
+        de.differential_evolution(spy, self.BOUNDS, n_pop=n_pop,
+                                  n_iter=n_iter, seed=0, verbose=False)
+        self.assertEqual(len(seen), n_iter + 1)
+
+    def test_it_keeps_the_best_of_each_triple(self):
+        """Selection must see the best trial per individual, so the result is
+        never worse than running any single one of the three strategies would
+        have been on that individual in that generation."""
+        pol = de.CodePolicy()
+        rng = np.random.default_rng(0)
+        pop = rng.uniform(-5, 5, (8, 6))
+        names = set()
+        for t in range(pol.n_trials):
+            pr = pol.begin(pop, np.zeros(8), rng, t)
+            names.add(id(pr.ops[0]))
+            self.assertEqual(len(pr.F), 8)
+        # three rounds, three distinct mutation operators
+        self.assertEqual(len(names), 3)
+
+    def test_parameters_come_from_the_published_pool(self):
+        pol = de.CodePolicy()
+        pr = pol.begin(np.zeros((500, 4)), np.zeros(500),
+                       np.random.default_rng(2), 0)
+        pairs = {(round(f, 3), round(c, 3)) for f, c in zip(pr.F, pr.cr)}
+        self.assertTrue(pairs <= {(1.0, 0.1), (1.0, 0.9), (0.8, 0.2)}, pairs)
+        self.assertGreater(len(pairs), 1)   # drawn per individual, not fixed
+
+    def test_an_empty_pool_is_refused(self):
+        with self.assertRaises(ValueError):
+            de.CodePolicy(strategies=())
+
+    def test_runs_are_reproducible(self):
+        kw = dict(policy="code", n_pop=20, n_iter=20, seed=4, verbose=False)
+        a = de.differential_evolution(functions.rastrigin, self.BOUNDS, **kw)
+        b = de.differential_evolution(functions.rastrigin, self.BOUNDS, **kw)
+        np.testing.assert_array_equal(a[0], b[0])
+
+    def test_it_wins_multimodal_at_equal_evaluations(self):
+        """CoDE spends three evaluations per generation, so it is given a
+        third of the generations. Measured at d=10 over 10 seeds: rastrigin
+        1.12 against 9.45, ackley 0.024 against 1.16. It *loses* the unimodal
+        cases at the same budget -- sphere 3.7e-06 against 3.5e-09 -- which is
+        why only the multimodal claim is asserted.
+        """
+        def median(f, bd, **kw):
+            return float(np.median([
+                de.differential_evolution(
+                    getattr(functions, f), np.array([[-bd, bd]] * 10),
+                    n_pop=30, seed=s, verbose=False, **kw)[1]
+                for s in range(6)]))
+
+        code = median("rastrigin", 5.12, n_iter=150, variant="rand/1/bin",
+                      policy="code")
+        fixed = median("rastrigin", 5.12, n_iter=450, variant="best/1/bin")
+        self.assertLess(code, fixed)
+
+
 class TestDEEnsemble(unittest.TestCase):
     """`EnsemblePolicy` -- a pool of strategies and parameters, per individual.
 

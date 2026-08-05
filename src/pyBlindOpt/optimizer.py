@@ -252,6 +252,29 @@ class Optimizer(abc.ABC):
         """
         pass
 
+    def _evolve_once(self, epoch: int):
+        """One generation: build offspring, evaluate them, select survivors.
+
+        Extracted from `optimize` so a subclass can change *how many* batches
+        a generation costs without reimplementing the whole loop. CoDE is the
+        reason: it builds three trial vectors per individual and keeps the best
+        of each triple, which is three evaluations per generation rather than
+        one.
+
+        A subclass that overrides this must keep every `evaluate` call to one
+        population's worth of individuals. Batches are not an implementation
+        detail here -- pyBlindOpt drives live agents whose engine requires all
+        of them connected for a batch, so three batches of `n_pop` is a
+        supported shape and one batch of `3 * n_pop` is not.
+
+        Args:
+            epoch (int): The current generation index.
+        """
+        offspring = self._generate_offspring(epoch)
+        offspring = self._check_bounds(offspring)
+        offspring_scores = self.evaluate(offspring)
+        self._selection(offspring, offspring_scores)
+
     def optimize(self) -> tuple:
         self._initialize()
 
@@ -267,13 +290,8 @@ class Optimizer(abc.ABC):
                 # 1. Update params (e.g., decay 'a')
                 self._update_iter_params(epoch)
 
-                # 2. Algorithm Logic
-                offspring = self._generate_offspring(epoch)
-                offspring = self._check_bounds(offspring)
-                offspring_scores = self.evaluate(offspring)
-
-                # 3. Selection (e.g., Greedy)
-                self._selection(offspring, offspring_scores)
+                # 2-3. Generate, evaluate, select.
+                self._evolve_once(epoch)
 
                 # 4. Update Best/Leaders
                 self._update_best(epoch)

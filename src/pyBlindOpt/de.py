@@ -619,6 +619,95 @@ class ShadePolicy(JadePolicy):
                 f"|A|={n})")
 
 
+class CodePolicy(Policy):
+    r"""CoDE: build three trials per individual, keep the best of the triple.
+
+    Composite DE (Wang, Cai & Zhang, IEEE TEC 2011) takes the opposite approach
+    to JADE and SHADE. Where those learn *which* parameters work and narrow
+    toward them, CoDE never adapts anything: it fixes three strategies and
+    three parameter pairs chosen to fail in different ways, generates one trial
+    from each strategy every generation, and lets selection decide. Nothing is
+    tuned, so nothing can be mistuned.
+
+    The three strategies, and what each is for:
+
+    | strategy | pairs well with | covers |
+    | --- | --- | --- |
+    | `rand/1/bin` | any | exploration; no attraction to the best |
+    | `rand/2/bin` | any | more diverse differences, slower |
+    | `current-to-rand/1` | rotation | rotated landscapes -- no crossover, so no bias toward the coordinate axes |
+
+    The three parameter pairs are $(F, cr) \in
+    \{(1.0, 0.1), (1.0, 0.9), (0.8, 0.2)\}$. Each trial draws one pair
+    uniformly, so a strategy is never locked to a single setting.
+
+    **This costs three evaluations per generation, not one**, and that is the
+    honest way to read any comparison against it: at a fixed evaluation budget
+    CoDE runs a third of the generations. It is included because the trade is
+    often worth it on multimodal landscapes, not because it is free.
+
+    The batches stay the right shape. `n_trials = 3` means the loop calls
+    `evaluate` three times with `n_pop` individuals each, never once with
+    `3 * n_pop` -- so the live-agent contract, where the engine needs every
+    agent connected for a batch, holds exactly as it does for `FixedPolicy`.
+
+    Args:
+        strategies (tuple | None): Mutation names, default CoDE's three.
+        params (tuple | None): `(F, cr)` pairs, default CoDE's three.
+
+    Note:
+        `variant`, `F` and `cr` passed to the optimizer are **ignored**: the
+        pool replaces all three. `current-to-rand/1` is used without crossover
+        in the paper; here it goes through the configured crossover, which is
+        the one deviation and is why `rand/1/bin` remains the first entry.
+    """
+
+    n_trials = 3
+
+    #: (F, cr) pairs from the paper. Deliberately far apart: a high cr with a
+    #: high F is an aggressive, near-total rebuild of the individual, a low cr
+    #: changes almost nothing, and the third sits between them.
+    _PARAMS = ((1.0, 0.1), (1.0, 0.9), (0.8, 0.2))
+    _STRATS = ("rand/1", "rand/2", "current-to-rand/1")
+
+    def __init__(self, strategies=None, params=None):
+        # `is None`, not `or`: an empty tuple is falsy, so `strategies or
+        # default` would silently substitute the default for a caller who
+        # explicitly asked for nothing and expects to be told it is invalid.
+        self.strategies = tuple(self._STRATS if strategies is None
+                                else strategies)
+        self.params = tuple(self._PARAMS if params is None else params)
+        if not self.strategies or not self.params:
+            raise ValueError("CoDE needs at least one strategy and one pair")
+        unknown = set(self.strategies) - set(DifferentialEvolution._STRATEGIES)
+        if unknown:
+            raise ValueError(f"unknown strategies: {sorted(unknown)}")
+        self.n_trials = len(self.strategies)
+
+    def begin(self, pop, scores, rng, trial):
+        """Parameters for trial round `trial`, one entry per individual.
+
+        `trial` selects the strategy -- every individual uses the same one in a
+        given round, which is what makes the round a clean batch -- while the
+        parameter pair is drawn per individual.
+        """
+        n = len(pop)
+        name = self.strategies[trial % len(self.strategies)]
+        op, need = DifferentialEvolution._STRATEGIES[name]
+        idx = rng.integers(0, len(self.params), n)
+        pairs = np.asarray(self.params, dtype=float)
+        return Proposal(
+            F=pairs[idx, 0],
+            cr=pairs[idx, 1],
+            ops=[op] * n,
+            samples=[need] * n,
+        )
+
+    def __repr__(self):
+        return (f"CodePolicy(strategies={self.strategies}, "
+                f"n_trials={self.n_trials})")
+
+
 class EnsemblePolicy(Policy):
     r"""An ensemble of strategies and parameters, per individual (EPSDE).
 
@@ -736,6 +825,9 @@ class DifferentialEvolution(Optimizer):
     * `shade`: `ShadePolicy` -- JADE with a memory of `h` settings instead of
       one running mean, updated by improvement-weighted means, and `p` drawn
       per individual. Same pairing.
+    * `code`: `CodePolicy` -- three trials per individual from three fixed
+      strategies, best of the triple survives. Adapts nothing, and costs
+      three evaluations per generation rather than one.
     * `ensemble`: `EnsemblePolicy` -- a pool of strategies and parameters,
       one triple per individual, kept while it succeeds and resampled when
       it fails.
@@ -875,12 +967,14 @@ class DifferentialEvolution(Optimizer):
                     "current-to-pbest/1; the adaptation still runs, but this "
                     "is not the published algorithm.", variant,
                 )
+        elif policy == "code":
+            self.policy = CodePolicy()
         elif policy == "ensemble":
             self.policy = EnsemblePolicy()
         else:
             raise ValueError(
                 f"Unknown policy '{policy}'. Supported: 'fixed', 'archive', "
-                f"'jade', 'shade', 'ensemble', "
+                f"'jade', 'shade', 'code', 'ensemble', "
                 f"or a Policy instance."
             )
         self.policy_name = policy if isinstance(policy, str) else type(policy).__name__
@@ -904,7 +998,7 @@ class DifferentialEvolution(Optimizer):
             self.best_score = self.scores[best_idx]
             self.best_pos = self.pop[best_idx].copy()
 
-    def _generate_offspring(self, epoch: int) -> np.ndarray:
+    def _generate_offspring(self, epoch: int, round_idx: int = 0) -> np.ndarray:
         """
         Generates the Trial Population.
 
@@ -921,7 +1015,8 @@ class DifferentialEvolution(Optimizer):
         # whole population once rather than per individual. `FixedPolicy`
         # returns constants and draws no randomness, which is what keeps this
         # path byte-identical to the pre-policy implementation.
-        proposal = self.policy.begin(self.pop, self.scores, self.rng, 0)
+        proposal = self.policy.begin(self.pop, self.scores, self.rng,
+                                     round_idx)
         self._proposal = proposal
 
         for j in range(n_pop):
@@ -1027,6 +1122,57 @@ class DifferentialEvolution(Optimizer):
         n_best = max(1, int(p_j * self.n_pop))
         top = np.argpartition(self.scores, n_best - 1)[:n_best]
         return self.pop[self.rng.choice(top)]
+
+    def _evolve_once(self, epoch: int):
+        """One generation, in `policy.n_trials` batches of `n_pop`.
+
+        With the default `n_trials = 1` this is the base implementation and is
+        byte-identical to it. CoDE sets 3: three trial vectors are built per
+        individual, each from a different strategy, and only the best of each
+        triple goes to selection.
+
+        Each round is its own `evaluate` call of exactly `n_pop` individuals.
+        Stacking them into one call of `3 * n_pop` would be fewer round trips
+        and is deliberately not done -- the live-agent backend needs every
+        agent in a batch connected together, so batch shape is part of the
+        contract rather than a tuning choice.
+
+        The winning trial's `Proposal` is the one handed to `observe`, so an
+        adaptive policy still learns from the parameters that actually
+        produced each survivor rather than from whichever round happened to
+        run last.
+
+        Args:
+            epoch (int): The current generation index.
+        """
+        n_trials = getattr(self.policy, "n_trials", 1)
+        if n_trials <= 1:
+            return super()._evolve_once(epoch)
+
+        best_off = None
+        best_sc = None
+        best_prop = None
+        for t in range(n_trials):
+            off = self._check_bounds(self._generate_offspring(epoch, t))
+            sc = self.evaluate(off)
+            prop = self._proposal
+            if prop is None:          # no policy proposal: nothing to track
+                continue
+            if best_off is None or best_sc is None or best_prop is None:
+                best_off, best_sc, best_prop = off, sc, prop
+                continue
+            win = sc < best_sc
+            best_off[win] = off[win]
+            best_sc[win] = sc[win]
+            # Keep the per-individual parameters aligned with the trial that
+            # won, so `observe` is told what produced the survivor.
+            best_prop.F[win] = prop.F[win]
+            best_prop.cr[win] = prop.cr[win]
+
+        if best_off is None or best_sc is None:
+            return
+        self._proposal = best_prop
+        self._selection(best_off, best_sc)
 
     def _selection(self, offspring: np.ndarray, offspring_scores: np.ndarray):
         """

@@ -56,6 +56,7 @@ generation:
 | `"archive"` | JADE's external archive of defeated parents, widening the pool the subtracted difference vector is drawn from |
 | `"jade"` | the archive plus `F` and `cr` learned from the values that produce survivors |
 | `"shade"` | JADE with a memory of `h` settings instead of one running mean, updated by improvement-weighted means, and `p` drawn per individual |
+| `"code"` | three trials per individual from three fixed strategies, best of the triple survives; adapts nothing, and costs **three evaluations per generation** |
 | `"ensemble"` | a pool of strategies and parameters, one triple per individual, **kept while it succeeds and resampled when it fails** |
 
 ```python
