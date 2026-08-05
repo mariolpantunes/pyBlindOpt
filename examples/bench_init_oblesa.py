@@ -650,6 +650,12 @@ def main():
     ap.add_argument("--list-arms", action="store_true",
                     help="print the arm count and exit, so the array size is "
                          "read off the same table the run uses")
+    ap.add_argument("--list-arm-names", action="store_true",
+                    help="print one arm name per line and exit. Use this, not "
+                         "--list-arms, to decide which files in --out-dir "
+                         "belong to the current grid: --list-arms prints a "
+                         "count, so filtering against it silently matches "
+                         "nothing and sweeps every file into the stale pile")
     ap.add_argument("--force", action="store_true",
                     help="recompute an arm whose output file is already complete")
     args = ap.parse_args()
@@ -658,6 +664,10 @@ def main():
 
     if args.list_arms:
         print(len(args.arms))
+        return
+
+    if args.list_arm_names:
+        print("\n".join(args.arms))
         return
 
     if args.arm_index is not None:
