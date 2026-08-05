@@ -240,6 +240,28 @@ class Policy:
         randomness**, which is what keeps the classical path reproducible."""
         return candidates
 
+    def set_budget(self, max_nfe):
+        """Told the total evaluation budget, once, before the run starts.
+
+        Only a policy with a population schedule needs it. A no-op otherwise,
+        so the optimizer can call it unconditionally rather than testing for
+        an attribute that most policies do not have.
+
+        Args:
+            max_nfe (int): Objective evaluations a fixed-population run of the
+                same settings would spend.
+        """
+
+    def resize(self, n_pop):
+        """The population changed size; adjust anything scaled to it.
+
+        Only a policy with a population schedule ever triggers this, and only
+        `ArchivePolicy` and its subclasses have state that needs it.
+
+        Args:
+            n_pop (int): The new population size.
+        """
+
     def observe(self, improved, proposal, delta, replaced):
         """Report the outcome.
 
@@ -405,6 +427,21 @@ class ArchivePolicy(Policy):
             # so the run stays reproducible.
             keep = self._rng.permutation(len(self.archive))[:cap]
             self.archive = self.archive[np.sort(keep)]
+
+    def resize(self, n_pop):
+        """Track the population, so archived parents do not come to dominate.
+
+        The archive cap is the population size. Left alone while the
+        population shrinks, the archive would become an ever-larger share of
+        the pool the subtracted difference vector is drawn from -- the
+        opposite of what it is for.
+        """
+        self._n_pop = int(n_pop)
+        arch = self.archive
+        if arch is None or len(arch) <= n_pop or self._rng is None:
+            return
+        keep = np.sort(self._rng.permutation(len(arch))[:n_pop])
+        self.archive = arch[keep]
 
     def __repr__(self):
         n = 0 if self.archive is None else len(self.archive)
@@ -630,6 +667,137 @@ class ShadePolicy(JadePolicy):
         return (f"ShadePolicy(h={self.h}, k={self.k}, "
                 f"M_F~{self.M_F.mean():.3f}, M_cr~{self.M_cr.mean():.3f}, "
                 f"|A|={n})")
+
+
+class LshadePolicy(ShadePolicy):
+    r"""L-SHADE: SHADE plus a population that shrinks as the budget is spent.
+
+    ## Read this before using it
+
+    **This policy changes `n_pop` while the run is in progress.** Every other
+    policy in this module keeps the population fixed at `n_pop` individuals
+    for the whole run, which is what lets a generation be one batch of agents
+    that the game engine can hold connected together. L-SHADE deletes the
+    worst individuals as the evaluation budget is consumed, so the batch size
+    falls -- from `n_pop` at the start to `n_min` (4) at the end.
+
+    If a caller depends on a constant population -- live agents, a fixed set
+    of simulation slots, anything that binds a resource per individual --
+    **do not use this policy**, and prefer `ShadePolicy`, which is the same
+    algorithm without the reduction. It is deliberately not offered as a
+    lecture default for the same reason.
+
+    ## What the reduction does
+
+    Linear population size reduction (Tanabe & Fukunaga, CEC 2014), on
+    evaluations rather than generations:
+
+    $$ N_{G+1} = \operatorname{round}\!\left(
+       \frac{N_{min} - N_{init}}{\mathit{MAX\_NFE}} \cdot \mathit{NFE}
+       + N_{init} \right) $$
+
+    Evaluations, not generations, because generations stop being comparable
+    units once the population shrinks -- a late generation costs a fraction of
+    an early one, so a schedule on generations would spend most of the budget
+    at large population sizes and reduce far too late.
+
+    The individuals removed are the worst, and the archive cap tracks the
+    population so it does not come to dominate the difference vectors as `N`
+    falls.
+
+    The idea is that a search wants many individuals early, when it does not
+    know where to look, and few late, when it is refining one basin -- the
+    same budget buys more generations of refinement at the end. It is a
+    consistent winner on the CEC benchmarks and is why L-SHADE and its
+    descendants took those competitions.
+
+    Args:
+        mutation_op (Callable): Mutation from the chosen `variant`.
+        samples_needed (int): How many difference vectors it takes.
+        h (int): Memory slots, as `ShadePolicy`.
+        n_min (int): Floor on the population. Four is the paper's value and
+            the smallest that `current-to-pbest/1` can draw from.
+        cap (int | None): Fixed archive cap. Leave None to track `n_pop`.
+
+    Note:
+        `max_nfe` is supplied by the optimizer at `begin`; it is `n_pop *
+        n_iter`, the budget a fixed-population run of the same settings would
+        spend.
+    """
+
+    def __init__(self, mutation_op, samples_needed, h=6, n_min=4, cap=None):
+        if n_min < 4:
+            raise ValueError(
+                f"n_min must be >= 4: current-to-pbest/1 needs a base vector, "
+                f"two difference vectors and the individual itself, got "
+                f"{n_min}"
+            )
+        super().__init__(mutation_op, samples_needed, h=h, cap=cap)
+        self.n_min = int(n_min)
+        self.n_init = None
+        self.max_nfe = None
+        self._nominal_nfe = None
+
+    def set_budget(self, max_nfe):
+        """Rescale the nominal budget to what a shrinking run actually spends.
+
+        The optimizer reports `n_pop * n_iter`: what a fixed-population run of
+        these settings would cost. A shrinking run costs less, so scheduling
+        against the nominal figure means the schedule never finishes -- at
+        `n_pop=60` over 150 generations the population bottomed out at 24
+        rather than reaching `n_min`, giving a much weaker reduction than the
+        algorithm intends.
+
+        The loop here is bounded by *generations*, not evaluations, which is
+        where this differs from the paper. With `N` falling linearly over
+        `n_iter` generations the run spends
+        `n_iter * (n_init + n_min) / 2` evaluations, so using that as the
+        budget makes the schedule reach `n_min` exactly as the last generation
+        runs. The consequence worth knowing: an L-SHADE run finishes having
+        used fewer objective calls than a `shade` run of the same `n_iter`,
+        which is a point in its favour and not a like-for-like comparison.
+        """
+        nominal = int(max_nfe)
+        n_init = self.n_init if self.n_init is not None else None
+        if n_init is None or n_init <= 0:
+            # `begin` has not run yet, so n_init is unknown; recovered below.
+            self.max_nfe = nominal
+            self._nominal_nfe = nominal
+            return
+        n_iter = max(1, nominal // n_init)
+        self.max_nfe = int(n_iter * (n_init + self.n_min) / 2)
+        self._nominal_nfe = nominal
+
+    def begin(self, pop, scores, rng, trial):
+        first = self.n_init is None
+        if first:
+            self.n_init = len(pop)
+        out = super().begin(pop, scores, rng, trial)
+        if first and self._nominal_nfe is not None:
+            # n_init is known only now, so redo the rescale that `set_budget`
+            # could not do when the optimizer called it before the first
+            # generation.
+            self.set_budget(self._nominal_nfe)
+        return out
+
+    def target_n_pop(self, nfe):
+        """Population size the schedule calls for after `nfe` evaluations.
+
+        Args:
+            nfe (int): Objective evaluations consumed so far.
+
+        Returns:
+            int: The target size, never below `n_min` nor above `n_init`.
+        """
+        if self.n_init is None or not self.max_nfe:
+            return None
+        frac = min(1.0, max(0.0, nfe / self.max_nfe))
+        target = round((self.n_min - self.n_init) * frac + self.n_init)
+        return int(min(self.n_init, max(self.n_min, target)))
+
+    def __repr__(self):
+        return (f"LshadePolicy(h={self.h}, n_init={self.n_init}, "
+                f"n_min={self.n_min})")
 
 
 class CodePolicy(Policy):
@@ -1115,15 +1283,30 @@ class DifferentialEvolution(Optimizer):
             self.policy = CodePolicy()
         elif policy == "sade":
             self.policy = SadePolicy()
+        elif policy == "lshade":
+            self.policy = LshadePolicy(self.mutation_op, self.samples_needed)
+            if strategy_key != "current-to-pbest/1":
+                logger.warning(
+                    "policy='lshade' with variant '%s'. L-SHADE is defined on "
+                    "current-to-pbest/1; the adaptation still runs, but this "
+                    "is not the published algorithm.", variant,
+                )
+            logger.warning(
+                "policy='lshade' shrinks the population as the budget is "
+                "spent, down to %d. Use 'shade' if the batch size must stay "
+                "constant.", self.policy.n_min,
+            )
         elif policy == "ensemble":
             self.policy = EnsemblePolicy()
         else:
             raise ValueError(
                 f"Unknown policy '{policy}'. Supported: 'fixed', 'archive', "
-                f"'jade', 'shade', 'code', 'sade', 'ensemble', "
+                f"'jade', 'shade', 'lshade', 'code', 'sade', 'ensemble', "
                 f"or a Policy instance."
             )
         self.policy_name = policy if isinstance(policy, str) else type(policy).__name__
+        #: Objective evaluations consumed, for a population schedule.
+        self._nfe = 0
         #: Per-generation memo for `_base_vector`; see there.
         self._pbest_cache = {}
         #: Filled by `_generate_offspring`, consumed by `_selection`.
@@ -1132,10 +1315,15 @@ class DifferentialEvolution(Optimizer):
         super().__init__(objective, bounds, **kwargs)
 
     def _initialize(self):
+        """Hand a population schedule its budget.
+
+        Done here rather than in `__init__` because the policy is built before
+        `Optimizer.__init__` has set `n_pop` and `n_iter`. The budget is what
+        a fixed-population run of the same settings would spend, so a shrinking
+        run is scheduled against the same total it is replacing.
         """
-        Initialization hook.
-        """
-        pass
+        self._nfe = 0
+        self.policy.set_budget(self.n_pop * self.n_iter)
 
     def _update_best(self, epoch: int):
         """
@@ -1311,7 +1499,10 @@ class DifferentialEvolution(Optimizer):
         """
         n_trials = getattr(self.policy, "n_trials", 1)
         if n_trials <= 1:
-            return super()._evolve_once(epoch)
+            super()._evolve_once(epoch)
+            self._nfe += self.n_pop
+            self._maybe_shrink()
+            return
 
         best_off = None
         best_sc = None
@@ -1343,6 +1534,33 @@ class DifferentialEvolution(Optimizer):
             return
         self._proposal = best_prop
         self._selection(best_off, best_sc)
+        self._nfe += self.n_pop * n_trials
+        self._maybe_shrink()
+
+    def _maybe_shrink(self):
+        """Apply a policy's population schedule, if it has one.
+
+        Only `LshadePolicy` does. Everything else has no `target_n_pop` and
+        this returns immediately, so the fixed-population contract the rest of
+        the module offers is untouched.
+
+        The individuals dropped are the worst, which is the whole point: the
+        budget that was being spent evaluating them buys extra generations of
+        refinement instead. `best_pos` and `best_score` are unaffected because
+        they are tracked separately and only ever improve.
+        """
+        target_fn = getattr(self.policy, "target_n_pop", None)
+        if target_fn is None:
+            return
+        target = target_fn(self._nfe)
+        if target is None or target >= self.n_pop:
+            return
+        keep = np.argsort(self.scores, kind="stable")[:target]
+        keep.sort()          # preserve relative order, so indices stay stable
+        self.pop = self.pop[keep]
+        self.scores = self.scores[keep]
+        self.n_pop = target
+        self.policy.resize(target)
 
     def _selection(self, offspring: np.ndarray, offspring_scores: np.ndarray):
         """

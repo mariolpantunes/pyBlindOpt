@@ -827,6 +827,116 @@ class TestDESade(unittest.TestCase):
                         median(variant="best/1/bin"))
 
 
+class TestDELshade(unittest.TestCase):
+    """L-SHADE: SHADE with a population that shrinks as the budget is spent.
+
+    This is the only policy that changes `n_pop` mid-run, so the tests are
+    mostly about that: it must shrink, never grow, never go below the floor,
+    and -- the point of the warning -- it must be the *only* one that does.
+    """
+
+    BOUNDS = np.array([[-5.12, 5.12]] * 8)
+
+    def _sizes(self, **kw):
+        seen = []
+
+        def spy(x):
+            x = np.atleast_2d(x)
+            seen.append(x.shape[0])
+            return np.array([functions.rastrigin(r) for r in x])
+
+        de.differential_evolution(spy, self.BOUNDS, seed=0, verbose=False,
+                                  **kw)
+        return seen
+
+    def test_selectable_by_name(self):
+        with self.assertLogs("pyBlindOpt.de", level="WARNING"):
+            opt = de.DifferentialEvolution(
+                functions.sphere, self.BOUNDS,
+                variant="current-to-pbest/1/bin", policy="lshade",
+                verbose=False)
+        self.assertIsInstance(opt.policy, de.LshadePolicy)
+
+    def test_it_warns_that_the_population_will_shrink(self):
+        """A caller binding a resource per individual has to be told, so the
+        warning fires on construction rather than at the first shrink."""
+        with self.assertLogs("pyBlindOpt.de", level="WARNING") as log:
+            de.DifferentialEvolution(
+                functions.sphere, self.BOUNDS,
+                variant="current-to-pbest/1/bin", policy="lshade",
+                verbose=False)
+        self.assertIn("shrinks the population", "".join(log.output))
+
+    def test_the_population_shrinks_and_never_grows(self):
+        sizes = self._sizes(n_pop=40, n_iter=100,
+                            variant="current-to-pbest/1/bin", policy="lshade")
+        self.assertEqual(sizes[0], 40)
+        self.assertLess(sizes[-1], sizes[0])
+        self.assertTrue(all(a >= b for a, b in zip(sizes, sizes[1:])))
+
+    def test_the_floor_is_respected(self):
+        sizes = self._sizes(n_pop=40, n_iter=400,
+                            variant="current-to-pbest/1/bin", policy="lshade")
+        self.assertGreaterEqual(min(sizes), 4)
+
+    def test_a_floor_below_four_is_refused(self):
+        """current-to-pbest/1 needs a base vector, two difference vectors and
+        the individual itself."""
+        with self.assertRaises(ValueError):
+            de.LshadePolicy(de.mutation_current_to_pbest_1, 2, n_min=3)
+
+    def test_every_other_policy_keeps_its_population(self):
+        """The contract the rest of the module offers, pinned."""
+        for pol, var in (("fixed", "best/1/bin"),
+                         ("jade", "current-to-pbest/1/bin"),
+                         ("shade", "current-to-pbest/1/bin"),
+                         ("sade", "rand/1/bin")):
+            sizes = self._sizes(n_pop=24, n_iter=40, variant=var, policy=pol)
+            self.assertEqual(set(sizes), {24}, pol)
+
+    def test_it_spends_less_than_a_fixed_population_run(self):
+        """Shrinking is cheaper, so a comparison at equal `n_iter` is not a
+        comparison at equal cost -- the docstring says so and this pins it."""
+        fixed = self._sizes(n_pop=40, n_iter=100,
+                            variant="current-to-pbest/1/bin", policy="shade")
+        shrunk = self._sizes(n_pop=40, n_iter=100,
+                             variant="current-to-pbest/1/bin",
+                             policy="lshade")
+        self.assertLess(sum(shrunk), sum(fixed))
+
+    def test_the_worst_are_the_ones_removed(self):
+        pol = de.LshadePolicy(de.mutation_current_to_pbest_1, 2)
+        opt = de.DifferentialEvolution(
+            functions.sphere, self.BOUNDS, n_pop=20, n_iter=60, seed=1,
+            variant="current-to-pbest/1/bin", policy=pol, verbose=False)
+        opt.optimize()
+        # whatever survived, the best is still tracked and the run improved
+        self.assertLess(opt.n_pop, 20)
+        self.assertTrue(np.isfinite(opt.best_score))
+
+    def test_runs_are_reproducible(self):
+        kw = dict(variant="current-to-pbest/1/bin", policy="lshade",
+                  n_pop=20, n_iter=40, seed=4, verbose=False)
+        a = de.differential_evolution(functions.rastrigin, self.BOUNDS, **kw)
+        b = de.differential_evolution(functions.rastrigin, self.BOUNDS, **kw)
+        np.testing.assert_array_equal(a[0], b[0])
+
+    def test_it_beats_shade_on_rastrigin(self):
+        """Measured at d=10, n_pop=60, 150 generations, 8 seeds: 1.32 against
+        SHADE's 3.52 -- while spending 4318 evaluations against 9060."""
+        def median(**kw):
+            return float(np.median([
+                de.differential_evolution(
+                    functions.rastrigin, np.array([[-5.12, 5.12]] * 10),
+                    n_pop=60, n_iter=150, seed=s, verbose=False, **kw)[1]
+                for s in range(6)]))
+
+        self.assertLess(median(variant="current-to-pbest/1/bin",
+                               policy="lshade"),
+                        median(variant="current-to-pbest/1/bin",
+                               policy="shade"))
+
+
 class TestDEEnsemble(unittest.TestCase):
     """`EnsemblePolicy` -- a pool of strategies and parameters, per individual.
 

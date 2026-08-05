@@ -56,9 +56,17 @@ generation:
 | `"archive"` | JADE's external archive of defeated parents, widening the pool the subtracted difference vector is drawn from |
 | `"jade"` | the archive plus `F` and `cr` learned from the values that produce survivors |
 | `"shade"` | JADE with a memory of `h` settings instead of one running mean, updated by improvement-weighted means, and `p` drawn per individual |
+| `"lshade"` | SHADE plus a population that shrinks linearly as the budget is spent. **Changes `n_pop` mid-run** — see the warning below |
 | `"code"` | three trials per individual from three fixed strategies, best of the triple survives; adapts nothing, and costs **three evaluations per generation** |
 | `"sade"` | learns a probability for each strategy in a pool from how often each produced a survivor, over a rolling window |
 | `"ensemble"` | a pool of strategies and parameters, one triple per individual, **kept while it succeeds and resampled when it fails** |
+
+> **`"lshade"` changes the population size while the run is in progress.**
+> Every other policy holds `n_pop` constant, which is what lets a generation
+> be one batch of agents held connected together. L-SHADE deletes the worst
+> individuals as the budget is consumed, so the batch shrinks toward 4. If
+> anything binds a resource per individual, use `"shade"` instead — the same
+> algorithm without the reduction.
 
 ```python
 from pyBlindOpt.de import differential_evolution
