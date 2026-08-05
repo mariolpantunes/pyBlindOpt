@@ -393,6 +393,102 @@ class TestDEArchive(unittest.TestCase):
         self.assertEqual(rng.bit_generator.state, before)
 
 
+class TestDEJade(unittest.TestCase):
+    """JADE: p-best mutation, archive, and `F`/`cr` learned from survivors.
+
+    The adaptation is tested by driving `observe` directly with known values,
+    rather than by running an optimizer and hoping -- a directional assertion
+    on a stochastic run is how a suite becomes flaky.
+    """
+
+    BOUNDS = np.array([[-5.12, 5.12]] * 6)
+
+    def test_selectable_by_name(self):
+        opt = de.DifferentialEvolution(
+            functions.sphere, self.BOUNDS, variant="current-to-pbest/1/bin",
+            policy="jade", verbose=False)
+        self.assertIsInstance(opt.policy, de.JadePolicy)
+
+    def test_it_warns_when_paired_with_another_mutation(self):
+        """JADE is defined on current-to-pbest/1; anything else still runs
+        but is not the published algorithm, and should say so."""
+        with self.assertLogs("pyBlindOpt.de", level="WARNING") as log:
+            de.DifferentialEvolution(
+                functions.sphere, self.BOUNDS, variant="best/1/bin",
+                policy="jade", verbose=False)
+        self.assertIn("current-to-pbest/1", "".join(log.output))
+
+    def test_mu_moves_toward_the_values_that_won(self):
+        pol = de.JadePolicy(de.mutation_current_to_pbest_1, 2, mu_F=0.5,
+                            mu_cr=0.5, c=0.5)
+        pr = de.Proposal(F=np.array([0.9, 0.9, 0.1, 0.1]),
+                         cr=np.array([0.2, 0.2, 0.8, 0.8]),
+                         ops=[None] * 4, samples=[2] * 4)
+        won = np.array([True, True, False, False])
+        pol.observe(won, pr, np.ones(4), np.zeros((2, 6)))
+        self.assertGreater(pol.mu_F, 0.5)     # 0.9 won -> F rises
+        self.assertLess(pol.mu_cr, 0.5)       # 0.2 won -> cr falls
+
+    def test_F_uses_the_lehmer_mean_not_the_arithmetic_one(self):
+        """The Lehmer mean weights large values more, which is what stops
+        `mu_F` decaying toward small steps that succeed often precisely
+        because they barely move."""
+        pol = de.JadePolicy(de.mutation_current_to_pbest_1, 2, mu_F=0.5, c=1.0)
+        F_won = np.array([0.2, 0.9])
+        pr = de.Proposal(F=F_won, cr=np.array([0.5, 0.5]),
+                         ops=[None] * 2, samples=[2] * 2)
+        pol.observe(np.array([True, True]), pr, np.ones(2), np.zeros((1, 6)))
+        lehmer = (F_won ** 2).sum() / F_won.sum()
+        self.assertAlmostEqual(pol.mu_F, lehmer)
+        self.assertGreater(lehmer, F_won.mean())
+
+    def test_nothing_adapts_when_nothing_survives(self):
+        pol = de.JadePolicy(de.mutation_current_to_pbest_1, 2)
+        before = (pol.mu_F, pol.mu_cr)
+        pr = de.Proposal(F=np.full(3, 0.9), cr=np.full(3, 0.9),
+                         ops=[None] * 3, samples=[2] * 3)
+        pol.observe(np.zeros(3, dtype=bool), pr, np.zeros(3), np.zeros((0, 6)))
+        self.assertEqual((pol.mu_F, pol.mu_cr), before)
+
+    def test_drawn_parameters_stay_in_range(self):
+        """`F` is Cauchy, so its tails are heavy; a clamp at zero would pile
+        probability on the boundary, hence resampling."""
+        for mu in (0.05, 0.5, 0.95):
+            pol = de.JadePolicy(de.mutation_current_to_pbest_1, 2, mu_F=mu,
+                                mu_cr=mu)
+            pr = pol.begin(np.zeros((5000, 4)), np.zeros(5000),
+                           np.random.default_rng(0), 0)
+            self.assertTrue((pr.F > 0).all() and (pr.F <= 1).all(), mu)
+            self.assertTrue((pr.cr >= 0).all() and (pr.cr <= 1).all(), mu)
+
+    def test_adaptation_rate_is_validated(self):
+        for bad in (0.0, -0.1, 1.5):
+            with self.assertRaises(ValueError):
+                de.JadePolicy(de.mutation_current_to_pbest_1, 2, c=bad)
+
+    def test_runs_are_reproducible(self):
+        kw = dict(variant="current-to-pbest/1/bin", policy="jade", n_pop=20,
+                  n_iter=30, seed=4, verbose=False)
+        a = de.differential_evolution(functions.rastrigin, self.BOUNDS, **kw)
+        b = de.differential_evolution(functions.rastrigin, self.BOUNDS, **kw)
+        np.testing.assert_array_equal(a[0], b[0])
+
+    def test_it_beats_the_default_where_the_default_fails(self):
+        """Margins from a measured run: at d=10 over 25 seeds JADE reached
+        0.0031 on rastrigin where best/1/bin managed 7.96. Asserted with
+        generous headroom on a smaller budget."""
+        def median(**kw):
+            return float(np.median([
+                de.differential_evolution(
+                    functions.rastrigin, np.array([[-5.12, 5.12]] * 10),
+                    n_pop=40, n_iter=300, seed=s, verbose=False, **kw)[1]
+                for s in range(6)]))
+
+        jade = median(variant="current-to-pbest/1/bin", policy="jade")
+        default = median(variant="best/1/bin")
+        self.assertLess(jade, default * 0.25)
+
+
 class TestDEEnsemble(unittest.TestCase):
     """`EnsemblePolicy` -- a pool of strategies and parameters, per individual.
 

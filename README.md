@@ -53,6 +53,8 @@ generation:
 | policy | behaviour |
 | --- | --- |
 | `"fixed"` (default) | constant `F` and `cr`, one strategy -- classical DE |
+| `"archive"` | JADE's external archive of defeated parents, widening the pool the subtracted difference vector is drawn from |
+| `"jade"` | the archive plus `F` and `cr` learned from the values that produce survivors |
 | `"ensemble"` | a pool of strategies and parameters, one triple per individual, **kept while it succeeds and resampled when it fails** |
 
 ```python
@@ -76,6 +78,40 @@ The ensemble matters on multimodal landscapes, where no single strategy is
 right for the whole run. Measured on rastrigin at `d=5`, 40 individuals, 250
 generations, 8 seeds: the ensemble reached the optimum on **every** seed,
 where `best/1/bin` had a median of 1.99 and a worst case of 5.97.
+
+### What to choose
+
+There is no arm that wins everywhere, and the differences are large enough
+to matter. Median of 25 seeds, `d=10`, 40 individuals, 300 generations:
+
+| function | `best/1` (default) | p-best | p-best + archive | JADE |
+| --- | --- | --- | --- | --- |
+| sphere | **9.0e-43** | 2.1e-32 | 6.8e-27 | 3.8e-16 |
+| rastrigin | 7.96 | 9.94 | 12.44 | **0.0031** |
+| ackley | 1.0e-10 | **4.0e-15** | 6.5e-13 | 2.8e-07 |
+| griewank | 0.0984 | **0.0148** | 0.0156 | 0.0342 |
+| rosenbrock | 6.77 | 6.93 | 2.51 | **0.95** |
+| levy | 0.0895 | **3.8e-30** | 6.4e-26 | 1.7e-14 |
+| zakharov | **3.3e-20** | 7.0e-16 | 7.7e-13 | 2.2e-11 |
+| dixon_price | **0.667** | 0.667 | 0.667 | 0.667 |
+| styblinski_tang | -363.4 | **-391.7** | -391.7 | -391.7 |
+
+The pattern is consistent: **the default is best where the landscape rewards
+greed and worst where it punishes it.** `best/1/bin` reaches machine
+precision on sphere and zakharov, and is the only arm that fails outright --
+7.96 on rastrigin and -363.4 on styblinski_tang, where every other arm finds
+-391.7.
+
+**JADE wins exactly where the default fails**, by 2500x on rastrigin and 7x
+on rosenbrock, and pays for it with precision on the easy functions: its
+heavy-tailed `F` keeps large steps available, which is what escapes local
+optima and also what stops it converging to 1e-40 on a bowl.
+
+The archive is worth a note of its own. On its own it is mostly *harmful* --
+it made rastrigin worse, 9.94 to 12.44 -- because it buys diversity among
+difference vectors and unimodal landscapes want the opposite. Combined with
+the adaptation it is part of the arm that wins rastrigin outright. It is a
+component of JADE, not a standalone upgrade.
 
 
 ## Installation

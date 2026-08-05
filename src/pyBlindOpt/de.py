@@ -28,12 +28,15 @@ __url__ = "https://github.com/mariolpantunes/pyblindopt"
 __status__ = "Development"
 
 import collections.abc
+import logging
 import typing
 
 import numpy as np
 
 import pyBlindOpt.utils as utils
 from pyBlindOpt.optimizer import Optimizer
+
+logger = logging.getLogger(__name__)
 
 
 # ==============================================================================
@@ -389,6 +392,107 @@ class ArchivePolicy(Policy):
         return f"ArchivePolicy(F={self.F}, cr={self.cr}, |A|={n})"
 
 
+class JadePolicy(ArchivePolicy):
+    r"""JADE: the archive above, plus `F` and `cr` learned from what works.
+
+    The third and, on the evidence in `ArchivePolicy`, the load-bearing part.
+    Instead of two constants chosen once, every individual draws its own pair
+    each generation from distributions whose centres follow the values that
+    have been producing survivors:
+
+    $$ F_i \sim \text{Cauchy}(\mu_F,\, 0.1), \qquad
+       cr_i \sim \mathcal{N}(\mu_{cr},\, 0.1) $$
+
+    $F_i$ is clipped to $(0, 1]$ -- non-positive draws are resampled rather
+    than clamped, because a Cauchy's lower tail is heavy and clamping would
+    pile probability on the boundary. $cr_i$ is clipped to $[0, 1]$.
+
+    After selection the centres move toward the successful values:
+
+    $$ \mu_F \leftarrow (1-c)\,\mu_F + c\,\text{mean}_L(S_F), \qquad
+       \mu_{cr} \leftarrow (1-c)\,\mu_{cr} + c\,\text{mean}(S_{cr}) $$
+
+    **The Lehmer mean on $F$ is not decoration.**
+    $\text{mean}_L(S) = \sum S^2 / \sum S$ weights larger values more, so
+    $\mu_F$ drifts upward whenever big steps are succeeding. An arithmetic
+    mean lets $\mu_F$ decay toward the small, safe values that succeed most
+    *often* -- and small steps succeed often precisely because they barely
+    move, which is how a DE stops exploring while appearing to be doing well.
+    $cr$ uses the arithmetic mean; there is no such asymmetry to correct.
+
+    A Cauchy for $F$ and a normal for $cr$ is likewise deliberate: the heavy
+    tail keeps occasional large steps available regardless of where $\mu_F$
+    has settled, which is what lets the search escape after it has narrowed.
+
+    Args:
+        mutation_op (Callable): Mutation from the chosen `variant`.
+        samples_needed (int): How many difference vectors it takes.
+        mu_F (float): Initial centre for `F`. JADE's default is 0.5.
+        mu_cr (float): Initial centre for `cr`. JADE's default is 0.5.
+        c (float): Adaptation rate, in $(0, 1]$. JADE's default is 0.1.
+        cap (int | None): Archive cap; see `ArchivePolicy`.
+
+    Note:
+        `F` and `cr` passed to the optimizer are **ignored** -- adapting them
+        is the point. `variant` is not overridden, but JADE is defined on
+        `current-to-pbest/1` and warns if paired with anything else.
+    """
+
+    def __init__(self, mutation_op, samples_needed, mu_F=0.5, mu_cr=0.5,
+                 c=0.1, cap=None):
+        if not 0.0 < c <= 1.0:
+            raise ValueError(f"c must be in (0, 1], got {c}")
+        super().__init__(mu_F, mu_cr, mutation_op, samples_needed, cap=cap)
+        self.mu_F = float(mu_F)
+        self.mu_cr = float(mu_cr)
+        self.c = float(c)
+
+    def _draw_F(self, rng, n):
+        """Cauchy, resampling the non-positive tail rather than clamping."""
+        out = np.empty(n)
+        todo = np.arange(n)
+        for _ in range(100):
+            draw = self.mu_F + 0.1 * rng.standard_cauchy(len(todo))
+            np.minimum(draw, 1.0, out=draw)
+            ok = draw > 0.0
+            out[todo[ok]] = draw[ok]
+            todo = todo[~ok]
+            if not len(todo):
+                break
+        out[todo] = 1e-3          # pathological mu_F; keep it positive
+        return out
+
+    def begin(self, pop, scores, rng, trial):
+        n = len(pop)
+        self._rng = rng
+        self._n_pop = n
+        if self.archive is None:
+            self.archive = np.empty((0, pop.shape[1]))
+        return Proposal(
+            F=self._draw_F(rng, n),
+            cr=np.clip(self.mu_cr + 0.1 * rng.standard_normal(n), 0.0, 1.0),
+            ops=[self.mutation_op] * n,
+            samples=[self.samples_needed] * n,
+        )
+
+    def observe(self, improved, proposal, delta, replaced):
+        super().observe(improved, proposal, delta, replaced)
+        won = np.asarray(improved, dtype=bool)
+        if not won.any():
+            return
+        s_F, s_cr = proposal.F[won], proposal.cr[won]
+        denom = s_F.sum()
+        if denom > 0:
+            lehmer = float((s_F ** 2).sum() / denom)
+            self.mu_F = (1.0 - self.c) * self.mu_F + self.c * lehmer
+        self.mu_cr = (1.0 - self.c) * self.mu_cr + self.c * float(s_cr.mean())
+
+    def __repr__(self):
+        n = 0 if self.archive is None else len(self.archive)
+        return (f"JadePolicy(mu_F={self.mu_F:.3f}, mu_cr={self.mu_cr:.3f}, "
+                f"c={self.c}, |A|={n})")
+
+
 class EnsemblePolicy(Policy):
     r"""An ensemble of strategies and parameters, per individual (EPSDE).
 
@@ -497,6 +601,12 @@ class DifferentialEvolution(Optimizer):
 
     **Supported Policies** (`policy=`, orthogonal to `variant`):
     * `fixed`: constant `F` and `cr`, one strategy. Classical DE.
+    * `archive`: `ArchivePolicy` -- JADE's external archive of defeated
+      parents, widening the pool the subtracted difference vector is drawn
+      from. Fixed `F` and `cr`.
+    * `jade`: `JadePolicy` -- the archive plus `F` and `cr` adapted from the
+      values that produce survivors. Pair with `current-to-pbest/1/bin` for
+      the published algorithm.
     * `ensemble`: `EnsemblePolicy` -- a pool of strategies and parameters,
       one triple per individual, kept while it succeeds and resampled when
       it fails.
@@ -620,11 +730,20 @@ class DifferentialEvolution(Optimizer):
         elif policy == "archive":
             self.policy = ArchivePolicy(F, cr, self.mutation_op,
                                         self.samples_needed)
+        elif policy == "jade":
+            self.policy = JadePolicy(self.mutation_op, self.samples_needed)
+            if strategy_key != "current-to-pbest/1":
+                logger.warning(
+                    "policy='jade' with variant '%s'. JADE is defined on "
+                    "current-to-pbest/1; the adaptation still runs, but this "
+                    "is not the published algorithm.", variant,
+                )
         elif policy == "ensemble":
             self.policy = EnsemblePolicy()
         else:
             raise ValueError(
                 f"Unknown policy '{policy}'. Supported: 'fixed', 'archive', "
+                f"'jade', "
                 f"'ensemble', "
                 f"or a Policy instance."
             )
