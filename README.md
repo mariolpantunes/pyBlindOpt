@@ -206,6 +206,20 @@ print(f"Best Score: {best_score}")
 
 ```
 
+## Development
+
+The checks in CI also run at commit time:
+
+```bash
+pip install pre-commit
+pre-commit install
+```
+
+That gates each commit on ruff, basedpyright, vulture and the unit tests --
+the same four the GitHub Action runs, reading the same `pyproject.toml`, so a
+commit that passes locally passes there. `pre-commit run --all-files` checks
+the tree without committing.
+
 ## Documentation
 
 This library is documented using Google-style docstrings.
