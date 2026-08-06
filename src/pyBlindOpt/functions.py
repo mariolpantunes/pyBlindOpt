@@ -10,12 +10,6 @@ Includes a variety of landscape types to test algorithm performance:
 Mathematical definitions use vector notation where $x = [x_1, x_2, ..., x_D]$.
 """
 
-__author__ = "Mário Antunes"
-__license__ = "MIT"
-__version__ = "0.2.0"
-__email__ = "mario.antunes@ua.com"
-__url__ = "https://github.com/mariolpantunes/pyblindopt"
-__status__ = "Development"
 
 import numpy as np
 

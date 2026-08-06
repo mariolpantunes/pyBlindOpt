@@ -19,12 +19,6 @@ Mixes the target vector $x_i$ and mutant $v_i$ with probability $CR$.
 * **Selection:** Greedy survival (child replaces parent if better).
 """
 
-__author__ = "Mário Antunes"
-__license__ = "MIT"
-__version__ = "0.3.0"
-__email__ = "mario.antunes@ua.com"
-__url__ = "https://github.com/mariolpantunes/pyblindopt"
-__status__ = "Development"
 
 import collections.abc
 import logging

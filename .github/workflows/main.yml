@@ -19,7 +19,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ["3.10", "3.11", "3.12"]
+        python-version: ["3.12", "3.14"]
 
     steps:
       - uses: actions/checkout@v7
@@ -42,7 +42,10 @@ jobs:
           pip install .
 
       - name: Lint with Ruff
-        run: ruff check src
+        # `src` alone reported green over 33 errors in tracked files: the
+        # tests and the benchmark harness are a third of the Python here and
+        # were never opened by the gate.
+        run: ruff check src test examples
 
       - name: Type-check with basedpyright
         run: basedpyright

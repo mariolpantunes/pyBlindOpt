@@ -1,4 +1,3 @@
-# coding: utf-8
 
 __author__ = "Mário Antunes"
 __version__ = "0.1"
@@ -162,7 +161,8 @@ class TestInit(unittest.TestCase):
             seen.update(kw)
             return np.zeros((n, bounds.shape[0]))
 
-        engine.accepts = frozenset({"k_cand", "lam", "scores"})
+        engine.accepts = frozenset(  # type: ignore[reportFunctionMemberAccess]
+            {"k_cand", "lam", "scores"})
         pop = init.oblesa(
             functions.sphere, bounds, n_pop=5, seed=1, engine=engine,
             k_cand=77, force_weight=3.5,
@@ -516,9 +516,9 @@ class TestOblesaSelectionPlumbing(unittest.TestCase):
         """
         base = init.oblesa(functions.sphere, self.bounds, n_pop=20, seed=42)
         variants = {
-            "probabilistic": dict(selection="prob", diversity_weight=0.25),
-            "crowding blend": dict(selection="best", diversity_weight=0.75),
-            "maximin": dict(selection="maximin", diversity_weight=0.25),
+            "probabilistic": {"selection": "prob", "diversity_weight": 0.25},
+            "crowding blend": {"selection": "best", "diversity_weight": 0.75},
+            "maximin": {"selection": "maximin", "diversity_weight": 0.25},
         }
         for label, kw in variants.items():
             pop = init.oblesa(
@@ -568,8 +568,12 @@ class TestOblesaSelectionPlumbing(unittest.TestCase):
         self.assertTrue(np.all(pop == 4.25) or pop.shape == (10, 4))
 
     def test_deterministic_for_a_given_seed(self):
-        for kw in ({}, {"opp": "quasi"}, {"selection": "maximin",
-                                          "diversity_weight": 0.25}):
+        # Bare `dict`: the values are heterogeneous by design, and a precise
+        # element type would make the splat below unassignable to `oblesa`.
+        cases: tuple[dict, ...] = (
+            {}, {"opp": "quasi"},
+            {"selection": "maximin", "diversity_weight": 0.25})
+        for kw in cases:
             a = init.oblesa(functions.sphere, self.bounds, n_pop=10, seed=42, **kw)
             b = init.oblesa(functions.sphere, self.bounds, n_pop=10, seed=42, **kw)
             np.testing.assert_array_equal(a, b)

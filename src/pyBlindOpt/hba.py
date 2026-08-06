@@ -14,12 +14,6 @@ It switches between digging (using smell) and eating honey (following a honeygui
 **Honey:** $x_{new} = x_{prey} + F \\cdot r \\cdot \\alpha \\cdot d$
 """
 
-__author__ = "Mário Antunes"
-__license__ = "MIT"
-__version__ = "0.2.0"
-__email__ = "mario.antunes@ua.com"
-__url__ = "https://github.com/mariolpantunes/pyblindopt"
-__status__ = "Development"
 
 import math
 

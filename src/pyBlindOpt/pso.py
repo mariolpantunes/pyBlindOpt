@@ -12,12 +12,6 @@ $$ x_{t+1} = x_t + v_{t+1} $$
 where $w$ is inertia, $c_1$ is cognitive (personal) weight, and $c_2$ is social (swarm) weight.
 """
 
-__author__ = "Mário Antunes"
-__license__ = "MIT"
-__version__ = "0.2.0"
-__email__ = "mario.antunes@ua.com"
-__url__ = "https://github.com/mariolpantunes/pyblindopt"
-__status__ = "Development"
 
 import collections.abc
 import logging

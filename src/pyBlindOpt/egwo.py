@@ -10,12 +10,6 @@ $$ X_{prey} = w_1 X_\\alpha + w_2 X_\\beta + w_3 X_\\gamma + \\mathcal{N}(0, \\s
 where $\\sigma$ decays exponentially over time.
 """
 
-__author__ = "Mário Antunes"
-__license__ = "MIT"
-__version__ = "0.2.0"
-__email__ = "mario.antunes@ua.com"
-__url__ = "https://github.com/mariolpantunes/pyblindopt"
-__status__ = "Development"
 
 import collections.abc
 import math

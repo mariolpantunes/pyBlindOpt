@@ -230,6 +230,48 @@ print(f"Best Score: {best_score}")
 
 ```
 
+### The class interface
+
+Every algorithm ships in two forms. The functions above run a search and hand
+back the answer; the classes keep the search itself, which is what you want
+when the run is the object of interest rather than its result — inspecting the
+population mid-run, subclassing an operator, or holding state across calls.
+
+```python
+import numpy as np
+import pyBlindOpt
+from pyBlindOpt.callback import EarlyStopping
+
+bounds = np.array([[-5.12, 5.12]] * 10)
+
+stopper = EarlyStopping(threshold=1e-6)   # a callback is any callable
+optimizer = pyBlindOpt.DifferentialEvolution(
+    objective=pyBlindOpt.functions.rastrigin,
+    bounds=bounds,
+    policy="jade",          # adapt F and CR from the run's own success history
+    n_pop=50,
+    n_iter=500,
+    callback=stopper,
+    seed=42,
+)
+
+best_pos, best_score = optimizer.optimize()
+
+# The run is still there afterwards, which is the point of the class form.
+print(f"stopped at generation {stopper.epoch}, best {best_score:.3e}")
+print(f"final population: {optimizer.pop.shape}")
+```
+
+`optimize()` runs a fixed loop — update per-epoch parameters, generate
+offspring, clip, evaluate, select, update the incumbent, run callbacks, log —
+and each algorithm supplies the operators. Subclass `Optimizer` and implement
+`_generate_offspring`, `_selection`, `_update_best` and `_update_iter_params`
+to add one; everything else (bounds, caching, parallel evaluation, history,
+callbacks, seeding) is inherited.
+
+Construct with `debug=True` and `optimize()` returns
+`(best_pos, best_score, history)` instead of the pair.
+
 ### OBLESA — opposition plus empty-space search
 
 `init.oblesa` builds a candidate pool from three blocks and selects the
@@ -272,21 +314,17 @@ best, score = pyBlindOpt.differential_evolution(
     objective, bounds, population=population, n_pop=30, n_iter=200, seed=rng)
 ```
 
-`force='guided'` needs the optional [EmptySpaceSearch][ess] backend, which is
-what places and relaxes the probe block. The other two levels need nothing
-extra and exist as controls: `'repulsive'` places probes on novelty alone, with
-no notion of where the good regions are, and `'uniform'` is the null — the same
-pool shape and candidate count with no empty-space search at all. Comparing
-against them is what separates "the search found something" from "a bigger pool
-gave the selector more to choose from".
+The probe block is placed and relaxed by [EmptySpaceSearch][ess], which is a
+hard dependency — it is the empty-space stage, not an option beside others.
+Controls for an experiment (a null that spends the same candidates without
+searching, say) go in through `engine=` and belong to the harness running the
+comparison.
 
 [ess]: https://github.com/mariolpantunes/ess
 
-> **`force_weight` changed units in 0.3.0.** It used to be the lambda of an
-> internal dart engine — a scalar on a standardised surrogate, useful into the
-> tens. It is now the EmptySpaceSearch backend's `attraction_weight`, which
-> scales a pairwise force and is refused at or above 2.5. Values tuned against
-> the old engine do not carry over.
+> **`force_weight` changed units in 0.3.0**, and values tuned before then do
+> not carry over. It is EmptySpaceSearch's `attraction_weight`: a scale on a
+> pairwise force, refused at or above 2.5.
 
 ## Development
 

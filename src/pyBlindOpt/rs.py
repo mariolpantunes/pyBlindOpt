@@ -18,12 +18,6 @@ every hour. They report their altitude, and the mission control simply remembers
 lowest point anyone has ever landed on. They do not learn from previous drops.
 """
 
-__author__ = "Mário Antunes"
-__license__ = "MIT"
-__version__ = "0.2.0"
-__email__ = "mario.antunes@ua.com"
-__url__ = "https://github.com/mariolpantunes/pyblindopt"
-__status__ = "Development"
 
 import collections.abc
 import logging

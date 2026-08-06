@@ -1,4 +1,3 @@
-# coding: utf-8
 
 __author__ = "Mário Antunes"
 __version__ = "0.1"

@@ -22,12 +22,22 @@ All algorithms take advantage of the joblib library to parallelize objective fun
 Note: The code has been optimized to a certain degree but was primarily created for educational purposes. Please consider libraries like pymoo or SciPy if you require a production-grade implementation.
 """
 
+import importlib.metadata
+
 __author__ = "Mário Antunes"
 __license__ = "MIT"
-__version__ = "0.2.0"
-__email__ = "mario.antunes@ua.com"
-__url__ = "https://github.com/mariolpantunes/pyblindopt"
+__email__ = "mario.antunes@ua.pt"
+__url__ = "https://github.com/mariolpantunes/pyBlindOpt"
 __status__ = "Development"
+
+# Read from the installed distribution rather than a literal here: hand-kept
+# copies drifted from `setup.cfg` (0.3.0 shipped reporting 0.2.0), and there is
+# no way for that to happen when there is only one copy. Source checkouts that
+# were never installed have no metadata, hence the fallback.
+try:
+    __version__ = importlib.metadata.version("pyBlindOpt")
+except importlib.metadata.PackageNotFoundError:  # pragma: no cover
+    __version__ = "0.0.0.dev0"
 
 import pyBlindOpt.callback as callback
 import pyBlindOpt.functions as functions

@@ -1,6 +1,6 @@
-# coding: utf-8
 
 import functools
+import itertools
 import typing
 import unittest
 
@@ -72,7 +72,7 @@ class HeuristicTestMixin(Base):
         The global minimum is at 0, inside a steep hole in a flat surface.
         """
         # [TUNING] Increased n_pop to 50 to help DE/GWO avoid local optima in 10D
-        result, score = self.optimizer_func(
+        _result, score = self.optimizer_func(
             functions.ackley,
             self.bounds_ackley,
             n_iter=300,
@@ -88,7 +88,7 @@ class HeuristicTestMixin(Base):
         on a complex problem (Ackley 10D).
         """
         # 1. Run Baseline (Random Search)
-        rs_result, rs_score = rs.random_search(
+        _rs_result, rs_score = rs.random_search(
             functions.ackley,
             self.bounds_ackley,
             n_iter=100,
@@ -98,7 +98,7 @@ class HeuristicTestMixin(Base):
         )
 
         # 2. Run Target Heuristic
-        target_result, target_score = self.optimizer_func(
+        _target_result, target_score = self.optimizer_func(
             functions.ackley,
             self.bounds_ackley,
             n_iter=100,
@@ -217,7 +217,7 @@ class TestDEPolicyContract(unittest.TestCase):
     """
 
     BOUNDS = np.array([[-5.12, 5.12]] * 4)
-    VARIANTS = [f"{b}/{c}"
+    VARIANTS: typing.ClassVar = [f"{b}/{c}"
                 for b in ("rand/1", "best/1", "rand/2", "best/2",
                           "current-to-best/1", "current-to-pbest/1",
                           "current-to-rand/1")
@@ -338,6 +338,7 @@ class TestDEArchive(unittest.TestCase):
     def test_it_fills_and_respects_the_cap(self):
         opt, pol = self.make()
         opt.optimize()
+        assert pol.archive is not None
         self.assertGreater(len(pol.archive), 0)
         self.assertLessEqual(len(pol.archive), 20)
 
@@ -346,6 +347,7 @@ class TestDEArchive(unittest.TestCase):
         de.DifferentialEvolution(
             functions.rastrigin, self.BOUNDS, policy=pol, n_pop=20,
             n_iter=15, seed=2, verbose=False).optimize()
+        assert pol.archive is not None
         self.assertLessEqual(len(pol.archive), 5)
 
     def test_it_holds_no_live_population_member(self):
@@ -354,6 +356,7 @@ class TestDEArchive(unittest.TestCase):
         opt, pol = self.make()
         opt.optimize()
         live = {row.tobytes() for row in opt.pop}
+        assert pol.archive is not None
         self.assertEqual([a for a in pol.archive if a.tobytes() in live], [])
 
     def test_the_archive_reaches_the_difference_vectors(self):
@@ -467,8 +470,8 @@ class TestDEJade(unittest.TestCase):
                 de.JadePolicy(de.mutation_current_to_pbest_1, 2, c=bad)
 
     def test_runs_are_reproducible(self):
-        kw = dict(variant="current-to-pbest/1/bin", policy="jade", n_pop=20,
-                  n_iter=30, seed=4, verbose=False)
+        kw = {"variant": "current-to-pbest/1/bin", "policy": "jade", "n_pop": 20,
+                  "n_iter": 30, "seed": 4, "verbose": False}
         a = de.differential_evolution(functions.rastrigin, self.BOUNDS, **kw)
         b = de.differential_evolution(functions.rastrigin, self.BOUNDS, **kw)
         np.testing.assert_array_equal(a[0], b[0])
@@ -594,8 +597,8 @@ class TestDEShade(unittest.TestCase):
             de.ShadePolicy(de.mutation_current_to_pbest_1, 2, h=0)
 
     def test_runs_are_reproducible(self):
-        kw = dict(variant="current-to-pbest/1/bin", policy="shade", n_pop=20,
-                  n_iter=30, seed=4, verbose=False)
+        kw = {"variant": "current-to-pbest/1/bin", "policy": "shade", "n_pop": 20,
+                  "n_iter": 30, "seed": 4, "verbose": False}
         a = de.differential_evolution(functions.rastrigin, self.BOUNDS, **kw)
         b = de.differential_evolution(functions.rastrigin, self.BOUNDS, **kw)
         np.testing.assert_array_equal(a[0], b[0])
@@ -693,7 +696,7 @@ class TestDECode(unittest.TestCase):
             de.CodePolicy(strategies=())
 
     def test_runs_are_reproducible(self):
-        kw = dict(policy="code", n_pop=20, n_iter=20, seed=4, verbose=False)
+        kw = {"policy": "code", "n_pop": 20, "n_iter": 20, "seed": 4, "verbose": False}
         a = de.differential_evolution(functions.rastrigin, self.BOUNDS, **kw)
         b = de.differential_evolution(functions.rastrigin, self.BOUNDS, **kw)
         np.testing.assert_array_equal(a[0], b[0])
@@ -808,7 +811,7 @@ class TestDESade(unittest.TestCase):
             de.SadePolicy(strategies=("no-such-strategy",))
 
     def test_runs_are_reproducible(self):
-        kw = dict(policy="sade", n_pop=20, n_iter=30, seed=4, verbose=False)
+        kw = {"policy": "sade", "n_pop": 20, "n_iter": 30, "seed": 4, "verbose": False}
         a = de.differential_evolution(functions.rastrigin, self.BOUNDS, **kw)
         b = de.differential_evolution(functions.rastrigin, self.BOUNDS, **kw)
         np.testing.assert_array_equal(a[0], b[0])
@@ -872,7 +875,7 @@ class TestDELshade(unittest.TestCase):
                             variant="current-to-pbest/1/bin", policy="lshade")
         self.assertEqual(sizes[0], 40)
         self.assertLess(sizes[-1], sizes[0])
-        self.assertTrue(all(a >= b for a, b in zip(sizes, sizes[1:])))
+        self.assertTrue(all(a >= b for a, b in itertools.pairwise(sizes)))
 
     def test_the_floor_is_respected(self):
         sizes = self._sizes(n_pop=40, n_iter=400,
@@ -915,8 +918,8 @@ class TestDELshade(unittest.TestCase):
         self.assertTrue(np.isfinite(opt.best_score))
 
     def test_runs_are_reproducible(self):
-        kw = dict(variant="current-to-pbest/1/bin", policy="lshade",
-                  n_pop=20, n_iter=40, seed=4, verbose=False)
+        kw = {"variant": "current-to-pbest/1/bin", "policy": "lshade",
+                  "n_pop": 20, "n_iter": 40, "seed": 4, "verbose": False}
         a = de.differential_evolution(functions.rastrigin, self.BOUNDS, **kw)
         b = de.differential_evolution(functions.rastrigin, self.BOUNDS, **kw)
         np.testing.assert_array_equal(a[0], b[0])
@@ -955,6 +958,7 @@ class TestDEEnsemble(unittest.TestCase):
         b = de.DifferentialEvolution(
             functions.sphere, self.BOUNDS,
             policy=de.EnsemblePolicy(strategies=["rand/1"]), verbose=False)
+        assert isinstance(b.policy, de.EnsemblePolicy)
         self.assertEqual(b.policy.strategy_keys, ["rand/1"])
 
     def test_unknown_policy_is_refused(self):
@@ -972,6 +976,7 @@ class TestDEEnsemble(unittest.TestCase):
         original = pol.observe
 
         def spy(improved, proposal, delta, replaced):
+            assert pol._held is not None
             before = pol._held.copy()
             original(improved, proposal, delta, replaced)
             kept = (before == pol._held).all(axis=1)
@@ -988,6 +993,7 @@ class TestDEEnsemble(unittest.TestCase):
         pol = de.EnsemblePolicy()
         rng = np.random.default_rng(0)
         pol.begin(np.zeros((6, 3)), np.zeros(6), rng, 0)
+        assert pol._held is not None
         before = pol._held.copy()
         pol.observe(np.zeros(6, dtype=bool), None, np.zeros(6), np.zeros((6, 3)))
         self.assertFalse(np.array_equal(before, pol._held))
@@ -1226,7 +1232,7 @@ class TestRS(unittest.TestCase):
         self.seed = 42
 
     def test_basic_execution(self):
-        res, score = rs.random_search(
+        res, _score = rs.random_search(
             functions.sphere,
             self.bounds,
             n_iter=10,

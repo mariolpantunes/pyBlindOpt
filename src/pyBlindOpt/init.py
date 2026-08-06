@@ -7,12 +7,6 @@ such as Opposition-Based Learning (OBL) and ESA-based strategies to improve
 initial convergence.
 """
 
-__author__ = "Mário Antunes"
-__license__ = "MIT"
-__version__ = "0.2.0"
-__email__ = "mario.antunes@ua.com"
-__url__ = "https://github.com/mariolpantunes/pyblindopt"
-__status__ = "Development"
 
 import collections.abc
 import logging
@@ -20,7 +14,6 @@ import logging
 import ess  # type: ignore[reportMissingImports]
 import numpy as np
 
-import pyBlindOpt.emptyspace as emptyspace
 import pyBlindOpt.utils as utils
 
 logger = logging.getLogger(__name__)
@@ -263,7 +256,7 @@ def _oppose(
     return utils.check_bounds(opp, bounds)
 
 
-#: Empty-space backends selected by the `force` knob of :func:`oblesa`.
+#: The empty-space backend behind the `force` knob of :func:`oblesa`.
 def _ess_engine(
     samples: np.ndarray,
     bounds: np.ndarray,
@@ -273,15 +266,15 @@ def _ess_engine(
     scores: np.ndarray | None = None,
     attraction_weight: float = 0.5,
     placement_weight: float | None = None,
-    att_model: str = "fourier",
+    att_model: str = "auto",
     k_cand: int = 64,
     **ignored,
 ) -> np.ndarray:
     """The EmptySpaceSearch relaxation, behind this module's engine contract.
 
-    `ess.esa` is the production empty-space engine: dart-throwing to place the
-    points, then a force relaxation that the dart engines here deliberately do
-    not have. This adapts it rather than changing it, because the `accepts`
+    `ess.esa` places the points, then relaxes them under a force field guided
+    by the fitness already measured on the pool. This adapts it rather than
+    changing it, because the `accepts`
     capability protocol is pyBlindOpt's convention and ESS should not have to
     know about it.
 
@@ -295,8 +288,8 @@ def _ess_engine(
       staring at.
     * **`force_weight` arrives as `attraction_weight`, in ESS's units.** It
       scales a pairwise force bounded by a collapse condition, so it is refused
-      at or above 2.5 -- a different scale from the dart lambda it replaced.
-      `k_cand` maps to `init_pool`; both are candidates per placement.
+      at or above 2.5. `k_cand` maps to `init_pool`; both are candidates per
+      placement.
 
     The attraction law is `cauchy` rather than ESS's default of "same as the
     repulsion", because two identical laws are proportional and can never
@@ -313,10 +306,13 @@ def _ess_engine(
         attraction_weight (float): Pull strength in ESS's units. The default
             is ESS's own measured optimum; it is **not** `force_weight`, see
             above.
-        att_model (str): How ESS estimates the attractiveness of a position
-            it has no measurement for -- 'fourier' fits one function of
-            position and evaluates it, 'idw' weights the nearest measured
-            points, 'detrended' does both.
+        att_model (str): How ESS estimates the attractiveness of a position it
+            has no measurement for -- 'fourier' fits one function of position
+            and evaluates it, 'idw' weights the nearest measured points,
+            'detrended' does both. The default 'auto' cross-validates them on
+            the pool that was already evaluated, so it costs no objective
+            calls; which one wins depends on whether the objective is
+            separable, and that is not readable from the dimension.
         placement_weight (float | None): Attraction weight for ESS's placement
             step alone. None pairs it with `attraction_weight`, which is the
             sensible default; they are separable so the guided placement and
@@ -347,10 +343,10 @@ _ess_engine.accepts = frozenset(  # type: ignore[reportFunctionMemberAccess]
     {"scores", "k_cand", "attraction_weight"})
 
 
+# One engine: OBLESA's empty-space stage is ESS. Controls an experiment needs
+# belong to that experiment and arrive through `engine=`.
 _FORCES = {
-    "repulsive": emptyspace.dart_esa,
     "guided": _ess_engine,
-    "uniform": emptyspace.random_esa,
     "ess": _ess_engine,
 }
 
@@ -425,21 +421,17 @@ def oblesa(
             *compresses* what the guided search itself earns -- the margin over
             the uniform null falls from +6.1 to +3.6 when it is on. It competes
             with the attraction term rather than adding to it.
-        force (str): Which force field the probes feel.
+        force (str): Which force field the probes feel. 'guided' (and its
+            explicit spelling 'ess') is the EmptySpaceSearch relaxation: it
+            places each probe on a blend of novelty and the attractiveness the
+            position is *expected* to have, then relaxes the block under
+            repulsion and attraction together.
 
-            'guided' (and its explicit spelling 'ess') is the EmptySpaceSearch
-            relaxation: it places each probe on a blend of novelty and the
-            attractiveness the position is *expected* to have, then relaxes the
-            block under repulsion and attraction together. This is the
-            production backend.
-
-            'repulsive' is pure novelty -- as far as possible from everything
-            already sampled, with no notion of where the good regions are.
-            'uniform' is the null: OBLESA's pool shape and candidate count with
-            no empty-space search at all, which is what separates "the search
-            found something" from "a bigger pool gave the selector more to
-            choose from". Both are dart engines kept as controls, so the
-            relaxation is measured against something rather than assumed.
+            That is the only backend, and the knob is kept for the name rather
+            than for a choice. Anything else -- a null that spends the same
+            candidates without searching, some other placement rule -- is a
+            control for an experiment, so it belongs to the harness running it
+            and arrives through `engine`.
 
             Ignored when `engine` is given.
         force_weight (float): Attraction strength, as ESS's
@@ -452,9 +444,9 @@ def oblesa(
         n_ess (int | None): Size of the empty-space block. Defaults to `n_pop`.
             Zero disables the stage, reducing this to OBL under `selection`.
         k_cand (int): Candidates the probe search draws per placed point,
-            reaching `ess.esa` as `init_pool`. Accuracy knob of the empty-space
-            engines; higher is closer to the exact largest empty sphere and
-            linearly more expensive. ESS relaxes the block afterwards, so the
+            reaching `ess.esa` as `init_pool`. Accuracy knob of the placement;
+            higher is closer to the exact largest empty sphere and linearly
+            more expensive. ESS relaxes the block afterwards, so the
             placement only has to be a reasonable starting point: raising this
             to 2048 costs 4.5-7.1x and returns the same population.
         engine (Callable | None): Empty-space backend override, called as

@@ -11,12 +11,6 @@ design pattern for population-based meta-heuristics. It handles common infrastru
 * History logging
 """
 
-__author__ = "Mário Antunes"
-__license__ = "MIT"
-__version__ = "0.2.0"
-__email__ = "mario.antunes@ua.com"
-__url__ = "https://github.com/mariolpantunes/pyblindopt"
-__status__ = "Development"
 
 import abc
 import collections.abc
@@ -270,6 +264,32 @@ class Optimizer(abc.ABC):
         self._selection(offspring, offspring_scores)
 
     def optimize(self) -> tuple:
+        """
+        Runs the search and returns the best solution found.
+
+        This is the Template Method: the loop below is fixed, and each
+        algorithm supplies its own `_generate_offspring`, `_selection`,
+        `_update_best` and `_update_iter_params`. One generation is
+
+        1. update per-epoch parameters (a decaying step, a temperature);
+        2. generate offspring, clip to bounds, evaluate;
+        3. select survivors;
+        4. update the incumbent best;
+        5. run callbacks, which may stop the run or edit the population;
+        6. append to `history`.
+
+        A callback that edits the population triggers an immediate
+        re-evaluation of the incumbent, so an injected solution is visible to
+        the next generation rather than one generation later.
+
+        `cleanup` runs in a `finally`, so the joblib cache directory is
+        released even if the objective raises.
+
+        Returns:
+            tuple: `(best_position, best_score)`, or
+            `(best_position, best_score, history)` when the optimizer was
+            constructed with `debug=True`.
+        """
         self._initialize()
 
         # Initial Best/Leader update before loop starts

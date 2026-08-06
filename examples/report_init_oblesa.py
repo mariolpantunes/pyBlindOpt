@@ -42,17 +42,13 @@ GROUPS = (
     ("cost controls, 3N candidates", ("random3x", "obl15x")),
     ("cost controls, 4N candidates", ("random4x", "obl2x")),
     ("opposition (2N calls)", ("obl", "qobl")),
-    ("OBLESA, largest-empty-sphere engine (3N / 4N pool)",
-     ("oblesa-dart", "oblesa-quasi-dart",
-      "oblesa-dart-4n", "oblesa-quasi-dart-4n")),
-    ("OBLESA, selection knobs on the 4N pool",
-     ("oblesa-dart-4n-div25", "oblesa-quasi-dart-4n-div25",
-      "oblesa-dart-4n-prob", "oblesa-quasi-dart-4n-prob",
-      "oblesa-dart-4n-mm25", "oblesa-quasi-dart-4n-mm25")),
+    ("OBLESA (3N / 4N pool)",
+     ("oblesa", "oblesa-quasi")),
+    ("OBLESA, selection knobs",
+     ("oblesa-div25", "oblesa-div50", "oblesa-mm25", "oblesa-mm50",
+      "oblesa-quasi-mm25", "oblesa-quasi-mm50")),
     ("uniform-noise null, matched settings",
-     ("oblesa-rand", "oblesa-quasi-rand", "oblesa-rand-4n",
-      "oblesa-quasi-rand-4n", "oblesa-rand-4n-mm25",
-      "oblesa-quasi-rand-4n-mm25")),
+     ("oblesa-rand", "oblesa-quasi-rand")),
 )
 ARMS = tuple(a for _, g in GROUPS for a in g)
 BASELINE = "random"
@@ -95,81 +91,68 @@ ARM_GLOSS = {
                    "uniform noise. Identical pool shape, candidate count and "
                    "selection rule, so any OBLESA margin over this arm belongs "
                    "to the empty-space search and to nothing else.",
-    "oblesa-dart": "OBLESA with the empty-space stage replaced by explicit "
-                   "largest-empty-sphere filling: each point goes at the "
-                   "centre of the biggest empty sphere, found by search over a "
-                   "candidate cloud. Same objective as a Voronoi/Delaunay "
-                   "construction, no torus and no force kernel — it tests the "
-                   "*idea* rather than this implementation of it.",
-    "oblesa-quasi-dart": "The same with quasi-opposition.",
-    "oblesa-dart-4n": "The largest-empty-sphere engine sized to the static "
-                      "pool it was placed against: n_ess = 2 * n_pop, so the "
-                      "candidate pool is 4N rather than the paper's 3N.",
-    "oblesa-quasi-dart-4n": "Quasi-opposition on the 4N pool.",
-    "oblesa-dart-4n-div25": "4N pool, fitness blended with NSGA-II crowding "
-                            "distance at weight 0.25.",
-    "oblesa-dart-4n-prob": "4N pool, probabilistic selection over that blended "
-                           "score rather than greedy.",
-    "oblesa-dart-4n-mm25": "4N pool, sequential maximin over the fittest "
-                           "1.75x n_pop.",
-    "oblesa-quasi-dart-4n-div25": "Quasi-opposition, crowding blend.",
-    "oblesa-quasi-dart-4n-prob": "Quasi-opposition, probabilistic selection.",
-    "oblesa-quasi-dart-4n-mm25": "Quasi-opposition, maximin selection.",
-    "oblesa-rand-4n": "The null at the 4N pool size.",
-    "oblesa-quasi-rand-4n": "Quasi-opposition null at the 4N pool size.",
-    "oblesa-rand-4n-mm25": "Null with maximin selection, so the dart arm at "
-                           "the same setting is compared like for like.",
-    "oblesa-quasi-rand-4n-mm25": "Quasi-opposition null, maximin selection.",
     "oblesa-quasi-rand": "Quasi-opposition null at the 3N pool size.",
 }
 
 
-#: Engine level -> what placed the empty-space block, for arms named by the
-#: sweep convention `ob_<engine>_<n_ess>_<selection>@<optimizer>`.
-#: Engine labels that are not a rung of the attraction ladder. Everything
-#: matching `g<digits>` is one, and is described from its own number rather
-#: than from a table -- the ladder is the axis under test, so a dictionary
-#: here would need editing every time a rung is added or moved.
+#: Engine label -> what placed the empty-space block, for arms named by the
+#: sweep convention `ob_<engine>_<selection>@<optimizer>`.
+#:
+#: Only labels that are *not* a rung of the attraction ladder need a table
+#: entry. A rung is `a<weight x100>` with an optional attractiveness-model
+#: suffix, and is described from its own number, so adding or moving a rung
+#: does not mean editing a dictionary here.
 _ENGINE_GLOSS = {
     "null": "uniform noise in place of any empty-space search — the control "
             "that separates “the search found something” from "
             "“a bigger pool gave the selector more to choose from”",
-    "dart": "dart-throwing for the largest empty sphere, unguided",
-    "dartg": "dart-throwing biased toward fitter regions",
-    "ess05": "the EmptySpaceSearch relaxation, attraction weight 0.5",
-    "ess10": "the EmptySpaceSearch relaxation, attraction weight 1.0",
-    "ess20": "the EmptySpaceSearch relaxation, attraction weight 2.0",
 }
 _SEL_GLOSS = {"s00": "greedy on fitness", "s25": "fitness blended with "
               "crowding distance at 0.25", "s50": "blended at 0.50"}
 #: Short form of the same, for section headings.
-_ENGINE_SHORT = {
-    "null": "uniform-noise control", "dart": "dart, unguided",
-    "dartg": "dart, fitness-guided", "ess05": "ESS, attraction 0.5",
-    "ess10": "ESS, attraction 1.0", "ess20": "ESS, attraction 2.0",
+_ENGINE_SHORT = {"null": "uniform-noise control"}
+#: Attractiveness-model suffix on a ladder rung -> how ESS estimates the
+#: value of a position it never evaluated.
+_MODEL_GLOSS = {
+    "f": ("Fourier", ("a periodic function of position fitted to the whole "
+                     "measured set")),
+    "i": ("IDW", "a distance weighting of the nearest measured points"),
+    "d": ("detrended", ("a fitted trend plus a distance weighting of what it "
+                       "leaves behind")),
+    "a": ("auto", "whichever of the above cross-validates best on the pool"),
 }
 
 
-def _lambda_of(engine):
-    """`"g008"` -> 8.0, the attraction weight. None if not a ladder rung."""
-    if len(engine) > 1 and engine[0] == "g" and engine[1:].isdigit():
-        return float(engine[1:])
-    return None
+def _rung_of(engine):
+    """`"a050f"` -> `(0.5, "f")`, the attraction weight and model. None if not a rung."""
+    if not engine.startswith("a"):
+        return None
+    body = engine[1:]
+    suffix = ""
+    if body and body[-1].isalpha():
+        body, suffix = body[:-1], body[-1]
+    return (float(body) / 100.0, suffix) if body.isdigit() else None
 
 
 def engine_gloss(engine, short=False):
-    """Describe an engine label, from the table or from its own lambda."""
-    lam = _lambda_of(engine)
-    if lam is None:
+    """Describe an engine label, from the table or from its own rung."""
+    rung = _rung_of(engine)
+    if rung is None:
         table = _ENGINE_SHORT if short else _ENGINE_GLOSS
         return table.get(engine, engine)
-    if lam == 0:
-        return ("dart, unguided" if short else
-                "dart-throwing for the largest empty sphere, with no "
-                "attraction at all — the λ = 0 end of the ladder")
-    return (f"dart, λ = {lam:g}" if short else
-            f"dart-throwing biased toward fitter regions, attraction weight "
-            f"λ = {lam:g} against a z-scored fitness surrogate")
+    weight, suffix = rung
+    if weight == 0:
+        return ("ESS, novelty only" if short else
+                "the EmptySpaceSearch relaxation with the attraction term "
+                "switched off — the ablation end of the ladder, where probes "
+                "are placed on novelty alone")
+    name, how = _MODEL_GLOSS.get(suffix, ("", ""))
+    if short:
+        return f"ESS, attraction {weight:g}" + (f", {name}" if name else "")
+    return (f"the EmptySpaceSearch relaxation at attraction weight "
+            f"{weight:g}, estimating the attractiveness of unmeasured "
+            f"positions with {how}" if name else
+            f"the EmptySpaceSearch relaxation at attraction weight {weight:g}")
 
 
 def parse_arm(a):
@@ -290,8 +273,8 @@ def organise(rows):
         by.setdefault((r["function"], r["d"], r["arm"]), []).append(r)
         cells.setdefault((r["function"], r["d"]), set()).add(r["arm"])
     full = sorted(k for k, v in cells.items() if set(ARMS) <= v)
-    for k in by:
-        by[k].sort(key=lambda r: r["seed"])
+    for group in by.values():
+        group.sort(key=lambda r: r["seed"])
     return full, by
 
 

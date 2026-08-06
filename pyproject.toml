@@ -21,11 +21,15 @@ ignore = [
 
 [tool.basedpyright]
 typeCheckingMode = "standard"
-include = ["src/pyBlindOpt"]
+# The tests and the benchmark harness, not just the library. Scoped to `src`
+# this missed `callback=stopper.callback` in `examples/tune_oblesa.py` --
+# `EarlyStopping` defines `__call__` and has no such attribute, so the tuner
+# raised `AttributeError` on its first run.
+include = ["src/pyBlindOpt", "test", "examples"]
 
 [tool.vulture]
 paths = ["src/pyBlindOpt"]
 min_confidence = 80
-# `**ignored` is deliberate: the empty-space engines accept and drop the
-# relaxation parameters so they stay drop-in for `ess.esa`.
+# `**ignored` is deliberate: the guided engine accepts and drops the
+# relaxation parameters so it stays drop-in for `ess.esa`.
 ignore_names = ["ignored"]
