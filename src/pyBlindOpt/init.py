@@ -18,6 +18,7 @@ __status__ = "Development"
 import collections.abc
 import logging
 
+import ess  # type: ignore[reportMissingImports]
 import numpy as np
 
 import pyBlindOpt.emptyspace as emptyspace
@@ -294,12 +295,8 @@ def _ess_engine(
       population, which makes it the one line in the substitution worth
       staring at.
     * **`force_weight` arrives as `attraction_weight`, in ESS's units.** It
-      used to be dart's lambda -- a scalar on a standardised Shepard surrogate
-      scoring a finite candidate cloud, which ran usefully into the tens.
-      `attraction_weight` scales a pairwise force and is bounded by a collapse
-      condition; at the old default of 8.0 ESS refuses the configuration
-      outright, correctly. The knob is the same knob, the scale is not, so a
-      value tuned against the dart engine must not be carried over.
+      scales a pairwise force bounded by a collapse condition, so it is refused
+      at or above 2.5 -- a different scale from the dart lambda it replaced.
       `k_cand` maps to `init_pool`; both are candidates per placement.
 
     The attraction law is `cauchy` rather than ESS's default of "same as the
@@ -331,23 +328,8 @@ def _ess_engine(
     Returns:
         np.ndarray: The `n` placed points, shape (n, D).
 
-    Raises:
-        ImportError: If EmptySpaceSearch is not installed.
     """
     del ignored
-    try:
-        # A hard requirement (`install_requires`), not an optional extra: this
-        # is the backend behind the default `force='guided'`. Imported lazily
-        # all the same, so `import pyBlindOpt` costs nothing for the callers
-        # that only want an optimizer, and so a broken install fails here with
-        # a message rather than at import time with a traceback.
-        import ess  # type: ignore[reportMissingImports]
-    except ImportError as exc:  # pragma: no cover - environment dependent
-        raise ImportError(
-            "force='guided' (the default) and force='ess' need the "
-            "EmptySpaceSearch package: pip install 'EmptySpaceSearch>=0.5.0'. "
-            "force='repulsive' and force='uniform' need nothing extra."
-        ) from exc
 
     kw = {}
     if scores is not None:
@@ -450,10 +432,7 @@ def oblesa(
             relaxation: it places each probe on a blend of novelty and the
             attractiveness the position is *expected* to have, then relaxes the
             block under repulsion and attraction together. This is the
-            production backend, and the one stage of this pipeline that needs
-            `EmptySpaceSearch` -- a hard requirement of the package, but
-            imported lazily, so `'repulsive'` and `'uniform'` still work in an
-            environment where it failed to install.
+            production backend.
 
             'repulsive' is pure novelty -- as far as possible from everything
             already sampled, with no notion of where the good regions are.
@@ -464,19 +443,11 @@ def oblesa(
             relaxation is measured against something rather than assumed.
 
             Ignored when `engine` is given.
-        force_weight (float): Attraction strength, in the backend's own units.
-
-            **This is ESS's `attraction_weight`, not the retired dart engine's
-            lambda.** The two are different quantities that both mean "how much
-            attraction": lambda scaled a standardised Shepard surrogate over a
-            finite candidate cloud and ran usefully into the tens, while this
-            scales a pairwise force and is bounded by a collapse condition --
-            ESS refuses a configuration at 8.0, correctly. Any tuning done
-            against the dart ladder does not transfer; the default here is
-            ESS's own measured optimum.
-
-            Zero reduces the placement to pure novelty, which makes a sweep
-            over this an ablation rather than a comparison of two methods.
+        force_weight (float): Attraction strength, as ESS's
+            `attraction_weight`. Bounded by a collapse condition: ESS refuses
+            anything at or above 2.5. Zero reduces the placement to pure
+            novelty, which makes a sweep over this an ablation rather than a
+            comparison of two methods.
         seed (int | Generator | None): Random seed or Generator instance.
         n_jobs (int): Number of parallel jobs for objective evaluation.
         n_ess (int | None): Size of the empty-space block. Defaults to `n_pop`.
@@ -484,14 +455,9 @@ def oblesa(
         k_cand (int): Candidates the probe search draws per placed point,
             reaching `ess.esa` as `init_pool`. Accuracy knob of the empty-space
             engines; higher is closer to the exact largest empty sphere and
-            linearly more expensive.
-
-            The default is ESS's own. It used to be 2048, inherited from the
-            retired dart engine, where the placement *was* the whole algorithm
-            and a coarse argmax over a candidate cloud had nothing downstream
-            to correct it. ESS relaxes the block afterwards, so the placement
-            only has to be a reasonable starting point -- and initialization is
-            97-98% of a run's wall clock, all of it here.
+            linearly more expensive. ESS relaxes the block afterwards, so the
+            placement only has to be a reasonable starting point: raising this
+            to 2048 costs 4.5-7.1x and returns the same population.
         engine (Callable | None): Empty-space backend override, called as
             `engine(samples, bounds, n=..., seed=..., ...)`. When None it is
             chosen by `force`. Pass `ess.esa` for the published implementation;

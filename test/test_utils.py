@@ -312,23 +312,17 @@ class TestUtils(unittest.TestCase):
         self.assertAlmostEqual(crowding[1], 0.4)
         self.assertAlmostEqual(crowding[2], 0.8)
 
-        # Extremes take twice their single gap, which puts them on the same
-        # scale as an interior point rather than above every one of them.
+        # Extremes take twice their single gap:
         #   P0 (0.0) -> 2*(1-0)/5 = 0.4   P3 (5.0) -> 2*(5-2)/5 = 1.2
         self.assertAlmostEqual(crowding[0], 0.4)
         self.assertAlmostEqual(crowding[3], 1.2)
 
-        # The extreme wedged against its neighbour is NOT the most isolated
-        # point here, which is the whole reason the infinities went away.
+        # The extreme wedged against its neighbour is not the most isolated.
         self.assertLess(crowding[0], crowding[3])
         self.assertFalse(np.any(np.isinf(crowding)))
 
     def test_crowding_distance_accumulates_across_axes(self):
-        """Being extreme on one axis must not erase spread banked on another.
-
-        The old code assigned `inf` inside the per-axis loop, so a point that
-        led on axis 0 lost that the instant it was extreme on axis 1.
-        """
+        """Being extreme on one axis must not erase spread from another."""
         samples = np.array([
             [0.0, 0.5],     # extreme on axis 0, interior on axis 1
             [0.5, 0.0],
@@ -336,17 +330,14 @@ class TestUtils(unittest.TestCase):
             [1.0, 0.51],
         ])
         crowding = utils.compute_crowding_distance(samples)
-        # Every contribution is a non-negative gap, and the two points with
-        # room on both sides must beat the pair crowded against each other.
+        # Points with room on both sides beat the pair crowded together.
         self.assertTrue(np.all(crowding >= 0))
         self.assertGreater(crowding[0], crowding[2])
 
     def test_crowding_distance_discriminates_in_high_dimension(self):
         """It must still separate points when D is comparable to N.
 
-        At D=100 with a 120-point pool, 88% of the points are extreme on at
-        least one axis. Under the old rule they all collapsed onto one shared
-        value and the measure ranked nothing.
+        At D=100 with a 120-point pool, 88% are extreme on some axis.
         """
         rng = np.random.default_rng(0)
         samples = rng.uniform(-5.0, 5.0, size=(120, 100))

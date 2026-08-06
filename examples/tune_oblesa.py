@@ -70,12 +70,8 @@ def evaluate_single_run(
             **oblesa_params,
         )
     except ValueError as e:
-        # ValueError only: that is a configuration the *backend* rejected --
-        # an attraction weight that would out-pull repulsion at contact, say --
-        # which is a legitimately bad point in the search space and deserves
-        # the penalty. A TypeError is a keyword this signature does not have,
-        # and scoring it as a bad trial is how this file came to search seven
-        # parameters that did not exist. Let it raise.
+        # ValueError only: a configuration the backend rejected is a bad point
+        # in the search space. A TypeError is a bug -- let it raise.
         logger.warning(f"OBLESA refused params {oblesa_params}: {e}")
         return MAX_OPTIMIZER_EPOCHS * 2
 
@@ -118,13 +114,8 @@ def objective(trial: optuna.Trial, n_seeds: int):
     Optuna objective function to tune OBLESA parameters.
     """
     # --- A. Sample Hyperparameters ---
-    # `oblesa`'s own knobs, and only those. This used to search `epochs`,
-    # `lr`, `decay`, `batch_size`, `tol`, `search_mode` and `border_strategy`
-    # -- parameters of the ESS relaxation, one layer below, which `oblesa` has
-    # never accepted. Every trial raised TypeError into the `except Exception`
-    # below, scored the crash penalty, and the study optimised nothing. Reach
-    # the backend's own parameters through `engine=functools.partial(...)`,
-    # which is what that argument is for.
+    # `oblesa`'s own knobs, and only those. ESS's relaxation parameters live
+    # one layer down; reach them with `engine=functools.partial(...)`.
     oblesa_params = {
         "opp": trial.suggest_categorical("opp", ["standard", "quasi"]),
         "opp_ess": trial.suggest_categorical("opp_ess", [False, True]),

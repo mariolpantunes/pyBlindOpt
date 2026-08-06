@@ -364,14 +364,9 @@ class TestInit(unittest.TestCase):
         and their opposites, so the claim with content is that they are picked
         *rarely relative to how common they are in the pool*.
 
-        **The reference is measured, not hard-coded.** An earlier version of
-        this test asserted an absolute rate, which silently encoded how one
-        particular empty-space engine populated the pool: the retired guided
-        dart placed probes almost on top of the optimum, so the pool itself was
-        mostly good and any selector looked discriminating. Swapping the
-        backend moved the pool and the test failed without the selection rule
-        having changed at all. Comparing against the pool the selector actually
-        saw is engine-independent, which is the property this test needs.
+        The reference is measured, not hard-coded: an absolute rate would
+        encode how the empty-space engine happens to populate the pool, and
+        would fail on a backend swap with the selection rule unchanged.
 
         `diversity_weight=0.0` is pinned because the default trades some of
         this away on purpose -- that trade is the subject of its own arms in
@@ -411,16 +406,14 @@ class TestInit(unittest.TestCase):
         kept = float(np.mean(far_roulette))
         available = float(np.mean(far_pool))
 
-        # Indifference would keep the far-out candidates at the rate the pool
-        # offers them. Roulette must be well under that.
+        # Indifference keeps them at the rate the pool offers them.
         self.assertLess(
             kept, 0.75 * available,
             f"roulette kept {kept:.2f} of the far-out points against "
             f"{available:.2f} available -- barely discriminating")
 
-        # ... and greedy, the maximum-pressure end of the same axis, must
-        # refuse them outright. Bracketing roulette between the two is what
-        # says it is a *pressure*, not a coin flip and not a sort.
+        # Greedy refuses them outright; bracketing roulette between the two
+        # is what makes it a pressure rather than a coin flip or a sort.
         self.assertEqual(float(np.mean(far_greedy)), 0.0)
         self.assertGreater(kept, 0.0, "roulette degenerated into greedy")
 

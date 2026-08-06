@@ -32,15 +32,9 @@ used to validate `dart_esa` at low dimension and nothing else --
 `dart_esa` is deliberately slower than `ess.esa`. That is the trade: it exists
 to attribute an effect, not to ship in the hot path.
 
-**These are controls, not the production path.** OBLESA's guided placement is
-`ess.esa`, which places on a blend of novelty and expected attractiveness and
-then relaxes the block under both forces. The two engines here are what that is
-measured *against*: :func:`dart_esa` is novelty with no idea where the good
-regions are, and :func:`random_esa` is the null with no search at all. A guided
-dart engine used to live here too and was retired -- it duplicated ESS's
-placement step with a differently-scaled attraction knob, and carried a
-toroidal Shepard surrogate into a box, where wrapping asserts a periodicity the
-objective does not have.
+These are controls, not the production path. OBLESA's guided placement is
+`ess.esa`; :func:`dart_esa` is novelty with no idea where the good regions are,
+and :func:`random_esa` is the null with no search at all.
 """
 
 __author__ = "Mário Antunes"

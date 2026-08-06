@@ -275,15 +275,9 @@ SHIFT_FRAC = [0.8]
 #: fitness term is z-scored before it is added to the novelty term -- so the
 #: levels are ratios of attraction to repulsion, comparable across functions
 #: and dimensions, and a geometric ladder is the right spacing for them.
-#: **These are ESS's units, not the retired dart engine's.** The 620,000-run
-#: sweep measured `emptyspace.fitness_dart_esa` at lambda = 0..32 -- a scalar
-#: on a standardised Shepard surrogate scoring a candidate cloud. That engine
-#: is gone; `force='guided'` is now `ess.esa`, whose `attraction_weight`
-#: scales a pairwise force and is bounded by a collapse condition. ESS refuses
-#: anything at or above 2.5 here (`weight * F_att(0) >= F_rep(0)`, checked
-#: rather than tested for), so the ladder runs to 2.0 and no dart number
-#: transfers. Nothing about the old ladder's *shape* carries over either: it
-#: was measured on a placement rule with no relaxation behind it.
+#: ESS's `attraction_weight`, not the retired dart lambda: it scales a
+#: pairwise force and ESS refuses it at or above 2.5, so the ladder stops at
+#: 2.0 and no number from the 620,000-run dart sweep transfers.
 _ENGINE_LEVELS = {
     "null": {"force": "uniform"},
     "rep0": {"force": "repulsive"},                        # no attraction
@@ -294,20 +288,15 @@ _ENGINE_LEVELS = {
     "a200": {"force": "guided", "force_weight": 2.00},     # just under refusal
 }
 
-#: How ESS estimates the attractiveness of a position it has not measured.
-#: Crossed with the ladder rather than fixed, because this is the axis the
-#: dimension question lives on: `idw` is Shepard weighting, which flattens to
-#: the pool mean as distances concentrate, while `fourier` fits `2d` ridge
-#: coefficients over the whole measured set and is the one built for the
-#: "60 points in 100 dimensions" case. `detrended` does both.
+#: How ESS estimates attractiveness where it has no measurement. Crossed with
+#: the ladder because this is where the dimension question lives: `idw`
+#: flattens to the pool mean as distances concentrate, `fourier` fits `2d`
+#: ridge coefficients over the whole measured set, `detrended` does both.
 _ATT_MODELS = ("fourier", "idw", "detrended")
 
-#: Probe-block size as a multiple of `n_pop`. **1N, the paper's pool shape.**
-#: The 86-arm sweep preferred 2N, but that was measured on dart, where the
-#: probe block was the only stage with any search in it. The composition
-#: question it was really asking -- more probes, or the probes' opposites --
-#: is `opp_ess`, which reaches the same 4N pool as `[N, N_opp, N_ess,
-#: N_ess_opp]` instead of `[N, N_opp, 2N_ess]`.
+#: Probe-block size as a multiple of `n_pop`: 1N, the paper's 3N pool. The 2N
+#: the 86-arm sweep preferred was measured on dart; `opp_ess` reaches the same
+#: 4N as `[N, N_opp, N_ess, N_ess_opp]`.
 _N_ESS_MULT = 1.0
 
 #: Selection rule with its diversity weight, crossed against attraction
@@ -364,9 +353,8 @@ _FIXED = {
     "opp_ess": False,      # worth 1.6, and compresses the guided margin
 }
 
-#: The attractiveness model only exists where there is attraction to estimate,
-#: so `null`, `rep0` and `a000` are not crossed with it -- doing so would ship
-#: three bit-identical arms under three names and dilute every mean they enter.
+#: Only crossed where there is attraction to estimate: crossing `null`, `rep0`
+#: and `a000` would ship three bit-identical arms under three names.
 _MODEL_SUFFIX = {"fourier": "f", "idw": "i", "detrended": "d"}
 
 OBLESA_KNOBS = {}
@@ -546,9 +534,8 @@ def initial_population(arm, objective, bounds, n_pop, rng, stats=None, info=None
         # `_n_ess_mult` is an arm-table convention, not an `oblesa` argument.
         mult = kw.pop("_n_ess_mult", 1.0)
         kw["n_ess"] = max(1, int(round(mult * n_pop)))
-        # `force_weight` is forwarded by `oblesa` itself. `att_model` is not --
-        # it is ESS's own knob, below the engine contract -- so it is bound
-        # here, which is the escape hatch `engine=` exists for.
+        # `oblesa` forwards `force_weight`; `att_model` is ESS's own knob,
+        # below the engine contract, so bind it through `engine=`.
         model = kw.pop("_att_model", None)
         if model is not None:
             kw["engine"] = functools.partial(
