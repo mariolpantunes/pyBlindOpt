@@ -1,4 +1,3 @@
-# coding: utf-8
 
 """
 Differential Evolution (DE).
@@ -1151,7 +1150,7 @@ class DifferentialEvolution(Optimizer):
     """
 
     # Strategy Mapping: "Name" -> (Function, Required_Sample_Count)
-    _STRATEGIES = {
+    _STRATEGIES: typing.ClassVar[dict] = {
         "rand/1": (mutation_rand_1, 3),
         "best/1": (mutation_best_1, 2),
         "rand/2": (mutation_rand_2, 5),
@@ -1165,7 +1164,8 @@ class DifferentialEvolution(Optimizer):
     #: `p` fraction rather than being the single global best.
     _PBEST_STRATEGIES = frozenset({"current-to-pbest/1"})
 
-    _CROSSOVERS = {"bin": crossover_bin, "exp": crossover_exp}
+    _CROSSOVERS: typing.ClassVar[dict] = {
+        "bin": crossover_bin, "exp": crossover_exp}
 
     @utils.inherit_docs(Optimizer)
     def __init__(

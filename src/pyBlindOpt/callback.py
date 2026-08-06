@@ -1,4 +1,3 @@
-# coding: utf-8
 
 """
 Optimization Callback Utilities.
@@ -55,10 +54,7 @@ class EarlyStopping:
             best_fitness = np.nanmin(fitness)
 
         # If all values are NaN, or the best fitness hits the threshold, stop.
-        if np.isnan(best_fitness) or best_fitness < self.threshold:
-            return True
-
-        return False
+        return bool(np.isnan(best_fitness) or best_fitness < self.threshold)
 
 
 class PatienceStopping:

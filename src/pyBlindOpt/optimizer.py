@@ -1,4 +1,3 @@
-# coding: utf-8
 
 """
 Base Optimizer Architecture.
@@ -209,27 +208,23 @@ class Optimizer(abc.ABC):
         """
         Hook: Run once before the main loop starts (e.g., initial leader finding).
         """
-        pass
 
     def _update_iter_params(self, epoch: int):
         """
         Hook: Update internal params based on current epoch (e.g., inertia, temperature).
         """
-        pass
 
     @abc.abstractmethod
     def _generate_offspring(self, epoch: int) -> np.ndarray:
         """
         Abstract Hook: Generate new candidate solutions for the next step.
         """
-        pass
 
     @abc.abstractmethod
     def _selection(self, offspring: np.ndarray, offspring_scores: np.ndarray):
         """
         Abstract Hook: Determine which solutions survive to the next generation.
         """
-        pass
 
     @abc.abstractmethod
     def _update_best(self, epoch: int):
@@ -250,7 +245,6 @@ class Optimizer(abc.ABC):
         Returns:
             tuple: (best_pos, best_score, [history])
         """
-        pass
 
     def _evolve_once(self, epoch: int):
         """One generation: build offspring, evaluate them, select survivors.

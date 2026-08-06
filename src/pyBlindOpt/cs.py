@@ -1,4 +1,3 @@
-# coding: utf-8
 
 """
 Cuckoo Search (CS) optimization.
@@ -53,7 +52,6 @@ class CuckooSearch(Optimizer):
 
         No specific state initialization required.
         """
-        pass
 
     def _update_iter_params(self, epoch: int):
         """
@@ -61,7 +59,6 @@ class CuckooSearch(Optimizer):
 
         CS parameters are constant in this implementation.
         """
-        pass
 
     def _update_best(self, epoch: int):
         """

@@ -5,6 +5,20 @@ build-backend = 'setuptools.build_meta'
 [tool.ruff]
 line-length = 120
 
+[tool.ruff.lint]
+ignore = [
+    # `import pyBlindOpt.utils as utils` is the convention across this package
+    # and its two siblings; the alias keeps the qualified name at the call site.
+    "PLR0402",
+    # The distribution is published as `pyBlindOpt`. Renaming the package to
+    # satisfy the module-name rule would break every import in the wild.
+    "N999",
+    # `compute_objective` falls back from loky to threading when a payload will
+    # not pickle. Pickling failures surface as whatever the backend raises, so
+    # naming the types would silently stop catching some of them.
+    "BLE001",
+]
+
 [tool.basedpyright]
 typeCheckingMode = "standard"
 include = ["src/pyBlindOpt"]

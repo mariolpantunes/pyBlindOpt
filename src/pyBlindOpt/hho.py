@@ -1,4 +1,3 @@
-# coding: utf-8
 
 
 """
@@ -51,7 +50,6 @@ class HarrisHawksOptimization(Optimizer):
 
         No specific internal state required.
         """
-        pass
 
     def _update_iter_params(self, epoch: int):
         """
@@ -59,7 +57,6 @@ class HarrisHawksOptimization(Optimizer):
 
         The energy parameter $E$ is calculated dynamically per individual inside `_generate_offspring`.
         """
-        pass
 
     def _update_best(self, epoch: int):
         """

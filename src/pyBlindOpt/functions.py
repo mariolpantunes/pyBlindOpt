@@ -1,4 +1,3 @@
-# coding: utf-8
 
 """
 Benchmark functions for evaluating optimization algorithms.

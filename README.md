@@ -305,12 +305,13 @@ the tree without committing.
 ## Documentation
 
 This library is documented using Google-style docstrings.
-The full documentation can be accessed [here](https://mariolpantunes.github.io/pyBlindOpt/).
+The full documentation is built and published from `main` by the
+`docs` workflow, and lives [here](https://mariolpantunes.github.io/pyBlindOpt/).
 
-To generate the documentation locally, run the following command:
+To preview it locally:
 
 ```bash
-pdoc --math -d google -o docs src/pyBlindOpt
+pdoc --math -d google src/pyBlindOpt
 ```
 
 ## Authors

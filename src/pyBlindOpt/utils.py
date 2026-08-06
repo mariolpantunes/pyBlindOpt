@@ -1,4 +1,3 @@
-# coding: utf-8
 
 """
 Optimization Utilities.
@@ -147,7 +146,6 @@ class Sampler(abc.ABC):
         Returns:
             np.ndarray: Population matrix of shape (n_pop, D).
         """
-        pass
 
     def _scale_to_bounds(
         self, unit_samples: np.ndarray, bounds: np.ndarray
@@ -739,7 +737,6 @@ def compute_objective(
             logger.debug(f"""Function does not support matrix input.
                 proceed to row-by-row methods:
                 {e}""")
-            pass
         # Apply function along axis 1 (rows).
         return np.apply_along_axis(function, 1, population)
 

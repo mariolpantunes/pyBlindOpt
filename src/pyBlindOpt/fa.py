@@ -1,4 +1,3 @@
-# coding: utf-8
 
 
 """
@@ -68,7 +67,6 @@ class FireflyAlgorithm(Optimizer):
 
         No specific state initialization required beyond parameters.
         """
-        pass
 
     def _update_iter_params(self, epoch: int):
         """

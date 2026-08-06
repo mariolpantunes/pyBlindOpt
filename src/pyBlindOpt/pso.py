@@ -1,4 +1,3 @@
-# coding: utf-8
 
 """
 Particle Swarm Optimization (PSO).
@@ -99,7 +98,6 @@ class ParticleSwarmOptimization(Optimizer):
 
         This implementation uses constant $w, c_1, c_2$, so no update is performed.
         """
-        pass
 
     def _update_best(self, epoch: int):
         """

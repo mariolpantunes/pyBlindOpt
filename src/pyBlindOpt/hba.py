@@ -1,4 +1,3 @@
-# coding: utf-8
 
 """
 Honey Badger Algorithm (HBA).
@@ -61,7 +60,6 @@ class HoneyBadgerAlgorithm(Optimizer):
 
         No specific state required.
         """
-        pass
 
     def _update_iter_params(self, epoch: int):
         """
@@ -69,7 +67,6 @@ class HoneyBadgerAlgorithm(Optimizer):
 
         Density factor $\\alpha$ is computed per epoch inside `_generate_offspring`.
         """
-        pass
 
     def _update_best(self, epoch: int):
         """
