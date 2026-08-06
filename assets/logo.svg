@@ -42,22 +42,28 @@
     <ellipse cx="86" cy="42" rx="27" ry="21" transform="rotate(-20 86 42)"/>
   </g>
 
-  <!-- population -->
+  <!-- the rest of the population, off the path -->
   <g class="bg">
-    <circle cx="34" cy="42" r="4.5"/>
-    <circle cx="55" cy="30" r="4.5"/>
-    <circle cx="30" cy="70" r="4.5"/>
-    <circle cx="66" cy="98" r="4.5"/>
-    <circle cx="95" cy="88" r="4.5"/>
+    <circle cx="32" cy="44" r="4.2"/>
+    <circle cx="34" cy="74" r="4.2"/>
+    <circle cx="97" cy="90" r="4.2"/>
+    <circle cx="62" cy="103" r="4.2"/>
   </g>
 
-  <!-- the reflection through the centre of the box: x_opp = a + b - x -->
-  <g class="axis" stroke-width="2" stroke-dasharray="4 4" stroke-linecap="round">
-    <line x1="42" y1="90" x2="86" y2="38"/>
-  </g>
-  <circle cx="64" cy="64" r="2.6" class="bg"/>
+  <!-- the search advancing: it starts at the candidate, crosses the centre of
+       the box, and closes on the basin -->
+  <path class="axis" d="M 42 90 Q 58 54 86 38" fill="none"
+        stroke-width="2" stroke-dasharray="4 4" stroke-linecap="round"/>
 
-  <!-- candidate (blue) and its opposite (teal), which lands in the basin -->
+  <!-- successive steps, growing as the search commits to the region -->
+  <g class="bg">
+    <circle cx="53" cy="70" r="3.2"/>
+    <circle cx="63" cy="56" r="4.2"/>
+    <circle cx="70" cy="49" r="5.2"/>
+  </g>
+
+  <!-- candidate (blue) and the point it reaches (teal), exact reflections
+       through the centre of the box: x_opp = a + b - x -->
   <circle class="halo" cx="42" cy="90" r="7.5" fill="#3b82f6" stroke-width="2.5"/>
   <circle class="halo" cx="86" cy="38" r="7.5" fill="#14b8a6" stroke-width="2.5"/>
 </svg>
