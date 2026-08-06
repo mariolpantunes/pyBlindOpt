@@ -12,6 +12,8 @@ lint gate covers the whole repository, and the empty-space stage is ESS alone.
 
 ### Breaking
 
+- **Requires Python 3.12.** The library is current and there is no reason to
+  hold it back three releases; CI runs 3.12 and 3.14.
 - **`pyBlindOpt.emptyspace` removed.** `dart_esa` and `random_esa` were a
   stand-in used to test whether OBLESA was worth pursuing before ESS was
   ready. ESS beats dart on both placement and attractiveness and is several
@@ -40,7 +42,8 @@ lint gate covers the whole repository, and the empty-space stage is ESS alone.
   what `setup.cfg` publishes.
 - **`requirements.txt` said `numpy>=1.6.4`** against `setup.cfg`'s
   `numpy>=1.26.4` — two decades apart — and the `tqdm` floors also disagreed.
-  The two files are now asserted equal.
+  It is now the runtime dependency list and nothing else, asserted equal to
+  `install_requires` in both directions.
 - **`examples/tune_oblesa.py` passed `callback=stopper.callback`**, which
   `EarlyStopping` does not have; it defines `__call__`. The tuner raised
   `AttributeError` on every run. Caught by widening the type gate.
@@ -53,8 +56,6 @@ lint gate covers the whole repository, and the empty-space stage is ESS alone.
 - **CI lints `src test examples`, not `src`.** The narrower gate reported
   green over 33 errors in tracked files; `basedpyright` now covers the same
   three, which is what found the callback bug above.
-- The lint toolchain is pinned in `requirements.txt` at the versions CI
-  installs, so the local gate and CI cannot disagree about what passes.
 - `Optimizer.optimize` and the four `Sampler.sample` implementations are
   documented; pdoc rendered them blank before.
 - README documents the class interface — roughly half the public API, and

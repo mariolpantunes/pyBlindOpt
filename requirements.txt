@@ -1,18 +1,4 @@
-# Runtime -- mirrors `install_requires` in setup.cfg exactly.
-# `test/test_packaging.py` asserts the two agree: they silently disagreed for
-# three releases (numpy>=1.6.4 here against numpy>=1.26.4 there), and the floor
-# stated here is what `bin/manage_venv.sh` verifies the venv against.
 numpy>=2.0.0
 joblib>=1.5.3
 tqdm>=4.67.3
 EmptySpaceSearch>=0.5.1
-
-# Lint toolchain, pinned to the versions .github/workflows/main.yml installs.
-# Unpinned, a ruff release lands new rules in CI that the local gate never saw.
-ruff==0.16.1
-basedpyright==1.39.8
-vulture==2.16
-
-# Docs and the benchmark harness. Not needed to use the library.
-pdoc>=16.0.0
-optuna>=4.8.0

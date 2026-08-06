@@ -9,6 +9,7 @@ Neither breaks a test, so neither surfaces without being asserted.
 
 import configparser
 import os
+import re
 import unittest
 
 import pyBlindOpt
@@ -16,39 +17,36 @@ import pyBlindOpt
 ROOT = os.path.join(os.path.dirname(__file__), os.pardir)
 
 
-def _requirement_lines(path):
-    """`name -> full specifier`, skipping comments and blanks."""
-    out = {}
-    with open(path, encoding="utf-8") as handle:
-        for raw in handle:
-            line = raw.split("#", 1)[0].strip()
-            if line:
-                name = line.split("=")[0].split(">")[0].split("<")[0].split("[")[0]
-                out[name.strip().lower()] = line
-    return out
+def _name_of(spec):
+    """`"numpy>=2.0.0"` -> `"numpy"`."""
+    return re.split(r"[<>=~!\[ ]", spec, maxsplit=1)[0].strip().lower()
 
 
 class TestPackaging(unittest.TestCase):
     def setUp(self):
         self.cfg = configparser.ConfigParser()
         self.cfg.read(os.path.join(ROOT, "setup.cfg"), encoding="utf-8")
-        self.declared = _requirement_lines(
-            os.path.join(ROOT, "requirements.txt"))
-
-    def _install_requires(self):
         raw = self.cfg["options"]["install_requires"]
-        return {line.split("=")[0].split(">")[0].strip().lower(): line.strip()
-                for line in raw.splitlines() if line.strip()}
+        self.required = [line.strip() for line in raw.splitlines() if line.strip()]
+        with open(os.path.join(ROOT, "requirements.txt"), encoding="utf-8") as handle:
+            self.declared = {_name_of(line): line.strip()
+                             for line in handle if line.strip()}
 
     def test_requirements_covers_every_runtime_dependency(self):
-        missing = set(self._install_requires()) - set(self.declared)
+        missing = {_name_of(s) for s in self.required} - set(self.declared)
         self.assertFalse(
             missing, f"in setup.cfg but not requirements.txt: {sorted(missing)}")
 
+    def test_requirements_declares_nothing_extra(self):
+        """It is the runtime dependency list, not a development environment."""
+        extra = set(self.declared) - {_name_of(s) for s in self.required}
+        self.assertFalse(
+            extra, f"in requirements.txt but not setup.cfg: {sorted(extra)}")
+
     def test_runtime_floors_agree_between_the_two_files(self):
-        for name, spec in self._install_requires().items():
-            with self.subTest(dependency=name):
-                self.assertEqual(spec, self.declared[name])
+        for spec in self.required:
+            with self.subTest(dependency=spec):
+                self.assertEqual(spec, self.declared[_name_of(spec)])
 
     def test_reported_version_matches_the_published_one(self):
         self.assertEqual(pyBlindOpt.__version__, self.cfg["metadata"]["version"])
