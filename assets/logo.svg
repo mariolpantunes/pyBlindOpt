@@ -1,76 +1,63 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="25 50 450 450" width="128" height="128">
-  <defs>
-    <linearGradient id="meshGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" style="stop-color:#3b82f6;stop-opacity:0.05" />
-      <stop offset="100%" style="stop-color:#3b82f6;stop-opacity:0.3" />
-    </linearGradient>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128"
+     role="img" aria-label="pyBlindOpt — derivative-free optimization">
+  <title>pyBlindOpt — derivative-free optimization</title>
+  <desc>The search space, with the basin drawn faintly because the optimizer
+  never sees it. A candidate (blue) and its opposite (teal) are reflected
+  through the centre of the box; the opposite lands in the basin, which is the
+  premise opposition-based initialization runs on.</desc>
 
-    <filter id="pointShadow" x="-50%" y="-50%" width="200%" height="200%">
-      <feGaussianBlur in="SourceAlpha" stdDeviation="1.5"/>
-      <feOffset dx="0" dy="1" result="offsetblur"/>
-      <feComponentTransfer>
-        <feFuncA type="linear" slope="0.3"/>
-      </feComponentTransfer>
-      <feMerge>
-        <feMergeNode/>
-        <feMergeNode in="SourceGraphic"/>
-      </feMerge>
-    </filter>
+  <!-- Light and dark are both first-class: this renders on GitHub in either
+       theme and on pdoc pages, which follow the reader's preference. -->
+  <style>
+    .cell    { fill: #f8fafc; stroke: #cbd5e1; }
+    .contour { stroke: #cbd5e1; }
+    .halo    { stroke: #ffffff; }
+    .bg      { fill: #94a3b8; }
+    .axis    { stroke: #cbd5e1; }
+    @media (prefers-color-scheme: dark) {
+      .cell    { fill: #0f172a; stroke: #334155; }
+      .contour { stroke: #334155; }
+      .halo    { stroke: #0f172a; }
+      .bg      { fill: #64748b; }
+      .axis    { stroke: #334155; }
+    }
+  </style>
+
+  <defs>
+    <!-- The landscape is bounded by the box, so the contours are clipped to
+         it rather than sized to fit by hand. -->
+    <clipPath id="box">
+      <rect x="14" y="14" width="100" height="100" rx="16"/>
+    </clipPath>
   </defs>
 
-  <rect x="25" y="50" width="450" height="450" fill="#ffffff" rx="20" />
+  <!-- the bounded search space -->
+  <rect class="cell" x="14" y="14" width="100" height="100" rx="16" stroke-width="3"/>
 
-  <g transform="translate(250, 260)">
-
-    <g stroke="#cbd5e1" stroke-width="2" stroke-linecap="round">
-      <line x1="0" y1="120" x2="0" y2="-180" />
-      <path d="M-5,-170 L0,-180 L5,-170" fill="none" stroke="#94a3b8"/>
-      <line x1="0" y1="120" x2="-160" y2="200" />
-      <path d="M-150,202 L-160,200 L-152,190" fill="none" stroke="#94a3b8"/>
-      <line x1="0" y1="120" x2="160" y2="200" />
-      <path d="M152,190 L160,200 L150,202" fill="none" stroke="#94a3b8"/>
-    </g>
-
-    <g transform="translate(0, 50)">
-
-      <path d="M -140,-150
-               C -80,-100 -20,-220 40,-160
-               S 140,-60 140,0
-               L 140,180
-               C 80,200 20,100 -40,140
-               S -120,50 -140,30 Z"
-            fill="url(#meshGradient)" stroke="none" />
-
-      <g stroke="#3b82f6" stroke-width="1.5" fill="none" opacity="0.6">
-        <path d="M -140,-150 C -80,-100 -20,-220 40,-160 S 140,-60 140,0" /> <path d="M -140,-105 C -80,-55 -20,-175 40,-115 S 140,-15 140,45" />
-        <path d="M -140,-60 C -80,-10 -20,-130 40,-70 S 140,30 140,90" />
-        <path d="M -140,-15 C -80,35 -20,-85 40,-25 S 140,75 140,135" />
-        <path d="M -140,30 C -120,50 -40,140 20,100 S 80,200 140,180" />   <path d="M -140,-150 L -140,30" />
-        <path d="M -70,-140 L -70,70" />
-        <path d="M 0,-170 L 0,110" />
-        <path d="M 70,-130 L 70,150" />
-        <path d="M 140,0 L 140,180" />
-      </g>
-
-      <g filter="url(#pointShadow)">
-
-        <circle cx="-110" cy="-145" r="6" fill="#ef4444" stroke="#ffffff" stroke-width="1.5"/>
-
-        <circle cx="-30" cy="-80" r="5" fill="#f59e0b" stroke="#ffffff" stroke-width="1.5"/>
-
-        <circle cx="40" cy="0" r="5" fill="#f59e0b" stroke="#ffffff" stroke-width="1.5"/>
-
-        <circle cx="110" cy="150" r="8" fill="#10b981" stroke="#ffffff" stroke-width="2"/>
-
-        <path d="M 40,0 Q 80,100 110,150" stroke="#f59e0b" stroke-width="1.5" stroke-dasharray="3,3" fill="none" opacity="0.8"/>
-      </g>
-    </g>
-
+  <!-- the basin, drawn faintly: it is there, the optimizer cannot see it -->
+  <g class="contour" fill="none" stroke-width="1.6" stroke-dasharray="3.5 4.5"
+     clip-path="url(#box)">
+    <ellipse cx="86" cy="42" rx="9"  ry="7"  transform="rotate(-20 86 42)"/>
+    <ellipse cx="86" cy="42" rx="18" ry="14" transform="rotate(-20 86 42)"/>
+    <ellipse cx="86" cy="42" rx="27" ry="21" transform="rotate(-20 86 42)"/>
   </g>
 
-  <g transform="translate(250, 460)" text-anchor="middle">
-    <text x="0" y="0" font-family="'Courier New', monospace" font-weight="bold" font-size="38" fill="#1e293b">
-      py<tspan fill="#3b82f6">BlindOpt</tspan>
-    </text>
+  <!-- population -->
+  <g class="bg">
+    <circle cx="34" cy="42" r="4.5"/>
+    <circle cx="55" cy="30" r="4.5"/>
+    <circle cx="30" cy="70" r="4.5"/>
+    <circle cx="66" cy="98" r="4.5"/>
+    <circle cx="95" cy="88" r="4.5"/>
   </g>
+
+  <!-- the reflection through the centre of the box: x_opp = a + b - x -->
+  <g class="axis" stroke-width="2" stroke-dasharray="4 4" stroke-linecap="round">
+    <line x1="42" y1="90" x2="86" y2="38"/>
+  </g>
+  <circle cx="64" cy="64" r="2.6" class="bg"/>
+
+  <!-- candidate (blue) and its opposite (teal), which lands in the basin -->
+  <circle class="halo" cx="42" cy="90" r="7.5" fill="#3b82f6" stroke-width="2.5"/>
+  <circle class="halo" cx="86" cy="38" r="7.5" fill="#14b8a6" stroke-width="2.5"/>
 </svg>
