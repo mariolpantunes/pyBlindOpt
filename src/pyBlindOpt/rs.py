@@ -1,4 +1,3 @@
-# coding: utf-8
 
 """
 Random Search (RS) optimization implementation.
@@ -70,7 +69,6 @@ class RandomSearch(Optimizer):
 
         No internal state setup required for Random Search.
         """
-        pass
 
     def _update_iter_params(self, epoch: int):
         """
@@ -78,7 +76,6 @@ class RandomSearch(Optimizer):
 
         Random Search is memoryless and parameter-free; it does not change behavior over time.
         """
-        pass
 
     def _update_best(self, epoch: int):
         """

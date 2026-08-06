@@ -106,5 +106,77 @@ class TestFunctions(unittest.TestCase):
         self.assertGreater(result, 0.0)
 
 
+    # --- Asymmetric landscapes ---
+    # These exist because the four functions above are EVEN: on a symmetric
+    # box the opposite of x is exactly -x and scores identically, so an
+    # opposition-based pool is half mirror pairs and no conclusion about
+    # opposition survives. Each of these breaks f(x) == f(-x).
+
+    def test_styblinski_tang_minimum(self):
+        """Global minimum is -39.1661657 per dimension, at x = -2.9035340."""
+        # Solved rather than quoted: the widely cited -39.16599 is rounded,
+        # and a rounded f* is one the optimizer can beat.
+        roots = np.roots([4.0, 0.0, -32.0, 5.0])
+        roots = roots[np.isreal(roots)].real
+        x_opt = roots[np.argmin(0.5 * (roots**4 - 16 * roots**2 + 5 * roots))]
+
+        for d in (1, 5, 12):
+            value = functions.styblinski_tang(np.full(d, x_opt))
+            self.assertAlmostEqual(float(value) / d, -39.1661657, places=6)
+
+    def test_styblinski_tang_is_asymmetric(self):
+        x = np.array([1.0, -2.0, 0.5])
+        self.assertNotAlmostEqual(
+            float(functions.styblinski_tang(x)),
+            float(functions.styblinski_tang(-x)),
+        )
+
+    def test_levy_minimum(self):
+        for d in (1, 4, 9):
+            self.assertAlmostEqual(float(functions.levy(np.ones(d))), 0.0, places=12)
+
+    def test_levy_is_asymmetric(self):
+        x = np.array([2.0, -1.0, 3.0])
+        self.assertNotAlmostEqual(float(functions.levy(x)), float(functions.levy(-x)))
+
+    def test_zakharov_minimum(self):
+        for d in (1, 4, 9):
+            self.assertAlmostEqual(float(functions.zakharov(np.zeros(d))), 0.0)
+
+    def test_zakharov_is_index_weighted(self):
+        """Permuting the coordinates must change the value."""
+        x = np.array([1.0, 2.0, 3.0])
+        self.assertNotAlmostEqual(
+            float(functions.zakharov(x)), float(functions.zakharov(x[::-1]))
+        )
+
+    def test_dixon_price_minimum(self):
+        """Global minimum 0 at x_i = 2^(-(2^i - 2) / 2^i)."""
+        for d in (1, 4, 9):
+            i = np.arange(1, d + 1)
+            x_opt = 2.0 ** (-(2.0**i - 2.0) / 2.0**i)
+            self.assertAlmostEqual(
+                float(functions.dixon_price(x_opt)), 0.0, places=12
+            )
+
+    def test_dixon_price_is_asymmetric(self):
+        x = np.array([1.0, 0.7, 0.6])
+        self.assertNotAlmostEqual(
+            float(functions.dixon_price(x)), float(functions.dixon_price(-x))
+        )
+
+    def test_new_functions_vectorize(self):
+        """(N, D) input must give (N,) output, as compute_objective assumes."""
+        batch = np.random.default_rng(0).uniform(-3, 3, size=(7, 5))
+        for fn in (functions.styblinski_tang, functions.levy,
+                   functions.zakharov, functions.dixon_price):
+            out = fn(batch)
+            self.assertEqual(out.shape, (7,), fn.__name__)
+            for i in range(7):
+                self.assertAlmostEqual(
+                    float(out[i]), float(fn(batch[i])), places=9, msg=fn.__name__
+                )
+
+
 if __name__ == "__main__":
     unittest.main()

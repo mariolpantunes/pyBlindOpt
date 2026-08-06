@@ -1,4 +1,3 @@
-# coding: utf-8
 
 """
 Artificial Bee Colony (ABC) optimization algorithm.
@@ -60,7 +59,6 @@ class ArtificialBeeColony(Optimizer):
 
         ABC does not have time-dependent parameters in this implementation.
         """
-        pass
 
     def _update_best(self, epoch: int):
         """

@@ -1,5 +1,6 @@
 # coding: utf-8
 
+import importlib
 import unittest
 import unittest.mock as mock
 
@@ -124,6 +125,79 @@ class TestOptimizerBase(unittest.TestCase):
         # Check that the final call to set_postfix matches the expected scientific notation format
         expected_format = f"{opt.best_score:.3e}"
         mock_pbar.set_postfix.assert_called_with(best_score=expected_format)
+
+
+#: Every functional entry point in the package, as `(module, function)`.
+ENTRY_POINTS = (
+    ("abc_opt", "artificial_bee_colony"),
+    ("cs", "cuckoo_search"),
+    ("de", "differential_evolution"),
+    ("egwo", "enhanced_grey_wolf_optimization"),
+    ("fa", "firefly_algorithm"),
+    ("ga", "genetic_algorithm"),
+    ("gwo", "grey_wolf_optimization"),
+    ("hba", "honey_badger_algorithm"),
+    ("hc", "hill_climbing"),
+    ("hho", "harris_hawks_optimization"),
+    ("pso", "particle_swarm_optimization"),
+    ("rs", "random_search"),
+    ("sa", "simulated_annealing"),
+)
+
+
+class TestSuppliedPopulation(unittest.TestCase):
+    """Every optimizer must actually start from the population it is given.
+
+    This is the invariant the whole initialization programme rests on. An
+    optimizer that quietly resamples, or that keeps the supplied rows but
+    reorders or replaces some of them before the first evaluation, would make
+    every acceleration-rate measurement a comparison of initializers that were
+    never used. It is also the kind of defect that leaves no trace in the
+    output: the run still converges, just from somewhere else.
+
+    Pinning it needs no tolerance and no statistics. The population contains
+    the exact optimum of a bowl, so an optimizer that received it reports 0.0
+    and one that resampled cannot: the probability of drawing the optimum of a
+    continuous function is zero.
+    """
+
+    def setUp(self):
+        self.bounds = np.asarray([(-10.0, 10.0)] * 3)
+        rng = np.random.default_rng(11)
+        self.pop = rng.uniform(-10.0, 10.0, (12, 3))
+        self.pop[7] = 0.0            # the exact argmin of `sphere`
+
+    @staticmethod
+    def sphere(x):
+        return float(np.sum(np.asarray(x, float) ** 2))
+
+    def _entry(self, module, name):
+        return getattr(importlib.import_module(f"pyBlindOpt.{module}"), name)
+
+    def test_supplied_population_is_used(self):
+        for module, name in ENTRY_POINTS:
+            with self.subTest(optimizer=module):
+                _, score = self._entry(module, name)(
+                    self.sphere, self.bounds, population=self.pop.copy(),
+                    n_pop=len(self.pop), n_iter=3, seed=7)
+                self.assertEqual(
+                    score, 0.0,
+                    f"{module} did not start from the supplied population")
+
+    def test_supplied_population_is_not_written_through(self):
+        """The caller's array survives the run unchanged.
+
+        The benchmark hands one population to several optimizers in turn, so
+        an optimizer that evolves the caller's array in place would silently
+        hand every later optimizer a different, already-improved start.
+        """
+        for module, name in ENTRY_POINTS:
+            with self.subTest(optimizer=module):
+                given = self.pop.copy()
+                self._entry(module, name)(
+                    self.sphere, self.bounds, population=given,
+                    n_pop=len(given), n_iter=3, seed=7)
+                np.testing.assert_array_equal(given, self.pop)
 
 
 if __name__ == "__main__":

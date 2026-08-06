@@ -1,4 +1,3 @@
-# coding: utf-8
 
 """
 Hill Climbing (HC) optimization algorithm.
@@ -76,7 +75,6 @@ class HillClimbing(Optimizer):
         No specific initialization is required for standard Hill Climbing beyond
         population generation handled by the base class.
         """
-        pass
 
     def _update_iter_params(self, epoch: int):
         """
@@ -85,7 +83,6 @@ class HillClimbing(Optimizer):
         Hill Climbing is a stationary algorithm with no dynamic parameters
         (like temperature or inertia) to update per epoch.
         """
-        pass
 
     def _update_best(self, epoch: int):
         """

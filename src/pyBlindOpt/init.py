@@ -1,4 +1,3 @@
-# coding: utf-8
 
 """
 Population initialization strategies.
@@ -18,9 +17,10 @@ __status__ = "Development"
 import collections.abc
 import logging
 
-import ess
+import ess  # type: ignore[reportMissingImports]
 import numpy as np
 
+import pyBlindOpt.emptyspace as emptyspace
 import pyBlindOpt.utils as utils
 
 logger = logging.getLogger(__name__)
@@ -237,19 +237,142 @@ def quasi_opposition_based(
     return combined_pop[top_k_indices]
 
 
-@utils.inherit_docs(ess.esa)
+def _oppose(
+    pop: np.ndarray,
+    bounds: np.ndarray,
+    mode: str,
+    rng: np.random.Generator,
+) -> np.ndarray:
+    """
+    Reflect `pop` through the centre of `bounds`.
+
+    `mode` is 'standard' for the exact reflection or 'quasi' for a point drawn
+    uniformly between the centre and that reflection. Shared by the base
+    population and the empty-space block so the two cannot drift apart.
+
+    Note the frame is whatever `bounds` is handed. Opposing the probes about
+    the *domain* centre when they were placed inside an elite sub-box throws
+    them straight back out of it; reflecting them within their own search box
+    keeps them where the restriction intended.
+    """
+    lower, upper = bounds[:, 0], bounds[:, 1]
+    opp = lower + (upper - pop)
+    if mode == "quasi":
+        center = lower + (upper - lower) / 2.0
+        opp = rng.uniform(np.minimum(center, opp), np.maximum(center, opp))
+    return utils.check_bounds(opp, bounds)
+
+
+#: Empty-space backends selected by the `force` knob of :func:`oblesa`.
+def _ess_engine(
+    samples: np.ndarray,
+    bounds: np.ndarray,
+    *,
+    n: int,
+    seed=None,
+    scores: np.ndarray | None = None,
+    attraction_weight: float = 0.5,
+    placement_weight: float | None = None,
+    att_model: str = "fourier",
+    k_cand: int = 64,
+    **ignored,
+) -> np.ndarray:
+    """The EmptySpaceSearch relaxation, behind this module's engine contract.
+
+    `ess.esa` is the production empty-space engine: dart-throwing to place the
+    points, then a force relaxation that the dart engines here deliberately do
+    not have. This adapts it rather than changing it, because the `accepts`
+    capability protocol is pyBlindOpt's convention and ESS should not have to
+    know about it.
+
+    Two mappings the adapter owns:
+
+    * **Polarity.** ESS's contract is *higher is more attractive*; it is not
+      told whether the caller minimises, and cannot guess. OBLESA minimises,
+      so the scores are negated here. Getting this backwards would pull probes
+      toward the *worst* regions and still return a plausible-looking
+      population, which makes it the one line in the substitution worth
+      staring at.
+    * **`force_weight` arrives as `attraction_weight`, in ESS's units.** It
+      scales a pairwise force bounded by a collapse condition, so it is refused
+      at or above 2.5 -- a different scale from the dart lambda it replaced.
+      `k_cand` maps to `init_pool`; both are candidates per placement.
+
+    The attraction law is `cauchy` rather than ESS's default of "same as the
+    repulsion", because two identical laws are proportional and can never
+    cross -- attraction would only weaken the push instead of pulling. See
+    `ess.esa`.
+
+    Args:
+        samples (np.ndarray): Points already occupying the space, shape (M, D).
+        bounds (np.ndarray): Search space bounds, shape (D, 2).
+        n (int): How many points to place.
+        seed: Random seed or Generator.
+        scores (np.ndarray | None): Objective values for `samples`, lower
+            better. Without them this is pure repulsion.
+        attraction_weight (float): Pull strength in ESS's units. The default
+            is ESS's own measured optimum; it is **not** `force_weight`, see
+            above.
+        att_model (str): How ESS estimates the attractiveness of a position
+            it has no measurement for -- 'fourier' fits one function of
+            position and evaluates it, 'idw' weights the nearest measured
+            points, 'detrended' does both.
+        placement_weight (float | None): Attraction weight for ESS's placement
+            step alone. None pairs it with `attraction_weight`, which is the
+            sensible default; they are separable so the guided placement and
+            the guided relaxation can be measured apart.
+        k_cand (int): Candidates per placement, forwarded as `init_pool`.
+        **ignored: Accepted and dropped, for signature compatibility.
+
+    Returns:
+        np.ndarray: The `n` placed points, shape (n, D).
+
+    """
+    del ignored
+
+    kw = {}
+    if scores is not None:
+        kw = {
+            "attractiveness": -np.asarray(scores, dtype=float),
+            "attraction_weight": attraction_weight,
+            "placement_weight": placement_weight,
+            "att_model": att_model,
+            "attraction_metric": "cauchy",
+            "attraction_kwargs": {"power": 1.0},
+        }
+    return ess.esa(samples, bounds, n=n, seed=seed, init_pool=k_cand, **kw)
+
+
+_ess_engine.accepts = frozenset(  # type: ignore[reportFunctionMemberAccess]
+    {"scores", "k_cand", "attraction_weight"})
+
+
+_FORCES = {
+    "repulsive": emptyspace.dart_esa,
+    "guided": _ess_engine,
+    "uniform": emptyspace.random_esa,
+    "ess": _ess_engine,
+}
+
+
 def oblesa(
     objective: collections.abc.Callable,
     bounds: np.ndarray,
     *,
     population: np.ndarray | utils.Sampler | None = None,
     n_pop: int = 10,
-    n_jobs: int = 1,
-    opp: str = "standard",
-    seed: int | np.random.Generator | None = None,
     selection: str = "best",
-    diversity_weight: float = 0.0,
-    **kwargs,
+    opp: str = "quasi",
+    opp_ess: bool = False,
+    force: str = "guided",
+    force_weight: float = 0.5,
+    seed: int | np.random.Generator | None = None,
+    n_jobs: int = 1,
+    n_ess: int | None = None,
+    k_cand: int = 64,
+    engine: collections.abc.Callable | None = None,
+    diversity_weight: float = 0.25,
+    info: dict | None = None,
 ) -> np.ndarray:
     """
     OBLESA (Opposition-Based Learning with Empty Space Search) Initialization.
@@ -258,23 +381,98 @@ def oblesa(
     the population is not only high-quality but also maximally distributed
     (low potential energy configuration).
 
+    The pipeline is four stages, each with its own knob::
+
+        P_0    <- sample                        n_pop points
+        P_obl  <- oppose(P_0)         `opp`     n_pop points
+        P_ess  <- probe empty space   `force`   n_ess points
+        P_eop  <- oppose(P_ess)       `opp_ess` n_ess points
+        return select(P_0 u P_obl u P_ess u P_eop)   `selection`
+
+    so the candidate pool is `2 * n_pop + 2 * n_ess` at most: 2N for plain
+    OBL (`n_ess=0`), the paper's 3N by default, 4N with `opp_ess=True`.
+
+    **How much of the empty-space block survives is a selection question,
+    not a reserved-slot one.** The empty-space candidates are probes: one that
+    is discarded found an unpromising region cheaply, which is the mechanism
+    working, and one that is kept found something. How aggressively the pool
+    is filtered is controlled by `selection` -- `'best'` for greedy, `'prob'`
+    for roulette, `'maximin'` for spread over the fittest -- together with
+    `diversity_weight`. Those cover the range without forcing any block into
+    the population regardless of what it found.
+
     Args:
         objective (Callable): The objective function to minimize.
         bounds (np.ndarray): Search space boundaries of shape (D, 2).
         population (ndarray | Sampler | None): Initial population or Sampler.
             If None, RandomSampler is used.
         n_pop (int): Number of individuals to select for the final population.
-        n_jobs (int): Number of parallel jobs for objective evaluation.
-        opp (str): Opposition method: 'standard' (exact symmetry) or 'quasi' (stochastic).
+        selection (str): Selection strategy: 'best' (greedy), 'prob' (roulette
+            over the blended score -- *not* uniform sampling) or 'maximin'
+            (sequential maximin over the fittest candidates). See
+            :func:`pyBlindOpt.utils.select_indices`.
+        opp (str): Opposition applied to the base sample: 'none', 'standard'
+            (exact reflection) or 'quasi' (stochastic, between centre and
+            reflection). 'none' makes this random + empty-space with no
+            opposition stage at all.
+        opp_ess (bool): Apply the same transform to the empty-space block,
+            appending the result to the pool. The premise is qOBL's, one level
+            down: an empty-region centroid is a guess, and the segment from the
+            centre toward its opposite is where quasi-opposition says the
+            payoff tends to sit. Ignored when `opp='none'` or `n_ess=0`.
+            Default False: worth 1.6 points of acceleration rate on the
+            factorial, against 10.6 for `opp` and 8.4 for `selection`, and it
+            *compresses* what the guided search itself earns -- the margin over
+            the uniform null falls from +6.1 to +3.6 when it is on. It competes
+            with the attraction term rather than adding to it.
+        force (str): Which force field the probes feel.
+
+            'guided' (and its explicit spelling 'ess') is the EmptySpaceSearch
+            relaxation: it places each probe on a blend of novelty and the
+            attractiveness the position is *expected* to have, then relaxes the
+            block under repulsion and attraction together. This is the
+            production backend.
+
+            'repulsive' is pure novelty -- as far as possible from everything
+            already sampled, with no notion of where the good regions are.
+            'uniform' is the null: OBLESA's pool shape and candidate count with
+            no empty-space search at all, which is what separates "the search
+            found something" from "a bigger pool gave the selector more to
+            choose from". Both are dart engines kept as controls, so the
+            relaxation is measured against something rather than assumed.
+
+            Ignored when `engine` is given.
+        force_weight (float): Attraction strength, as ESS's
+            `attraction_weight`. Bounded by a collapse condition: ESS refuses
+            anything at or above 2.5. Zero reduces the placement to pure
+            novelty, which makes a sweep over this an ablation rather than a
+            comparison of two methods.
         seed (int | Generator | None): Random seed or Generator instance.
-        selection (str): Selection strategy, either 'best' (greedy) or 'random'
-            (stochastic selection based on fitness/diversity).
+        n_jobs (int): Number of parallel jobs for objective evaluation.
+        n_ess (int | None): Size of the empty-space block. Defaults to `n_pop`.
+            Zero disables the stage, reducing this to OBL under `selection`.
+        k_cand (int): Candidates the probe search draws per placed point,
+            reaching `ess.esa` as `init_pool`. Accuracy knob of the empty-space
+            engines; higher is closer to the exact largest empty sphere and
+            linearly more expensive. ESS relaxes the block afterwards, so the
+            placement only has to be a reasonable starting point: raising this
+            to 2048 costs 4.5-7.1x and returns the same population.
+        engine (Callable | None): Empty-space backend override, called as
+            `engine(samples, bounds, n=..., seed=..., ...)`. When None it is
+            chosen by `force`. Pass `ess.esa` for the published implementation;
+            engines declare which extra keywords they accept via an `accepts`
+            attribute, and anything without one receives only the four
+            positional-equivalent arguments.
         diversity_weight (float): Trade-off between fitness (0.0) and spatial
-            diversity (1.0) using crowding distance.
-        **kwargs: Arguments passed directly to `ess.esa` for the repulsion simulation.
+            diversity (1.0) using crowding distance. The default is an interior
+            optimum, not a corner: 26.7 at 0.0, 29.4 at 0.25, 24.0 at 0.5. It
+            exists only under `selection='best'` -- the other rules already
+            spend their own randomness on spread.
+        info (dict | None): If given, filled in place with `pool_size`.
 
     Returns:
-        np.ndarray: Optimized population of shape (n_pop, D).
+        np.ndarray: Optimized population of shape (n_pop, D), ordered by
+        ascending score.
     """
     rng = (
         np.random.default_rng(seed)
@@ -282,35 +480,53 @@ def oblesa(
         else seed
     )
 
+    if opp not in ("none", "standard", "quasi"):
+        raise ValueError(f"opp must be 'none', 'standard' or 'quasi', got {opp!r}")
+    if engine is None and force not in _FORCES:
+        raise ValueError(f"force must be one of {sorted(_FORCES)}, got {force!r}")
+    probe = _FORCES[force] if engine is None else engine
+
     ran_pop, n_pop = _parse_population_arg(population, n_pop, bounds, rng)
 
-    lower, upper = bounds[:, 0], bounds[:, 1]
-    opp_pop = lower + (upper - ran_pop)
-    if opp == "standard":
-        opp_pop = utils.check_bounds(opp_pop, bounds)
-    elif opp == "quasi":
-        center = lower + (upper - lower) / 2.0
-        low_bound = np.minimum(center, opp_pop)
-        high_bound = np.maximum(center, opp_pop)
-        pop_quasi = rng.uniform(low_bound, high_bound)
-        opp_pop = utils.check_bounds(pop_quasi, bounds)
+    if opp == "none":
+        combined_samples = ran_pop
     else:
-        logger.warning(f"Invalid opp options ({opp}), fallback to standard OBL")
-        opp_pop = utils.check_bounds(opp_pop, bounds)
+        combined_samples = np.vstack((ran_pop, _oppose(ran_pop, bounds, opp, rng)))
+    n_ess = n_pop if n_ess is None else int(n_ess)
 
-    combined_samples = np.vstack((ran_pop, opp_pop))
-    emp_pop = ess.esa(combined_samples, bounds, n=2 * n_pop, seed=rng, **kwargs)
+    obl_scores = utils.compute_objective(combined_samples, objective, n_jobs)
 
-    population = np.vstack((ran_pop, opp_pop, emp_pop))
-    scores = np.zeros(population.shape[0])
+    if n_ess > 0:
+        # Only keywords the engine declares are forwarded. `ess.esa` declares
+        # nothing and pushes anything it does not recognise into its metric
+        # kernel, where it dies; this is what keeps it substitutable.
+        accepts = getattr(probe, "accepts", frozenset())
+        eng_kw = {}
+        if "k_cand" in accepts:
+            eng_kw["k_cand"] = k_cand
+        # `force_weight` under whichever name the engine calls it. ESS scales a
+        # pairwise force; an external engine scoring a candidate cloud calls the
+        # same knob `lam`. One `force` level, one attraction strength, whatever
+        # the backend spells it.
+        if "attraction_weight" in accepts:
+            eng_kw["attraction_weight"] = force_weight
+        elif "lam" in accepts:
+            eng_kw["lam"] = force_weight
+        if "scores" in accepts:
+            eng_kw["scores"] = obl_scores
+        emp_pop = probe(combined_samples, bounds, n=n_ess, seed=rng, **eng_kw)
+    else:
+        emp_pop = np.empty((0, bounds.shape[0]))
 
-    for i in range(0, population.shape[0], n_pop):
-        end = min(i + n_pop, population.shape[0])
-        batch = population[i:end]
-        scores[i:end] = utils.compute_objective(batch, objective, n_jobs)
+    if opp_ess and opp != "none" and emp_pop.shape[0]:
+        emp_pop = np.vstack((emp_pop, _oppose(emp_pop, bounds, opp, rng)))
 
-    # Delegate the selection math to the new utils method
-    return utils.select_population(
+    population = np.vstack((combined_samples, emp_pop))
+    scores = np.concatenate((
+        obl_scores, utils.compute_objective(emp_pop, objective, n_jobs)
+        if emp_pop.shape[0] else np.empty(0)))
+
+    idx = utils.select_indices(
         population=population,
         scores=scores,
         n_pop=n_pop,
@@ -318,3 +534,8 @@ def oblesa(
         diversity_weight=diversity_weight,
         rng=rng,
     )
+
+    if info is not None:
+        info["pool_size"] = int(population.shape[0])
+
+    return population[idx]

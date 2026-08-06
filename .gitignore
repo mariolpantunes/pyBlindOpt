@@ -129,3 +129,31 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+
+# Benchmark results: regenerate them, never review them.
+*.json
+examples/out/
+
+# Agent scratch
+.claude/
+.goose/
+.agy/
+
+# Working notes: plans, handoffs, measurement logs. README.md stays.
+*.md
+!README.md
+
+# Measurement scaffolding. This is a library; the index carries the library,
+# its tests, and nothing whose job is to produce a number once. Cluster
+# submission, sweep reports and reference implementations used to check a
+# result live on disk and are regenerated when needed.
+bin/
+slurm/
+examples/report_sweep.py
+examples/emptyspace_reference.py
+
+# Generated documentation. Built by .github/workflows/docs.yml and published
+# straight to Pages -- it exists on GitHub and nowhere else, so generated HTML
+# never lands in a diff, a review, or a stale working tree.
+docs/
+docs_build/

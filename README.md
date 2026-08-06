@@ -14,7 +14,7 @@ Currently, it implements thirteen different algorithms:
 2.  **Hill Climbing (HC)**: A mathematical optimization technique belonging to the family of local search algorithms. It is an iterative method that starts with an arbitrary solution and attempts to find a better one by making incremental changes to the current solution.
 3.  **Simulated Annealing (SA)**: A probabilistic technique for approximating the global optimum of a given function. It is a metaheuristic designed to escape local optima by allowing "uphill" moves (worse solutions) with a probability that decreases over time (simulating the cooling process of metallurgy).
 4.  **Genetic Algorithm (GA)**: A metaheuristic inspired by the process of natural selection that belongs to the larger class of evolutionary algorithms (EA). GA generates high-quality solutions by relying on biologically inspired operators such as mutation, crossover, and selection.
-5.  **Differential Evolution (DE)**: A population-based method that optimizes a problem by iteratively improving a candidate solution with regard to a given measure of quality. It makes few to no assumptions about the problem being optimized and is effective for searching very large spaces of candidate solutions.
+5.  **Differential Evolution (DE)**: A population-based method that optimizes a problem by iteratively improving a candidate solution with regard to a given measure of quality. It makes few to no assumptions about the problem being optimized and is effective for searching very large spaces of candidate solutions. See [Differential Evolution variants](#differential-evolution-variants) for the mutation strategies and adaptation policies available.
 6.  **Particle Swarm Optimization (PSO)**: A computational method that optimizes a problem by iteratively improving a candidate solution (particle) with regard to a given measure of quality. Particles move around the search space according to simple mathematical formulas involving their position and velocity. Each particle's movement is guided by its local best-known position and the global best-known position in the search space.
 7.  **Grey Wolf Optimization (GWO)**: A population-based metaheuristic algorithm that simulates the leadership hierarchy (Alpha, Beta, Delta, and Omega) and hunting mechanism of grey wolves in nature.
 8.  **Enhanced Grey Wolf Optimization (EGWO)**: An advanced variant of the standard GWO that incorporates mechanisms to better balance exploration and exploitation. This modification helps prevent the algorithm from stagnating in local optima, improving convergence speed and solution quality in complex landscapes.
@@ -27,6 +27,116 @@ Currently, it implements thirteen different algorithms:
 All algorithms take advantage of the [joblib](https://joblib.readthedocs.io/en/latest/) library to parallelize objective function evaluations and cache results for improved performance.
 
 > **Note:** The code has been optimized to a certain degree but was primarily created for educational purposes. Please consider libraries like [pymoo](https://pymoo.org/) or [SciPy](https://scipy.org/) if you require a production-grade implementation. Regardless, reported issues will be fixed whenever possible..
+
+## Differential Evolution variants
+
+DE is configured along two independent axes, because the literature's adaptive
+methods do not add new mutations -- they choose among the ones already there.
+
+**`variant="base/n/crossover"`** selects the mutation and the recombination:
+
+| base | mutation |
+| --- | --- |
+| `rand/1` | `v = r1 + F(r2 - r3)` -- standard, good diversity |
+| `best/1` | `v = best + F(r1 - r2)` -- greedy, converges fast |
+| `rand/2`, `best/2` | two difference vectors; more robust, slower |
+| `current-to-best/1` | `v = x + F(best - x) + F(r1 - r2)` -- rotationally invariant |
+| `current-to-pbest/1` | as above, but toward a draw from the fittest `p` fraction rather than the single best (JADE's mutation) |
+| `current-to-rand/1` | rotationally invariant, exploratory |
+
+with `bin` (independent gene swaps) or `exp` (a contiguous block) as the
+crossover.
+
+**`policy=`** selects how `F`, `cr` and the strategy are chosen each
+generation:
+
+| policy | behaviour |
+| --- | --- |
+| `"fixed"` (default) | constant `F` and `cr`, one strategy -- classical DE |
+| `"archive"` | JADE's external archive of defeated parents, widening the pool the subtracted difference vector is drawn from |
+| `"jade"` | the archive plus `F` and `cr` learned from the values that produce survivors |
+| `"shade"` | JADE with a memory of `h` settings instead of one running mean, updated by improvement-weighted means, and `p` drawn per individual |
+| `"lshade"` | SHADE plus a population that shrinks linearly as the budget is spent. **Changes `n_pop` mid-run** — see the warning below |
+| `"code"` | three trials per individual from three fixed strategies, best of the triple survives; adapts nothing, and costs **three evaluations per generation** |
+| `"sade"` | learns a probability for each strategy in a pool from how often each produced a survivor, over a rolling window |
+| `"ensemble"` | a pool of strategies and parameters, one triple per individual, **kept while it succeeds and resampled when it fails** |
+
+> **`"lshade"` changes the population size while the run is in progress.**
+> Every other policy holds `n_pop` constant, which is what lets a generation
+> be one batch of agents held connected together. L-SHADE deletes the worst
+> individuals as the budget is consumed, so the batch shrinks toward 4. If
+> anything binds a resource per individual, use `"shade"` instead — the same
+> algorithm without the reduction.
+
+```python
+from pyBlindOpt.de import differential_evolution
+
+# JADE's mutation: each individual pulled toward its own draw from the top 10%
+best, score = differential_evolution(
+    objective, bounds, variant="current-to-pbest/1/bin", p=0.1)
+
+# let the population find the strategy and parameters that suit the landscape
+best, score = differential_evolution(objective, bounds, policy="ensemble")
+```
+
+`current-to-pbest/1` exists because pulling every individual toward the *same*
+point is what makes `current-to-best/1` converge prematurely; pulling each
+toward a different good point keeps the population spread. It is bracketed by
+two variants already in the table -- `p` below `1/N` is exactly
+`current-to-best/1`, and `p = 1` draws from the whole population.
+
+The ensemble matters on multimodal landscapes, where no single strategy is
+right for the whole run. Measured on rastrigin at `d=5`, 40 individuals, 250
+generations, 8 seeds: the ensemble reached the optimum on **every** seed,
+where `best/1/bin` had a median of 1.99 and a worst case of 5.97.
+
+### What to choose
+
+There is no arm that wins everywhere, and the differences are large enough
+to matter. Median of 25 seeds, `d=10`, 40 individuals, 300 generations:
+
+| function | `best/1` (default) | p-best | p-best + archive | JADE | SHADE |
+| --- | --- | --- | --- | --- | --- |
+| sphere | **9.0e-43** | 2.1e-32 | 6.8e-27 | 3.8e-16 | 2.4e-19 |
+| rastrigin | 7.96 | 9.94 | 12.44 | 0.0031 | **0.00015** |
+| ackley | 1.0e-10 | **4.0e-15** | 6.5e-13 | 2.8e-07 | 2.2e-09 |
+| griewank | 0.0984 | **0.0148** | 0.0156 | 0.0342 | 0.0334 |
+| rosenbrock | 6.77 | 6.93 | 2.51 | 0.95 | **4.1e-05** |
+| levy | 0.0895 | **3.8e-30** | 6.4e-26 | 1.7e-14 | 4.8e-18 |
+| zakharov | **3.3e-20** | 7.0e-16 | 7.7e-13 | 2.2e-11 | 1.7e-16 |
+| dixon_price | **0.667** | 0.667 | 0.667 | 0.667 | 0.667 |
+| styblinski_tang | -363.4 | **-391.7** | -391.7 | -391.7 | -391.7 |
+
+The pattern is consistent: **the default is best where the landscape rewards
+greed and worst where it punishes it.** `best/1/bin` reaches machine
+precision on sphere and zakharov, and is the only arm that fails outright --
+7.96 on rastrigin and -363.4 on styblinski_tang, where every other arm finds
+-391.7.
+
+**JADE wins exactly where the default fails**, by 2500x on rastrigin and 7x
+on rosenbrock, and pays for it with precision on the easy functions: its
+heavy-tailed `F` keeps large steps available, which is what escapes local
+optima and also what stops it converging to 1e-40 on a bowl.
+
+**SHADE dominates JADE** on this grid: better on seven functions, tied on the
+two where every adaptive arm reaches the same answer, worse on none. The
+margin is largest on rosenbrock, 0.95 to 4.1e-05, whose curved valley is
+exactly the case where one running mean is the wrong model -- the `F` that
+works along the valley is not the `F` that works across it, and JADE has only
+one number to hold both. A memory of six can hold both, and individuals keep
+drawing from whichever slot suits them.
+
+It also recovers much of what JADE gave up for that robustness: three orders
+of magnitude on sphere and five on zakharov, without losing rastrigin. It does
+not reach `best/1`'s 9.0e-43 on a bowl, and nothing adaptive will -- keeping
+large steps available is the cost of being able to escape.
+
+The archive is worth a note of its own. On its own it is mostly *harmful* --
+it made rastrigin worse, 9.94 to 12.44 -- because it buys diversity among
+difference vectors and unimodal landscapes want the opposite. Combined with
+the adaptation it is part of the arm that wins rastrigin outright. It is a
+component of JADE, not a standalone upgrade.
+
 
 ## Installation
 
@@ -120,15 +230,88 @@ print(f"Best Score: {best_score}")
 
 ```
 
+### OBLESA — opposition plus empty-space search
+
+`init.oblesa` builds a candidate pool from three blocks and selects the
+population out of it:
+
+```
+P_0    <- sample                       n_pop points
+P_obl  <- oppose(P_0)        `opp`     n_pop points
+P_ess  <- probe empty space  `force`   n_ess points   (default n_pop)
+return select(P_0 u P_obl u P_ess)     `selection`
+```
+
+Opposition covers the reflection of what was sampled; the empty-space stage
+probes what neither block reached. Nothing is reserved — the probes compete on
+merit with everything else, so a discarded probe means the search found an
+unpromising region cheaply, which is the mechanism working rather than failing.
+
+```python
+import numpy as np
+import pyBlindOpt
+
+bounds = np.array([[-5.0, 5.0]] * 30)
+objective = pyBlindOpt.functions.rastrigin
+rng = np.random.default_rng(42)
+
+info = {}
+population = pyBlindOpt.init.oblesa(
+    objective, bounds,
+    n_pop=30,
+    opp="quasi",             # stochastic opposition, between centre and reflection
+    force="guided",          # empty-space probes attracted toward good regions
+    force_weight=0.5,        # attraction strength, in the backend's units
+    selection="best",        # greedy over fitness blended with crowding
+    diversity_weight=0.25,
+    seed=rng,
+    info=info,               # filled in place: {'pool_size': 90}
+)
+
+best, score = pyBlindOpt.differential_evolution(
+    objective, bounds, population=population, n_pop=30, n_iter=200, seed=rng)
+```
+
+`force='guided'` needs the optional [EmptySpaceSearch][ess] backend, which is
+what places and relaxes the probe block. The other two levels need nothing
+extra and exist as controls: `'repulsive'` places probes on novelty alone, with
+no notion of where the good regions are, and `'uniform'` is the null — the same
+pool shape and candidate count with no empty-space search at all. Comparing
+against them is what separates "the search found something" from "a bigger pool
+gave the selector more to choose from".
+
+[ess]: https://github.com/mariolpantunes/ess
+
+> **`force_weight` changed units in 0.3.0.** It used to be the lambda of an
+> internal dart engine — a scalar on a standardised surrogate, useful into the
+> tens. It is now the EmptySpaceSearch backend's `attraction_weight`, which
+> scales a pairwise force and is refused at or above 2.5. Values tuned against
+> the old engine do not carry over.
+
+## Development
+
+The checks in CI also run at commit time:
+
+```bash
+pip install pre-commit
+pre-commit install
+```
+
+That gates each commit on ruff, basedpyright, vulture and the unit tests --
+the same four the GitHub Action runs, reading the same `pyproject.toml`, so a
+commit that passes locally passes there. `pre-commit run --all-files` checks
+the tree without committing.
+
 ## Documentation
 
 This library is documented using Google-style docstrings.
-The full documentation can be accessed [here](https://mariolpantunes.github.io/pyBlindOpt/).
+The full documentation is built and published from `main` by the
+`docs` workflow, and lives [here](https://mariolpantunes.github.io/pyBlindOpt/).
 
-To generate the documentation locally, run the following command:
+To preview it locally:
 
 ```bash
-pdoc --math -d google -o docs src/pyBlindOpt
+pdoc --math -d google src/pyBlindOpt
 ```
 
 ## Authors

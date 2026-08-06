@@ -1,4 +1,3 @@
-# coding: utf-8
 
 """
 Genetic Algorithm (GA).
@@ -297,13 +296,11 @@ class GeneticAlgorithm(Optimizer):
         """
         Initialization hook.
         """
-        pass
 
     def _update_iter_params(self, epoch: int):
         """
         Parameter update hook.
         """
-        pass
 
     def _update_best(self, epoch: int):
         """

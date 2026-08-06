@@ -1,4 +1,3 @@
-# coding: utf-8
 
 """
 Benchmark functions for evaluating optimization algorithms.
@@ -162,3 +161,146 @@ def griewank(x: np.ndarray) -> np.ndarray:
     term2 = np.prod(np.cos(x / np.sqrt(indices)), axis=-1)
 
     return term1 - term2 + 1
+
+
+# ==============================================================================
+# Asymmetric landscapes
+# ==============================================================================
+# Everything above except Rosenbrock is EVEN -- f(x) == f(-x) -- and on the
+# symmetric boxes these are normally posed over that makes them a poor test of
+# anything opposition-based: the opposite of x is exactly -x and carries
+# identical fitness, so an OBL pool is half mirror pairs. Shifting the optimum
+# off centre fixes the *location* but not the symmetry, and three of them are
+# periodic as well, so a lattice of near-equivalent basins survives the shift.
+#
+# The three below break that on purpose, each in a different way:
+# Styblinski-Tang by an odd term, Lévy by a structure with no symmetry at all,
+# Zakharov by index weighting that breaks permutation symmetry too.
+
+
+def styblinski_tang(x: np.ndarray) -> np.ndarray:
+    """
+    Styblinski-Tang Function.
+
+    Multimodal and separable, with $2^D$ local minima -- one per orthant --
+    of which only one is global. The linear $5x_i$ term is what makes it
+    **asymmetric**: $f(x) \\neq f(-x)$, so a reflected point is a genuinely
+    different candidate rather than a duplicate with the same score.
+
+    **Equation:**
+    $$ f(x) = \\frac{1}{2}\\sum_{i=1}^D (x_i^4 - 16 x_i^2 + 5 x_i) $$
+
+    **Global Minimum:**
+    $f(x) = -39.16599 D$ at $x_i = -2.903534$.
+
+    Args:
+        x (np.ndarray): Input vector(s).
+
+    Returns:
+        np.ndarray: Computed function values.
+    """
+    return 0.5 * np.sum(np.power(x, 4) - 16.0 * np.power(x, 2) + 5.0 * x, axis=-1)
+
+
+def levy(x: np.ndarray) -> np.ndarray:
+    """
+    Lévy Function.
+
+    Highly multimodal and non-separable, built on a change of variables that
+    treats the first and last coordinates differently from the rest. That
+    construction leaves it with no symmetry to exploit -- neither reflection
+    nor permutation -- which is the property the even functions lack.
+
+    **Equation:**
+    With $w_i = 1 + (x_i - 1) / 4$,
+    $$ f(x) = \\sin^2(\\pi w_1)
+       + \\sum_{i=1}^{D-1}(w_i-1)^2\\left[1 + 10\\sin^2(\\pi w_i + 1)\\right]
+       + (w_D-1)^2\\left[1 + \\sin^2(2\\pi w_D)\\right] $$
+
+    **Global Minimum:**
+    $f(x) = 0$ at $x_i = 1$.
+
+    Args:
+        x (np.ndarray): Input vector(s).
+
+    Returns:
+        np.ndarray: Computed function values.
+    """
+    w = 1.0 + (x - 1.0) / 4.0
+
+    first = np.power(np.sin(np.pi * w[..., 0]), 2)
+    last = np.power(w[..., -1] - 1.0, 2) * (
+        1.0 + np.power(np.sin(2.0 * np.pi * w[..., -1]), 2)
+    )
+
+    middle = w[..., :-1]
+    body = np.sum(
+        np.power(middle - 1.0, 2)
+        * (1.0 + 10.0 * np.power(np.sin(np.pi * middle + 1.0), 2)),
+        axis=-1,
+    )
+
+    return first + body + last
+
+
+def zakharov(x: np.ndarray) -> np.ndarray:
+    """
+    Zakharov Function.
+
+    Unimodal, non-separable and increasingly ill-conditioned with dimension.
+    The coordinates enter the sums weighted by their **index**, so unlike every
+    other function here it is not invariant under permuting them -- a design
+    that spreads its points evenly across dimensions is not thereby doing the
+    right thing, which makes this a useful counterweight to the separable
+    multimodal landscapes.
+
+    Note it is still *even*: every term sees $x$ through an even power of the
+    weighted sum, so $f(x) = f(-x)$ and it does not break reflection symmetry.
+    It is here for the conditioning and the index weighting, not for that.
+
+    **Equation:**
+    $$ f(x) = \\sum_{i=1}^D x_i^2
+       + \\left(\\sum_{i=1}^D 0.5\\,i\\,x_i\\right)^2
+       + \\left(\\sum_{i=1}^D 0.5\\,i\\,x_i\\right)^4 $$
+
+    **Global Minimum:**
+    $f(x) = 0$ at $x = [0, ..., 0]$.
+
+    Args:
+        x (np.ndarray): Input vector(s).
+
+    Returns:
+        np.ndarray: Computed function values.
+    """
+    idx = np.arange(1, x.shape[-1] + 1)
+    partial = np.sum(0.5 * idx * x, axis=-1)
+    return np.sum(np.power(x, 2), axis=-1) + np.power(partial, 2) + np.power(partial, 4)
+
+
+def dixon_price(x: np.ndarray) -> np.ndarray:
+    """
+    Dixon-Price Function.
+
+    Unimodal, non-separable, and **asymmetric**: the leading $(x_1 - 1)^2$
+    term alone means $f(x) \\neq f(-x)$. Each coordinate is coupled to its
+    predecessor, so the valley twists rather than lying along an axis.
+
+    **Equation:**
+    $$ f(x) = (x_1 - 1)^2
+       + \\sum_{i=2}^{D} i\\left(2x_i^2 - x_{i-1}\\right)^2 $$
+
+    **Global Minimum:**
+    $f(x) = 0$ at $x_i = 2^{-(2^i - 2) / 2^i}$.
+
+    Args:
+        x (np.ndarray): Input vector(s).
+
+    Returns:
+        np.ndarray: Computed function values.
+    """
+    idx = np.arange(2, x.shape[-1] + 1)
+    head = np.power(x[..., 0] - 1.0, 2)
+    tail = np.sum(
+        idx * np.power(2.0 * np.power(x[..., 1:], 2) - x[..., :-1], 2), axis=-1
+    )
+    return head + tail

@@ -1,4 +1,3 @@
-# coding: utf-8
 
 """
 Enhanced Grey Wolf Optimization (EGWO).

@@ -115,15 +115,89 @@ class TestUtils(unittest.TestCase):
         pop_high = sampler.sample(10, bounds_high)
         self.assertEqual(pop_high.shape, (10, 40))
 
-    def test_sobol_dimension_limit(self):
-        """Test that Sobol raises error for unsupported dimensions (>40)"""
-        # Create bounds for 41 dimensions
-        bounds = np.zeros((41, 2))
+    def test_sobol_no_dimension_limit(self):
+        """Sobol has no dimension ceiling: direction numbers are generated."""
+        bounds = np.zeros((64, 2))
+        bounds[:, 1] = 1.0
 
-        sampler = utils.SobolSampler(self.rng)
+        pop = utils.SobolSampler(self.rng).sample(16, bounds)
 
-        with self.assertRaises(ValueError):
-            sampler.sample(10, bounds)
+        self.assertEqual(pop.shape, (16, 64))
+        self.assertTrue(utils.assert_bounds(pop, bounds))
+
+    def test_sobol_primitive_polynomials(self):
+        """
+        Every generated polynomial must be primitive over GF(2) and distinct.
+
+        This is the property the old hard-coded table violated: five of its
+        rows were not primitive and six polynomials were reused across up to
+        four dimensions, which is why dimensions above 19 did not describe a
+        Sobol sequence at all.
+        """
+        polys = utils._primitive_polynomials(80)
+
+        self.assertEqual(len(polys), 80)
+        self.assertEqual(len(set(polys)), 80, "polynomials must be distinct")
+        for s, a in polys:
+            self.assertTrue(
+                utils._is_primitive((1 << s) | (a << 1) | 1, s),
+                f"({s}, {a}) is not primitive over GF(2)",
+            )
+        # Degree must be non-decreasing: the enumeration goes by degree.
+        degrees = [s for s, _ in polys]
+        self.assertEqual(degrees, sorted(degrees))
+
+    def test_sobol_stratification(self):
+        """
+        Each coordinate of a 2^k-point design must be a (0, k, 1)-net.
+
+        With `n = 2**k` points every dimension has to hit each of the `n`
+        equal strata exactly once. The previous Gray-code driver derived its
+        direction index from `i` instead of `i - 1`, shifting the sequence by
+        one point and dropping the origin, so this failed in every dimension.
+        """
+        n = 128
+        bounds = np.zeros((24, 2))
+        bounds[:, 1] = 1.0
+
+        pop = utils.SobolSampler(self.rng).sample(n, bounds)
+        strata = np.floor(pop * n).astype(int)
+
+        for d in range(bounds.shape[0]):
+            self.assertEqual(
+                len(np.unique(strata[:, d])), n, f"dimension {d} does not stratify"
+            )
+
+    def test_sobol_projections_uncorrelated(self):
+        """
+        No coordinate pair may correlate strongly when points outnumber dims.
+
+        Correlated projections are the failure mode of unoptimized direction
+        numbers, and the reason `_sobol_extend` searches for them rather than
+        defaulting to `m_i = 1`. Only asserted for `n >= 4 * d`: with fewer
+        points than dimensions some pair must correlate whatever the design.
+        """
+        for d, n in ((16, 256), (40, 256), (64, 1024)):
+            bounds = np.zeros((d, 2))
+            bounds[:, 1] = 1.0
+            pop = utils.SobolSampler(np.random.default_rng(0)).sample(n, bounds)
+
+            corr = np.corrcoef(pop.T)
+            np.fill_diagonal(corr, 0.0)
+
+            self.assertLess(
+                float(np.abs(corr).max()), 0.5, f"correlated projection at d={d}"
+            )
+
+    def test_sobol_prefix_stable(self):
+        """
+        The direction numbers for `d` dimensions must be a prefix of those for
+        any larger `d`, so the cache can be grown and sliced.
+        """
+        wide = utils._sobol_extend(50)
+        narrow = utils._sobol_extend(12)
+
+        np.testing.assert_array_equal(wide[:12], narrow)
 
     def test_chaotic_sampler(self):
         """Test Chaotic Map Sampler (Logistic Map)"""
@@ -232,14 +306,51 @@ class TestUtils(unittest.TestCase):
         samples = np.array([[0.0], [1.0], [2.0], [5.0]])
         crowding = utils.compute_crowding_distance(samples)
 
-        # Internal points check
-        # Range=5. P1 (1.0) -> (2-0)/5 = 0.4
+        # Range=5.
+        # Interior points span their two neighbours:
+        #   P1 (1.0) -> (2-0)/5 = 0.4     P2 (2.0) -> (5-1)/5 = 0.8
         self.assertAlmostEqual(crowding[1], 0.4)
+        self.assertAlmostEqual(crowding[2], 0.8)
 
-        # Boundaries check (Boosted Finite Max)
-        # Max finite is 0.8. Boundary logic is max_dist * 2.0 -> 1.6
-        self.assertTrue(crowding[0] > 0.8)
-        self.assertTrue(crowding[3] > 0.8)
+        # Extremes take twice their single gap:
+        #   P0 (0.0) -> 2*(1-0)/5 = 0.4   P3 (5.0) -> 2*(5-2)/5 = 1.2
+        self.assertAlmostEqual(crowding[0], 0.4)
+        self.assertAlmostEqual(crowding[3], 1.2)
+
+        # The extreme wedged against its neighbour is not the most isolated.
+        self.assertLess(crowding[0], crowding[3])
+        self.assertFalse(np.any(np.isinf(crowding)))
+
+    def test_crowding_distance_accumulates_across_axes(self):
+        """Being extreme on one axis must not erase spread from another."""
+        samples = np.array([
+            [0.0, 0.5],     # extreme on axis 0, interior on axis 1
+            [0.5, 0.0],
+            [0.51, 1.0],
+            [1.0, 0.51],
+        ])
+        crowding = utils.compute_crowding_distance(samples)
+        # Points with room on both sides beat the pair crowded together.
+        self.assertTrue(np.all(crowding >= 0))
+        self.assertGreater(crowding[0], crowding[2])
+
+    def test_crowding_distance_discriminates_in_high_dimension(self):
+        """It must still separate points when D is comparable to N.
+
+        At D=100 with a 120-point pool, 88% are extreme on some axis.
+        """
+        rng = np.random.default_rng(0)
+        samples = rng.uniform(-5.0, 5.0, size=(120, 100))
+        crowding = utils.compute_crowding_distance(samples)
+
+        self.assertFalse(np.any(np.isinf(crowding)))
+        # No mass tie: the pool must not share a handful of distinct values.
+        self.assertGreater(len(np.unique(np.round(crowding, 9))), 100)
+        # And a genuinely isolated point must outrank a crowded one.
+        crowded = samples.mean(axis=0) + rng.normal(0, 1e-3, size=(4, 100))
+        packed = utils.compute_crowding_distance(
+            np.vstack((samples, crowded)))
+        self.assertLess(packed[-4:].mean(), packed[:120].mean())
 
     def test_compute_objective_vectorized(self):
         """
