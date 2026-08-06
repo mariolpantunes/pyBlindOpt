@@ -1,4 +1,3 @@
-# coding: utf-8
 
 __author__ = "Mário Antunes"
 __version__ = "0.2"
@@ -24,12 +23,10 @@ class TestUtils(unittest.TestCase):
         class Parent:
             """Parent documentation."""
 
-            pass
 
         @utils.inherit_docs(Parent)
         def child_func():
             """Child documentation."""
-            pass
 
         doc = child_func.__doc__
 

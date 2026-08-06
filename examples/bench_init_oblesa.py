@@ -218,15 +218,15 @@ DIMS = (2, 5, 10, 20, 40, 64, 100)
 #
 #   opp        base opposition: standard or quasi
 #   opp_ess    extend it to the probe block (3N pool -> 4N)
-#   force      what pulls the probes: uniform null, pure repulsion, or
-#              repulsion plus attraction toward low predicted objective at
-#              weight `force_weight`
+#   engine     what pulls the probes: the uniform null, or ESS's repulsion
+#              plus attraction toward low predicted objective at weight
+#              `force_weight`
 #   selection  how the pool is filtered, with `diversity_weight`
 #
-# `force='uniform'` is the null: OBLESA's pool shape and candidate count with
-# no empty-space search at all. Its presence at every point of the grid is
-# what lets a margin be attributed to the search rather than to pool size --
-# the comparison OBLESA-versus-OBL on its own cannot make.
+# `_uniform_null` is the null: OBLESA's pool shape and candidate count with no
+# empty-space search at all. Its presence at every point of the grid is what
+# lets a margin be attributed to the search rather than to pool size -- the
+# comparison OBLESA-versus-OBL on its own cannot make.
 
 BASELINE_ARMS = (
     "random", "sobol", "lhs",       # samplers, N calls
@@ -254,33 +254,41 @@ def baseline_for(arm):
 SHIFT = [True]        # cleared by --no-shift; module-level so one_run sees it
 SHIFT_FRAC = [0.8]
 
+def _uniform_null(samples, bounds, *, n, seed=None, **ignored):
+    """The no-search null: `n` uniform points, same pool shape, nothing sought.
+
+    This is the control the whole design rests on. OBLESA against OBL confounds
+    two things -- a larger candidate pool, and a pool with points chosen by
+    searching empty space -- and only an arm that spends the same candidates
+    without searching separates them.
+
+    Four lines here rather than a call into ESS: the null must not move when
+    ESS changes, or it stops being a fixed reference.
+    """
+    del samples, ignored
+    rng = seed if isinstance(seed, np.random.Generator) else np.random.default_rng(seed)
+    return rng.uniform(bounds[:, 0], bounds[:, 1], size=(int(n), bounds.shape[0]))
+
+
 #: Engine level -> the knobs that select it.
 #:
-#: **This is the attraction ladder, and it exists because the 86-arm sweep
-#: measured attraction at exactly two points.** `dart` is lambda = 0 (pure
-#: repulsion) and `dartg` was lambda = 8; between them sits the entire engine
-#: effect -- 0.5317 to 0.4655 in mean normalised rank under `de`, larger than
-#: any other axis in that sweep -- and its shape in between, and beyond 8,
-#: was never observed. A two-point measurement cannot locate an optimum, only
-#: a direction, so 8.0 is a default with no evidence that it is the right
-#: default. The ladder brackets it on both sides.
+#: **The attraction ladder.** Every rung is ESS; what varies is how hard the
+#: probes are pulled toward positions the pool's own fitness says should be
+#: good. `a000` is novelty alone, so the ladder is an ablation of attraction
+#: rather than a comparison of two methods, and `null` at the bottom is the
+#: no-search control that separates "the search found something" from "a
+#: bigger pool gave the selector more to choose from".
 #:
-#: `null` stays as the no-search control at every point of the grid, which is
-#: what lets a margin be attributed to the search rather than to pool size.
-#: The `ess` relaxation engines are dropped: all three attraction weights
-#: landed within 0.013 of each other and of the null, so they measured
-#: nothing, and each one costs roughly twice a dart arm in wall clock.
+#: `force_weight` is ESS's `attraction_weight`: it scales a pairwise force
+#: bounded by a collapse condition, and ESS refuses it at or above 2.5, so the
+#: ladder stops at 2.0.
 #:
-#: `force_weight` is dart's lambda on a *standardised* surrogate -- the
-#: fitness term is z-scored before it is added to the novelty term -- so the
-#: levels are ratios of attraction to repulsion, comparable across functions
-#: and dimensions, and a geometric ladder is the right spacing for them.
-#: ESS's `attraction_weight`, not the retired dart lambda: it scales a
-#: pairwise force and ESS refuses it at or above 2.5, so the ladder stops at
-#: 2.0 and no number from the 620,000-run dart sweep transfers.
+#: No number from the earlier sweep sets these levels. That sweep ran on a
+#: dart stand-in built to answer "is OBLESA worth pursuing" before ESS existed
+#: -- a different engine on a different scale, whose lambda has no conversion
+#: into this one.
 _ENGINE_LEVELS = {
-    "null": {"force": "uniform"},
-    "rep0": {"force": "repulsive"},                        # no attraction
+    "null": {"engine": _uniform_null},
     "a000": {"force": "guided", "force_weight": 0.00},     # ESS, novelty only
     "a025": {"force": "guided", "force_weight": 0.25},
     "a050": {"force": "guided", "force_weight": 0.50},     # ESS's own default
@@ -295,8 +303,8 @@ _ENGINE_LEVELS = {
 _ATT_MODELS = ("fourier", "idw", "detrended")
 
 #: Probe-block size as a multiple of `n_pop`: 1N, the paper's 3N pool. The 2N
-#: the 86-arm sweep preferred was measured on dart; `opp_ess` reaches the same
-#: 4N as `[N, N_opp, N_ess, N_ess_opp]`.
+#: the earlier sweep preferred was measured on a different engine; `opp_ess`
+#: reaches the same 4N as `[N, N_opp, N_ess, N_ess_opp]`.
 _N_ESS_MULT = 1.0
 
 #: Selection rule with its diversity weight, crossed against attraction
@@ -346,15 +354,22 @@ OPTIMIZERS = {
     "egwo": (egwo.enhanced_grey_wolf_optimization, {}),
 }
 
-#: Knobs held fixed, with the evidence for each, so the budget goes to what
-#: is genuinely unknown for this engine.
+#: Knobs held fixed so the budget goes to what is genuinely unknown.
+#:
+#: **Both were fixed on evidence from the retired dart engine, and neither
+#: has been re-measured on ESS.** `opp` is the one that matters: it was frozen
+#: at 31.6 against 21.0 for standard, but a later 12-seed probe under `ga` put
+#: quasi at +2.39 against standard's +39.09 at d=32. That reverses the
+#: decision on the optimizer least able to recover from a bad start. See
+#: TODO.md -- returning `opp` to the swept axis is the first thing the next
+#: sweep should do.
 _FIXED = {
-    "opp": "quasi",        # 31.6 vs 21.0 for standard; largest single effect
+    "opp": "quasi",
     "opp_ess": False,      # worth 1.6, and compresses the guided margin
 }
 
-#: Only crossed where there is attraction to estimate: crossing `null`, `rep0`
-#: and `a000` would ship three bit-identical arms under three names.
+#: Only crossed where there is attraction to estimate: crossing `null` and
+#: `a000` would ship two bit-identical arms under two names.
 _MODEL_SUFFIX = {"fourier": "f", "idw": "i", "detrended": "d"}
 
 OBLESA_KNOBS = {}
@@ -378,11 +393,9 @@ ARMS_INIT = BASELINE_ARMS + tuple(OBLESA_KNOBS)
 
 #: What each arm reports as its engine, for grouping in the report.
 ENGINE_LABEL = {
-    name: {"uniform": "uniform-random-null",
-           "repulsive": "dart-largest-empty-sphere",
-           "guided": "ess-relaxation-w{:g}-{}".format(
-               kw.get("force_weight", 0), kw.get("_att_model") or "none"),
-           }[kw["force"]]
+    name: "uniform-random-null" if kw.get("engine") is _uniform_null
+    else "ess-relaxation-w{:g}-{}".format(
+        kw.get("force_weight", 0), kw.get("_att_model") or "none")
     for name, kw in OBLESA_KNOBS.items()
 }
 
@@ -466,7 +479,7 @@ def population_dispersion(pop, bounds):
     """ESS-layer scores for one initial population, in bounded space."""
     lo, hi = bounds[:, 0], bounds[:, 1]
     unit = np.clip((np.asarray(pop, float) - lo) / (hi - lo), 0.0, 1.0)
-    n = unit.shape[0]
+    unit.shape[0]
     # Mean nearest-neighbour Euclidean gap: the "are points spread out"
     # question the empty-space stage is supposed to answer, measured in the
     # optimizer's own metric rather than the relaxation's.
@@ -525,7 +538,7 @@ def initial_population(arm, objective, bounds, n_pop, rng, stats=None, info=None
     if arm in OBLESA_KNOBS:
         # Every OBLESA arm goes through the same `init.oblesa` call; the arm
         # name only selects keyword arguments. The empty-space engine included
-        # -- it is chosen by the `force` knob rather than by a monkeypatched
+        # -- it arrives as `force` or `engine` rather than as a monkeypatched
         # module attribute -- so the opposition step, the pool shape and the
         # selection rule stay bit-for-bit identical across arms that share
         # them, and each knob is genuinely the only thing that varies along
@@ -533,14 +546,15 @@ def initial_population(arm, objective, bounds, n_pop, rng, stats=None, info=None
         kw = dict(OBLESA_KNOBS[arm])
         # `_n_ess_mult` is an arm-table convention, not an `oblesa` argument.
         mult = kw.pop("_n_ess_mult", 1.0)
-        kw["n_ess"] = max(1, int(round(mult * n_pop)))
+        kw["n_ess"] = max(1, round(mult * n_pop))
         # `oblesa` forwards `force_weight`; `att_model` is ESS's own knob,
         # below the engine contract, so bind it through `engine=`.
         model = kw.pop("_att_model", None)
         if model is not None:
             kw["engine"] = functools.partial(
                 init._ess_engine, att_model=model)
-            kw["engine"].accepts = init._ess_engine.accepts
+            kw["engine"].accepts = (  # type: ignore[reportAttributeAccessIssue]
+                init._ess_engine.accepts)  # type: ignore[reportFunctionMemberAccess]
             kw.pop("force", None)
         if stats is not None and arm in ENGINE_LABEL:
             stats["engine"] = ENGINE_LABEL[arm]
@@ -579,8 +593,8 @@ def one_cell(init_arm, fname, d, seed, n_pop, n_iter, optimizers):
     so a difference between them cannot be initialization noise.
 
     **Two independent generators, and the reason matters.** The arms consume
-    wildly different amounts of randomness during initialization — the dart
-    engine draws `k_cand` candidates per placement, plain sampling draws once.
+    wildly different amounts of randomness during initialization — the probe
+    search draws `k_cand` candidates per placement, plain sampling draws once.
     Feeding the optimizer whatever generator state the initializer happened to
     leave behind means each arm runs on a different random trajectory, so a
     paired comparison would be measuring two changes at once and attributing
@@ -920,8 +934,8 @@ def report(rows, args):
     by = {}
     for r in rows:
         by.setdefault((r["n_pop"], r["function"], r["d"], r["arm"]), []).append(r)
-    for k in by:
-        by[k].sort(key=lambda r: r["seed"])
+    for group in by.values():
+        group.sort(key=lambda r: r["seed"])
 
     # Everything below is measured against a baseline arm, so a column whose
     # baseline was not run has no comparison to report. Saying so beats

@@ -15,13 +15,6 @@ A new candidate solution $v_{i,j}$ is generated from $x_{i,j}$ using a partner $
 $$ v_{i,j} = x_{i,j} + \\phi_{i,j} (x_{i,j} - x_{k,j}) $$
 """
 
-__author__ = "Mário Antunes"
-__license__ = "MIT"
-__version__ = "0.2.0"
-__email__ = "mario.antunes@ua.com"
-__url__ = "https://github.com/mariolpantunes/pyblindopt"
-__status__ = "Development"
-
 
 import numpy as np
 

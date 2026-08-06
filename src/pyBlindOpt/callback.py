@@ -6,13 +6,6 @@ Provides ready-to-use callbacks that can be injected into the `Optimizer` loop
 to modify behavior (e.g., Early Stopping).
 """
 
-__author__ = "Mário Antunes"
-__license__ = "MIT"
-__version__ = "0.2.0"
-__email__ = "mario.antunes@ua.com"
-__url__ = "https://github.com/mariolpantunes/pyblindopt"
-__status__ = "Development"
-
 
 import warnings
 

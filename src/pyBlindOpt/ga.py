@@ -10,12 +10,6 @@ Evolves a population using operators: Selection, Crossover (Recombination), and 
 Survival of the fittest. Individuals compete to reproduce. The best traits are combined to create offspring, and random mutations introduce diversity to prevent stagnation.
 """
 
-__author__ = "Mário Antunes"
-__license__ = "MIT"
-__version__ = "0.2.0"
-__email__ = "mario.antunes@ua.com"
-__url__ = "https://github.com/mariolpantunes/pyblindopt"
-__status__ = "Development"
 
 import collections.abc
 

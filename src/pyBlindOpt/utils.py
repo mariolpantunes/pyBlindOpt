@@ -6,12 +6,6 @@ Provides mathematical helpers, sampling strategies, and evaluation logic
 required by various optimization algorithms.
 """
 
-__author__ = "Mário Antunes"
-__license__ = "MIT"
-__version__ = "0.2.0"
-__email__ = "mario.antunes@ua.com"
-__url__ = "https://github.com/mariolpantunes/pyblindopt"
-__status__ = "Development"
 
 import abc
 import functools
@@ -167,6 +161,7 @@ class RandomSampler(Sampler):
     """
 
     def sample(self, n_pop: int, bounds: np.ndarray) -> np.ndarray:
+        """`n_pop` independent uniform draws, one per individual."""
         lower = bounds[:, 0]
         upper = bounds[:, 1]
         return self.rng.uniform(low=lower, high=upper, size=(n_pop, bounds.shape[0]))
@@ -182,6 +177,12 @@ class HLCSampler(Sampler):
     """
 
     def sample(self, n_pop: int, bounds: np.ndarray) -> np.ndarray:
+        """One sample per stratum per dimension, then the columns shuffled.
+
+        Stratifying alone would leave every point on the diagonal; the
+        independent per-dimension permutation is what turns `dim` sorted
+        ladders into a Latin hypercube.
+        """
         dim = bounds.shape[0]
         # 1. Generate stratified samples in [0, 1]
         samples = np.zeros((dim, n_pop))
@@ -437,6 +438,12 @@ class SobolSampler(Sampler):
     """
 
     def sample(self, n_pop: int, bounds: np.ndarray) -> np.ndarray:
+        """The first `n_pop` points of the sequence, by Gray-code recursion.
+
+        Deterministic: the same `n_pop` and `dim` always give the same
+        design, which is what makes it a *quasi*-random baseline rather
+        than another random one.
+        """
         dim = bounds.shape[0]
         SCALE = 1 << _SOBOL_BITS
 
@@ -481,6 +488,11 @@ class ChaoticSampler(Sampler):
     """
 
     def sample(self, n_pop: int, bounds: np.ndarray) -> np.ndarray:
+        """`n_pop` iterates of the tent map, one chaotic orbit per dimension.
+
+        The orbit is seeded away from the map's fixed points (0, 0.5, 1),
+        where it would collapse to a constant instead of exploring.
+        """
         dim = bounds.shape[0]
 
         # Initialize x with random start (avoid 0.0, 0.5, 1.0 fixed points)

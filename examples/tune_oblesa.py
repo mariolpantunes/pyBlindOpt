@@ -3,7 +3,7 @@ import logging
 import sys
 
 import numpy as np
-import optuna
+import optuna  # type: ignore[reportMissingImports]
 
 from pyBlindOpt.callback import EarlyStopping
 from pyBlindOpt.de import DifferentialEvolution
@@ -87,7 +87,7 @@ def evaluate_single_run(
         population=population,  # Pass the OBLESA population
         n_iter=MAX_OPTIMIZER_EPOCHS,
         variant="best/1/bin",
-        callback=stopper.callback,
+        callback=stopper,   # EarlyStopping is the callback: it defines __call__
         seed=seed,
     )
 
@@ -119,8 +119,8 @@ def objective(trial: optuna.Trial, n_seeds: int):
     oblesa_params = {
         "opp": trial.suggest_categorical("opp", ["standard", "quasi"]),
         "opp_ess": trial.suggest_categorical("opp_ess", [False, True]),
-        "force": trial.suggest_categorical(
-            "force", ["guided", "repulsive", "uniform"]),
+        # No `force` axis: ESS is the engine. What the tuner varies is how hard
+        # the probes are pulled toward predicted-good regions, below.
         # ESS refuses `weight * F_att(0) >= F_rep(0)`, which caps this at 2.5.
         "force_weight": trial.suggest_float("force_weight", 0.0, 2.0, step=0.25),
         "selection": trial.suggest_categorical(
@@ -135,7 +135,7 @@ def objective(trial: optuna.Trial, n_seeds: int):
     # We loop over functions and dimensions.
     # To speed things up, if the performance is terrible on low dims, we prune.
 
-    for func_name in BENCHMARKS.keys():
+    for func_name in BENCHMARKS:
         for dim in DIMENSIONS:
             # Aggregate score over multiple seeds
             seed_scores = []
@@ -193,7 +193,7 @@ def main():
     logger.info("Landscape types being tested:")
 
     # Visual context for the user (simulated)
-    print("")
+    print()
 
     # Create Study
     study = optuna.create_study(

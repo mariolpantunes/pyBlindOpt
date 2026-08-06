@@ -16,13 +16,6 @@ $$ x_i^{t+1} = x_i^t + \\beta_0 e^{-\\gamma r_{ij}^2} (x_j^t - x_i^t) + \\alpha 
 where $r_{ij}$ is the distance, $\\beta_0$ is attractiveness at $r=0$, and $\\alpha$ is the randomization parameter.
 """
 
-__author__ = "Mário Antunes"
-__license__ = "MIT"
-__version__ = "0.2.0"
-__email__ = "mario.antunes@ua.com"
-__url__ = "https://github.com/mariolpantunes/pyblindopt"
-__status__ = "Development"
-
 
 import numpy as np
 

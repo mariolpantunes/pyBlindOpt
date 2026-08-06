@@ -139,9 +139,11 @@ examples/out/
 .goose/
 .agy/
 
-# Working notes: plans, handoffs, measurement logs. README.md stays.
+# Working notes: plans, handoffs, measurement logs. Project documents stay.
 *.md
 !README.md
+!CHANGELOG.md
+!TODO.md
 
 # Measurement scaffolding. This is a library; the index carries the library,
 # its tests, and nothing whose job is to produce a number once. Cluster
