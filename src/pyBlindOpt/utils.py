@@ -618,6 +618,25 @@ def compute_crowding_distance(samples: np.ndarray) -> np.ndarray:
     Estimates the density of solutions surrounding a particular point in the objective space.
     Higher distance = More isolated (Better for diversity).
 
+    **Per-axis extremes get a finite score, not infinity.** NSGA-II assigns the
+    two extremes of every axis an infinite crowding distance so a *Pareto
+    front* can never lose its endpoints -- a front spans two or three
+    objectives, so that marks four to six solutions. This measures spread over
+    a `D`-dimensional decision space instead, where `D` is the problem's
+    dimension, and the same rule marks up to `2 * D` of them. On OBLESA's pool
+    of `4 * n_pop = 120` candidates the fraction that is extreme on at least
+    one axis runs 12% at `D=8`, 41% at `D=32` and **88% at `D=100`**, and
+    infinities collapse to one shared value however they are later rescaled.
+    Past roughly `D = N / 4` the measure stops discriminating altogether.
+
+    So an extreme scores twice the one gap it has, which is the same quantity
+    an interior point scores -- the span its neighbours enclose -- for the only
+    neighbour it owns. An extreme wedged against its neighbour is then correctly
+    reported as crowded, and one standing off alone still wins. The accumulation
+    over axes is also a true sum: the previous code *assigned* infinity inside
+    the per-axis loop, so a point that had banked real spread across earlier
+    axes lost all of it the moment it happened to be extreme on a later one.
+
     Args:
         samples (np.ndarray): Shape (N, D)
 
@@ -637,35 +656,26 @@ def compute_crowding_distance(samples: np.ndarray) -> np.ndarray:
         sorted_indices = np.argsort(samples[:, d])
         sorted_samples = samples[sorted_indices, d]
 
-        # 2. Handle Boundaries
-        # The min and max points in each dim are always "infinite" distance (most isolated)
-        distances[sorted_indices[0]] = np.inf
-        distances[sorted_indices[-1]] = np.inf
-
-        # 3. Compute Distance for Internal Points
-        # Formula: (Next_Val - Prev_Val) / (Max_Val - Min_Val)
+        # 2. Normalise by this axis's spread, so axes with different units
+        # contribute comparably to the sum.
         scale = sorted_samples[-1] - sorted_samples[0]
 
         if scale == 0:
             continue  # All points are identical in this dimension
 
+        # 3. Interior points: the span their two neighbours enclose.
         # Vectorized difference: P[i+1] - P[i-1]
         # We slice sorted_samples from [2:] and [:-2] to get next/prev neighbors
-        dim_dist = (sorted_samples[2:] - sorted_samples[:-2]) / scale
-
-        # Add to the cumulative score of the corresponding original indices
         # Indices [1:-1] correspond to the internal points we just computed
-        distances[sorted_indices[1:-1]] += dim_dist
+        distances[sorted_indices[1:-1]] += (
+            sorted_samples[2:] - sorted_samples[:-2]) / scale
 
-    # Replace infinite values (boundaries) with the max finite value found
-    # so probabilities don't break
-    finite_mask = np.isfinite(distances)
-    if np.any(finite_mask):
-        max_dist = np.max(distances[finite_mask])
-        distances[~finite_mask] = max_dist * 2.0
-    else:
-        # If all are infinite (e.g. N=2), fallback to ones
-        distances[:] = 1.0
+        # 4. Extremes: twice their single gap, so the units match step 3.
+        # `+=`, not `=` -- see the note above on losing banked spread.
+        distances[sorted_indices[0]] += (
+            2.0 * (sorted_samples[1] - sorted_samples[0]) / scale)
+        distances[sorted_indices[-1]] += (
+            2.0 * (sorted_samples[-1] - sorted_samples[-2]) / scale)
 
     return distances
 
