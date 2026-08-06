@@ -58,8 +58,8 @@ jobs:
             pyBlindOpt.emptyspace pyBlindOpt.fa pyBlindOpt.ga pyBlindOpt.gwo \
             pyBlindOpt.hba pyBlindOpt.hc pyBlindOpt.hho pyBlindOpt.optimizer \
             pyBlindOpt.pso pyBlindOpt.rs pyBlindOpt.sa \
-            --logo "assets/pyblindopt_logo.svg" \
-            --favicon "assets/pyblindopt_logo.svg"
+            --logo "assets/logo.svg" \
+            --favicon "assets/logo.svg"
           # The logo path is resolved relative to the page referencing it, and
           # pdoc emits two levels: `pyBlindOpt.html` at the root and
           # `pyBlindOpt/<submodule>.html` below it. A single copy leaves every
