@@ -40,7 +40,7 @@ OUT = os.path.join(os.path.dirname(__file__), "out")
 GROUPS = (
     ("baselines (N calls)", ("random", "sobol")),
     ("cost controls, 3N candidates", ("random3x", "obl15x")),
-    ("cost controls, 4N candidates", ("random4x", "obl2x")),
+    ("cost controls, 3N candidates", ("random3x", "obl15x")),
     ("opposition (2N calls)", ("obl", "qobl")),
     ("OBLESA, largest-empty-sphere engine (3N / 4N pool)",
      ("oblesa-dart", "oblesa-quasi-dart",
@@ -61,7 +61,7 @@ BASELINE = "random"
 #: factorial rather than hand-written, and set to None when absent.
 OBLESA_REF = "oblesa"
 OPP_REF = "obl"
-CTRL_ARMS = ("random4x", "obl2x")
+CTRL_ARMS = ("random3x", "obl15x")
 ARM_GLOSS = {
     "random": "Uniform random sampling. The reference every acceleration "
               "rate is measured against.",
@@ -71,9 +71,9 @@ ARM_GLOSS = {
                 "exactly what a 3N-pool OBLESA spends, with no structure.",
     "obl15x": "1.5N random plus their 1.5N opposites, keep the best N: the "
               "3N-pool cost control with opposition but no empty-space stage.",
-    "random4x": "4N uniform random candidates, keep the best N. The cost "
+    "random3x": "3N uniform random candidates, keep the best N. The cost "
                 "control for the 4N-pool OBLESA arms.",
-    "obl2x": "2N random plus their 2N opposites, keep the best N. OBLESA's "
+    "obl15x": "1.5N random plus their opposites, keep the best N. OBLESA's "
              "budget and OBLESA's opposition, without the empty-space stage.",
     "obl": "Opposition-based learning: N sampled, N reflected, best N of 2N.",
     "qobl": "Quasi-opposition: the opposite is drawn between the centre and "
@@ -656,7 +656,7 @@ an arm that paid 4N to initialise has spent more calls than one that paid
 &ldquo;ESS helps&rdquo; from &ldquo;ESS helps enough to pay for
 itself&rdquo;.</p>
 <div class="scroll"><table><thead><tr><th class="l">arm</th>""")
-    RIVALS = tuple(r_ for r_ in ("random", "random4x", "obl2x", "obl",
+    RIVALS = tuple(r_ for r_ in ("random", "random3x", "obl15x", "obl",
                                 "qobl") if r_ in ARMS)
     for r_ in RIVALS:
         P.append(f"<th>vs {esc(r_)}</th>")

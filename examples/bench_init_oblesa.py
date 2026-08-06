@@ -33,7 +33,7 @@ reason it is not a fair charge.)
 OBL's, so its *initial population* cannot be worse — that is arithmetic, and
 `test_init.py` pins it. What that does not settle is whether the empty-space
 stage contributes anything, because a bigger pool alone gives greedy selection
-more to choose from. `random4x`, `obl2x` and above all `oblesa-rand` — OBLESA's
+more to choose from. `random3x`, `obl15x` and above all `oblesa-rand` — OBLESA's
 exact pipeline with the empty-space engine swapped for uniform noise — spend
 the same candidates without searching for empty space, so the margin over them
 is the margin attributable to the search.
@@ -228,10 +228,17 @@ DIMS = (2, 5, 10, 20, 40, 64, 100)
 # what lets a margin be attributed to the search rather than to pool size --
 # the comparison OBLESA-versus-OBL on its own cannot make.
 
+#: The cost controls are **3N**, matching OBLESA's three stages. OBLESA is
+#: `sample -> oppose -> probe`, one block of `n_pop` each, so it pays 3N
+#: objective evaluations; a 4N control spends a third more and wins on budget
+#: rather than on structure. The 4N arms measured exactly that -- under `ga` at
+#: d=100 every 4N arm scored around +50 AR and every 3N arm below zero,
+#: whatever was in the pool. `opp_ess=True` is what takes OBLESA to 4N, by
+#: adding a fourth stage; compare it against the 4N controls, not these.
 BASELINE_ARMS = (
     "random", "sobol", "lhs",       # samplers, N calls
     "obl", "qobl",                  # opposition, 2N
-    "random4x", "obl2x",            # equal-space cost controls, 4N
+    "random3x", "obl15x",           # equal-cost controls, 3N
 )
 
 BASELINE = "random"   # the arm AR is measured against, GECCO Companion '26 Eq. 3
@@ -493,7 +500,7 @@ def initial_population(arm, objective, bounds, n_pop, rng, stats=None, info=None
     The cost controls exist because OBLESA's advantage has two candidate
     explanations that the default arms cannot separate: the empty-space stage
     may be locating genuinely under-explored regions, or a larger pool may
-    simply give greedy selection more to work with. `random4x` and `obl2x`
+    simply give greedy selection more to work with. `random3x` and `obl15x`
     spend comparable candidates without it, and `oblesa-rand` runs OBLESA's
     exact pipeline with the engine swapped for uniform noise -- the only one of
     the three that holds pool *shape* fixed as well as pool size.
