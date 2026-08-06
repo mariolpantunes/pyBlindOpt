@@ -293,15 +293,14 @@ def _ess_engine(
       toward the *worst* regions and still return a plausible-looking
       population, which makes it the one line in the substitution worth
       staring at.
-    * **`force_weight` is deliberately not forwarded.** It is dart's lambda: a
-      scalar on a standardised Shepard surrogate scoring a finite candidate
-      cloud. ESS's `attraction_weight` scales a pairwise force and is bounded
-      by a collapse condition -- at OBLESA's default of 8.0 ESS refuses the
-      configuration outright, correctly. Two different quantities that happen
-      to both mean "how much attraction", so this uses ESS's own default and
-      leaves tuning to a caller that knows which engine it is talking to
-      (`engine=functools.partial(...)`). `k_cand` does carry over, as
-      `init_pool`; both are candidates per placement.
+    * **`force_weight` arrives as `attraction_weight`, in ESS's units.** It
+      used to be dart's lambda -- a scalar on a standardised Shepard surrogate
+      scoring a finite candidate cloud, which ran usefully into the tens.
+      `attraction_weight` scales a pairwise force and is bounded by a collapse
+      condition; at the old default of 8.0 ESS refuses the configuration
+      outright, correctly. The knob is the same knob, the scale is not, so a
+      value tuned against the dart engine must not be carried over.
+      `k_cand` maps to `init_pool`; both are candidates per placement.
 
     The attraction law is `cauchy` rather than ESS's default of "same as the
     repulsion", because two identical laws are proportional and can never
@@ -337,13 +336,17 @@ def _ess_engine(
     """
     del ignored
     try:
-        # Optional dependency, imported here so the package works without
-        # it; only `force='ess'` needs it.
+        # A hard requirement (`install_requires`), not an optional extra: this
+        # is the backend behind the default `force='guided'`. Imported lazily
+        # all the same, so `import pyBlindOpt` costs nothing for the callers
+        # that only want an optimizer, and so a broken install fails here with
+        # a message rather than at import time with a traceback.
         import ess  # type: ignore[reportMissingImports]
     except ImportError as exc:  # pragma: no cover - environment dependent
         raise ImportError(
-            "force='ess' needs the EmptySpaceSearch package: "
-            "pip install EmptySpaceSearch"
+            "force='guided' (the default) and force='ess' need the "
+            "EmptySpaceSearch package: pip install 'EmptySpaceSearch>=0.5.0'. "
+            "force='repulsive' and force='uniform' need nothing extra."
         ) from exc
 
     kw = {}
@@ -359,12 +362,13 @@ def _ess_engine(
     return ess.esa(samples, bounds, n=n, seed=seed, init_pool=k_cand, **kw)
 
 
-_ess_engine.accepts = frozenset({"scores", "k_cand"})  # type: ignore[reportFunctionMemberAccess]
+_ess_engine.accepts = frozenset(  # type: ignore[reportFunctionMemberAccess]
+    {"scores", "k_cand", "attraction_weight"})
 
 
 _FORCES = {
     "repulsive": emptyspace.dart_esa,
-    "guided": emptyspace.fitness_dart_esa,
+    "guided": _ess_engine,
     "uniform": emptyspace.random_esa,
     "ess": _ess_engine,
 }
@@ -380,11 +384,11 @@ def oblesa(
     opp: str = "quasi",
     opp_ess: bool = False,
     force: str = "guided",
-    force_weight: float = 8.0,
+    force_weight: float = 0.5,
     seed: int | np.random.Generator | None = None,
     n_jobs: int = 1,
     n_ess: int | None = None,
-    k_cand: int = 2048,
+    k_cand: int = 64,
     engine: collections.abc.Callable | None = None,
     diversity_weight: float = 0.25,
     info: dict | None = None,
@@ -440,49 +444,54 @@ def oblesa(
             *compresses* what the guided search itself earns -- the margin over
             the uniform null falls from +6.1 to +3.6 when it is on. It competes
             with the attraction term rather than adding to it.
-        force (str): Which force field the probes feel. 'repulsive' is pure
-            novelty -- as far as possible from everything already sampled.
-            'guided' adds an attractive term toward low predicted objective,
-            weighted by `force_weight`, which is the physical reading of ESS:
-            particles repel by distance and are attracted by quality.
-            'uniform' is the null -- OBLESA's pool shape and candidate count
-            with no empty-space search at all, which is what separates "the
-            search found something" from "a bigger pool gave the selector
-            more to choose from".
+        force (str): Which force field the probes feel.
 
-            'ess' is the EmptySpaceSearch relaxation, which places points the
-            same way 'guided' does and then relaxes them under a repulsive
-            and attractive force. It needs the optional `EmptySpaceSearch`
-            dependency. The dart engines remain so the substitution can be
-            measured rather than assumed. Ignored when `engine` is given.
-        force_weight (float): Attraction strength for `force='guided'`. Zero
-            reproduces 'repulsive' exactly, which makes a sweep over this an
-            ablation rather than a comparison of two methods.
+            'guided' (and its explicit spelling 'ess') is the EmptySpaceSearch
+            relaxation: it places each probe on a blend of novelty and the
+            attractiveness the position is *expected* to have, then relaxes the
+            block under repulsion and attraction together. This is the
+            production backend, and the one stage of this pipeline that needs
+            `EmptySpaceSearch` -- a hard requirement of the package, but
+            imported lazily, so `'repulsive'` and `'uniform'` still work in an
+            environment where it failed to install.
 
-            The default is conditioned on the other defaults, which matters
-            because the two estimators disagree. Averaged over all 56 settings
-            of the other knobs the factorial prefers 16 (29.2 against 8's
-            28.0), but 42 of those settings use `elite_box` or `opp_ess`,
-            which this signature no longer ships. Restricted to the shipped
-            family the gap is noise (28.7 against 28.3, n=14 each), and at
-            *these* defaults 8 wins the paired comparison outright: 460 of 800
-            cells against 336, Wilcoxon p < 1e-4 on final best fitness.
+            'repulsive' is pure novelty -- as far as possible from everything
+            already sampled, with no notion of where the good regions are.
+            'uniform' is the null: OBLESA's pool shape and candidate count with
+            no empty-space search at all, which is what separates "the search
+            found something" from "a bigger pool gave the selector more to
+            choose from". Both are dart engines kept as controls, so the
+            relaxation is measured against something rather than assumed.
 
-            **Provisional.** This is the dart engine's knob: a scalar on a
-            standardised Shepard surrogate, scoring a finite candidate cloud.
-            A force relaxation such as `ess.esa` normalises attraction
-            differently -- pairwise, with no interpolating denominator -- so
-            the number does not carry across, and this default is expected to
-            be re-derived once that backend exists. What does carry across is
-            how it was chosen: condition on the other defaults rather than
-            averaging over settings the signature does not ship.
+            Ignored when `engine` is given.
+        force_weight (float): Attraction strength, in the backend's own units.
+
+            **This is ESS's `attraction_weight`, not the retired dart engine's
+            lambda.** The two are different quantities that both mean "how much
+            attraction": lambda scaled a standardised Shepard surrogate over a
+            finite candidate cloud and ran usefully into the tens, while this
+            scales a pairwise force and is bounded by a collapse condition --
+            ESS refuses a configuration at 8.0, correctly. Any tuning done
+            against the dart ladder does not transfer; the default here is
+            ESS's own measured optimum.
+
+            Zero reduces the placement to pure novelty, which makes a sweep
+            over this an ablation rather than a comparison of two methods.
         seed (int | Generator | None): Random seed or Generator instance.
         n_jobs (int): Number of parallel jobs for objective evaluation.
         n_ess (int | None): Size of the empty-space block. Defaults to `n_pop`.
             Zero disables the stage, reducing this to OBL under `selection`.
-        k_cand (int): Candidates the probe search draws per placed point.
-            Accuracy knob of the empty-space engines; higher is closer to the
-            exact largest empty sphere and linearly more expensive.
+        k_cand (int): Candidates the probe search draws per placed point,
+            reaching `ess.esa` as `init_pool`. Accuracy knob of the empty-space
+            engines; higher is closer to the exact largest empty sphere and
+            linearly more expensive.
+
+            The default is ESS's own. It used to be 2048, inherited from the
+            retired dart engine, where the placement *was* the whole algorithm
+            and a coarse argmax over a candidate cloud had nothing downstream
+            to correct it. ESS relaxes the block afterwards, so the placement
+            only has to be a reasonable starting point -- and initialization is
+            97-98% of a run's wall clock, all of it here.
         engine (Callable | None): Empty-space backend override, called as
             `engine(samples, bounds, n=..., seed=..., ...)`. When None it is
             chosen by `force`. Pass `ess.esa` for the published implementation;
@@ -530,7 +539,13 @@ def oblesa(
         eng_kw = {}
         if "k_cand" in accepts:
             eng_kw["k_cand"] = k_cand
-        if "lam" in accepts:
+        # `force_weight` under whichever name the engine calls it. ESS scales a
+        # pairwise force; an external engine scoring a candidate cloud calls the
+        # same knob `lam`. One `force` level, one attraction strength, whatever
+        # the backend spells it.
+        if "attraction_weight" in accepts:
+            eng_kw["attraction_weight"] = force_weight
+        elif "lam" in accepts:
             eng_kw["lam"] = force_weight
         if "scores" in accepts:
             eng_kw["scores"] = obl_scores

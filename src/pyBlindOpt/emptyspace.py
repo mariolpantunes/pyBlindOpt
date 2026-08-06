@@ -31,6 +31,16 @@ used to validate `dart_esa` at low dimension and nothing else --
 
 `dart_esa` is deliberately slower than `ess.esa`. That is the trade: it exists
 to attribute an effect, not to ship in the hot path.
+
+**These are controls, not the production path.** OBLESA's guided placement is
+`ess.esa`, which places on a blend of novelty and expected attractiveness and
+then relaxes the block under both forces. The two engines here are what that is
+measured *against*: :func:`dart_esa` is novelty with no idea where the good
+regions are, and :func:`random_esa` is the null with no search at all. A guided
+dart engine used to live here too and was retired -- it duplicated ESS's
+placement step with a differently-scaled attraction knob, and carried a
+toroidal Shepard surrogate into a box, where wrapping asserts a periodicity the
+objective does not have.
 """
 
 __author__ = "Mário Antunes"
@@ -212,133 +222,6 @@ def random_esa(
     return rng.uniform(bounds[:, 0], bounds[:, 1], size=(int(n), bounds.shape[0]))
 
 
-def _pairwise(points: np.ndarray, static: np.ndarray, span: np.ndarray | None,
-              block: int = 256) -> np.ndarray:
-    """Full `(K, M)` distance matrix, toroidal when `span` is given."""
-    out = np.empty((points.shape[0], static.shape[0]))
-    for i in range(0, points.shape[0], block):
-        chunk = points[i : i + block]
-        diff = np.abs(chunk[:, None, :] - static[None, :, :])
-        if span is not None:
-            np.minimum(diff, span - diff, out=diff)
-        out[i : i + block] = np.sqrt(np.einsum("ijk,ijk->ij", diff, diff))
-    return out
-
-
-def fitness_dart_esa(
-    samples: np.ndarray,
-    bounds: np.ndarray,
-    *,
-    n: int,
-    seed: int | np.random.Generator | None = None,
-    scores: np.ndarray | None = None,
-    k_cand: int = 2048,
-    lam: float = 1.0,
-    power: float = 2.0,
-    k: int = 8,
-    _torus: bool = True,
-    **ignored,
-) -> np.ndarray:
-    """
-    Empty-space filling with a fitness attraction term.
-
-    :func:`dart_esa` places each point purely by novelty -- as far as possible
-    from everything already sampled. That treats every empty region as equally
-    worth probing, which is the assumption the measurements do not support:
-    restricting the same search to the box spanned by the fittest candidates
-    raised the chance of a probe beating the incumbent from 12.5% to 35% at
-    d=10, so *where* you probe matters more than how evenly you spread.
-
-    This makes that a force balance rather than a hard boundary, which is the
-    physical reading of ESS: particles repel by distance and are attracted by
-    quality. Each candidate is scored
-
-    $$ s(c) = z\\!\\left(\\text{novelty}(c)\\right)
-              - \\lambda \\, z\\!\\left(\\hat{f}(c)\\right) $$
-
-    where novelty is the distance to the nearest point already present and
-    $\\hat f$ is a Shepard (inverse-distance-weighted) estimate of the
-    objective at `c`, built from the `k` nearest **already-evaluated** samples:
-
-    $$ \\hat f(c) = \\frac{\\sum_i w_i f_i}{\\sum_i w_i},
-       \\qquad w_i = d(c, x_i)^{-p} $$
-
-    Both terms are standardised per placement, so `lam` is scale-free across
-    objectives. No extra objective evaluations are spent: the surrogate reuses
-    the fitness of the pool, which OBLESA has already paid for.
-
-    **`lam = 0` reproduces :func:`dart_esa` exactly**, which makes a sweep over
-    `lam` an ablation rather than a separate method to argue about.
-
-    A caution on dimension: with a pool of `2 * n_pop` points in a hundred
-    dimensions, distances concentrate, the weights flatten and $\\hat f$ tends
-    to the pool mean -- the attraction term carries little signal up there.
-    Expect this to pay at low-to-middling dimension and fade at the top.
-
-    Args:
-        samples (np.ndarray): Points already occupying the space, shape (M, D).
-        bounds (np.ndarray): Search space bounds, shape (D, 2).
-        n (int): How many points to place.
-        seed (int | Generator | None): Random seed or Generator.
-        scores (np.ndarray | None): Objective values for `samples`, lower
-            better. Required for the attraction term; without it this degrades
-            to :func:`dart_esa` and says so once.
-        k_cand (int): Candidates drawn per placed point.
-        lam (float): Attraction weight. 0 is pure novelty.
-        power (float): Inverse-distance exponent `p` of the surrogate.
-        k (int): Neighbours used by the surrogate.
-        _torus (bool): **Not part of the contract.** See :func:`dart_esa`.
-        **ignored: Accepted and dropped, for `ess.esa` signature compatibility.
-
-    Returns:
-        np.ndarray: The `n` placed points, shape (n, D).
-    """
-    rng = seed if isinstance(seed, np.random.Generator) else np.random.default_rng(seed)
-
-    lower, upper = bounds[:, 0], bounds[:, 1]
-    dim = bounds.shape[0]
-    n = int(n)
-    if n <= 0:
-        return np.empty((0, dim))
-
-    if scores is None or lam == 0.0:
-        if scores is None and lam != 0.0:
-            logger.warning(
-                "fitness_dart_esa got no scores; falling back to pure novelty"
-            )
-        return dart_esa(samples, bounds, n=n, seed=rng, k_cand=k_cand,
-                        _torus=_torus)
-
-    span = (upper - lower) if _torus else None
-    known = np.asarray(samples, dtype=float).reshape(-1, dim)
-    known_f = np.asarray(scores, dtype=float).ravel()
-    static = known.copy()
-    placed = np.empty((n, dim))
-    kk = int(min(k, known.shape[0]))
-
-    def standardise(v):
-        sd = float(np.std(v))
-        return (v - float(np.mean(v))) / sd if sd > 0 else np.zeros_like(v)
-
-    for i in range(n):
-        cand = rng.uniform(lower, upper, size=(k_cand, dim))
-
-        novelty = np.sqrt(_pairwise(cand, static, span).min(axis=1))
-
-        # Shepard surrogate over the k nearest evaluated points.
-        d_known = _pairwise(cand, known, span)
-        nn = np.argpartition(d_known, kk - 1, axis=1)[:, :kk]
-        d_nn = np.take_along_axis(d_known, nn, axis=1)
-        w = 1.0 / np.maximum(d_nn, 1e-12) ** power
-        f_hat = np.einsum("ij,ij->i", w, known_f[nn]) / w.sum(axis=1)
-
-        best = int(np.argmax(standardise(novelty) - lam * standardise(f_hat)))
-        placed[i] = cand[best]
-        static = np.vstack((static, placed[i][None, :]))
-
-    return placed
-
-
 # Which optional keywords each engine will accept from `init.oblesa`. An
 # engine without this attribute -- `ess.esa` -- receives only `samples`,
 # `bounds`, `n` and `seed`, because it forwards anything it does not recognise
@@ -346,7 +229,3 @@ def fitness_dart_esa(
 # probing for them is what keeps the backends substitutable.
 dart_esa.accepts = frozenset({"k_cand"})  # type: ignore[reportFunctionMemberAccess]
 random_esa.accepts = frozenset()  # type: ignore[reportFunctionMemberAccess]
-fitness_dart_esa.accepts = frozenset({"k_cand", "lam", "power", "k", "scores"})  # type: ignore[reportFunctionMemberAccess]
-
-#: Back-compatible alias of the `scores` capability.
-fitness_dart_esa.wants_scores = True  # type: ignore[reportFunctionMemberAccess]

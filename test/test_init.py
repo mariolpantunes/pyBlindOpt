@@ -7,6 +7,7 @@ __status__ = "Development"
 
 
 import unittest
+import unittest.mock
 
 import numpy as np
 
@@ -361,9 +362,16 @@ class TestInit(unittest.TestCase):
         working, not failing -- asserting every pick is good on one seed tests
         the seed. The pool here holds two deliberately bad seeds at |x| ~ 10
         and their opposites, so the claim with content is that they are picked
-        rarely. Measured over these 30 seeds the rate is 0.85 (standard) and
-        0.90 (quasi); the floor below leaves room for the tail without
-        admitting a rule that has stopped discriminating.
+        *rarely relative to how common they are in the pool*.
+
+        **The reference is measured, not hard-coded.** An earlier version of
+        this test asserted an absolute rate, which silently encoded how one
+        particular empty-space engine populated the pool: the retired guided
+        dart placed probes almost on top of the optimum, so the pool itself was
+        mostly good and any selector looked discriminating. Swapping the
+        backend moved the pool and the test failed without the selection rule
+        having changed at all. Comparing against the pool the selector actually
+        saw is engine-independent, which is the property this test needs.
 
         `diversity_weight=0.0` is pinned because the default trades some of
         this away on purpose -- that trade is the subject of its own arms in
@@ -372,25 +380,49 @@ class TestInit(unittest.TestCase):
         bounds = np.asarray([[-10.0, 10.0]])
         initial_pop = np.array([[0.01], [0.02], [9.9], [9.95]])
 
-        picked = []
-        for seed in range(30):
-            result = init.oblesa(
-                functions.sphere,
-                bounds,
-                population=initial_pop,
-                opp=opp,
-                selection="random",
-                diversity_weight=0.0,
-                seed=seed,
-            )
-            self.assertEqual(result.shape, (4, 1))
-            self.assertTrue(utils.assert_bounds(result, bounds))
-            picked.append(functions.sphere(result))
+        def run(selection):
+            """Picks and the pools they were drawn from, over 30 seeds."""
+            picked, pools = [], []
+            real = utils.select_indices
 
-        fitness = np.concatenate(picked)
-        rate = float(np.mean(fitness < 2.0))
-        self.assertGreater(rate, 0.75, f"roulette kept only {rate:.2f} good picks")
-        self.assertLess(float(np.median(fitness)), 2.0)
+            def spy(population, scores, n_pop, **kw):
+                pools.append(np.abs(population.ravel()) > 5.0)
+                return real(population, scores, n_pop, **kw)
+
+            with unittest.mock.patch.object(init.utils, "select_indices", spy):
+                for seed in range(30):
+                    result = init.oblesa(
+                        functions.sphere,
+                        bounds,
+                        population=initial_pop,
+                        opp=opp,
+                        selection=selection,
+                        diversity_weight=0.0,
+                        seed=seed,
+                    )
+                    self.assertEqual(result.shape, (4, 1))
+                    self.assertTrue(utils.assert_bounds(result, bounds))
+                    picked.append(np.abs(result.ravel()) > 5.0)
+            return np.concatenate(picked), np.concatenate(pools)
+
+        far_roulette, far_pool = run("random")
+        far_greedy, _ = run("best")
+
+        kept = float(np.mean(far_roulette))
+        available = float(np.mean(far_pool))
+
+        # Indifference would keep the far-out candidates at the rate the pool
+        # offers them. Roulette must be well under that.
+        self.assertLess(
+            kept, 0.75 * available,
+            f"roulette kept {kept:.2f} of the far-out points against "
+            f"{available:.2f} available -- barely discriminating")
+
+        # ... and greedy, the maximum-pressure end of the same axis, must
+        # refuse them outright. Bracketing roulette between the two is what
+        # says it is a *pressure*, not a coin flip and not a sort.
+        self.assertEqual(float(np.mean(far_greedy)), 0.0)
+        self.assertGreater(kept, 0.0, "roulette degenerated into greedy")
 
     def test_oblesa_standard_random(self):
         """Standard OBL, roulette selection: heavily favours best fitness."""
