@@ -230,6 +230,64 @@ print(f"Best Score: {best_score}")
 
 ```
 
+### OBLESA — opposition plus empty-space search
+
+`init.oblesa` builds a candidate pool from three blocks and selects the
+population out of it:
+
+```
+P_0    <- sample                       n_pop points
+P_obl  <- oppose(P_0)        `opp`     n_pop points
+P_ess  <- probe empty space  `force`   n_ess points   (default n_pop)
+return select(P_0 u P_obl u P_ess)     `selection`
+```
+
+Opposition covers the reflection of what was sampled; the empty-space stage
+probes what neither block reached. Nothing is reserved — the probes compete on
+merit with everything else, so a discarded probe means the search found an
+unpromising region cheaply, which is the mechanism working rather than failing.
+
+```python
+import numpy as np
+import pyBlindOpt
+
+bounds = np.array([[-5.0, 5.0]] * 30)
+objective = pyBlindOpt.functions.rastrigin
+rng = np.random.default_rng(42)
+
+info = {}
+population = pyBlindOpt.init.oblesa(
+    objective, bounds,
+    n_pop=30,
+    opp="quasi",             # stochastic opposition, between centre and reflection
+    force="guided",          # empty-space probes attracted toward good regions
+    force_weight=0.5,        # attraction strength, in the backend's units
+    selection="best",        # greedy over fitness blended with crowding
+    diversity_weight=0.25,
+    seed=rng,
+    info=info,               # filled in place: {'pool_size': 90}
+)
+
+best, score = pyBlindOpt.differential_evolution(
+    objective, bounds, population=population, n_pop=30, n_iter=200, seed=rng)
+```
+
+`force='guided'` needs the optional [EmptySpaceSearch][ess] backend, which is
+what places and relaxes the probe block. The other two levels need nothing
+extra and exist as controls: `'repulsive'` places probes on novelty alone, with
+no notion of where the good regions are, and `'uniform'` is the null — the same
+pool shape and candidate count with no empty-space search at all. Comparing
+against them is what separates "the search found something" from "a bigger pool
+gave the selector more to choose from".
+
+[ess]: https://github.com/mariolpantunes/ess
+
+> **`force_weight` changed units in 0.3.0.** It used to be the lambda of an
+> internal dart engine — a scalar on a standardised surrogate, useful into the
+> tens. It is now the EmptySpaceSearch backend's `attraction_weight`, which
+> scales a pairwise force and is refused at or above 2.5. Values tuned against
+> the old engine do not carry over.
+
 ## Development
 
 The checks in CI also run at commit time:
