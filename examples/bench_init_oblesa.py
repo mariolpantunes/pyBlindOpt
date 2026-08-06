@@ -61,6 +61,7 @@ population, and each is scored only against its own random baseline.
 from __future__ import annotations
 
 import argparse
+import functools
 import json
 import os
 import time
@@ -274,22 +275,40 @@ SHIFT_FRAC = [0.8]
 #: fitness term is z-scored before it is added to the novelty term -- so the
 #: levels are ratios of attraction to repulsion, comparable across functions
 #: and dimensions, and a geometric ladder is the right spacing for them.
+#: **These are ESS's units, not the retired dart engine's.** The 620,000-run
+#: sweep measured `emptyspace.fitness_dart_esa` at lambda = 0..32 -- a scalar
+#: on a standardised Shepard surrogate scoring a candidate cloud. That engine
+#: is gone; `force='guided'` is now `ess.esa`, whose `attraction_weight`
+#: scales a pairwise force and is bounded by a collapse condition. ESS refuses
+#: anything at or above 2.5 here (`weight * F_att(0) >= F_rep(0)`, checked
+#: rather than tested for), so the ladder runs to 2.0 and no dart number
+#: transfers. Nothing about the old ladder's *shape* carries over either: it
+#: was measured on a placement rule with no relaxation behind it.
 _ENGINE_LEVELS = {
     "null": {"force": "uniform"},
-    "g000": {"force": "repulsive"},                      # lambda = 0
-    "g001": {"force": "guided", "force_weight": 1.0},
-    "g002": {"force": "guided", "force_weight": 2.0},
-    "g004": {"force": "guided", "force_weight": 4.0},
-    "g008": {"force": "guided", "force_weight": 8.0},    # the old default
-    "g016": {"force": "guided", "force_weight": 16.0},
-    "g032": {"force": "guided", "force_weight": 32.0},
+    "rep0": {"force": "repulsive"},                        # no attraction
+    "a000": {"force": "guided", "force_weight": 0.00},     # ESS, novelty only
+    "a025": {"force": "guided", "force_weight": 0.25},
+    "a050": {"force": "guided", "force_weight": 0.50},     # ESS's own default
+    "a100": {"force": "guided", "force_weight": 1.00},
+    "a200": {"force": "guided", "force_weight": 2.00},     # just under refusal
 }
 
-#: Probe-block size as a multiple of `n_pop`, now fixed. `n2` beat `n1` under
-#: both optimizers in the 86-arm sweep (0.4961/0.4926 against 0.5039/0.5074)
-#: -- a small margin, but the only one in that sweep with a consistent sign,
-#: so the axis is settled and its budget goes to attraction.
-_N_ESS_MULT = 2.0
+#: How ESS estimates the attractiveness of a position it has not measured.
+#: Crossed with the ladder rather than fixed, because this is the axis the
+#: dimension question lives on: `idw` is Shepard weighting, which flattens to
+#: the pool mean as distances concentrate, while `fourier` fits `2d` ridge
+#: coefficients over the whole measured set and is the one built for the
+#: "60 points in 100 dimensions" case. `detrended` does both.
+_ATT_MODELS = ("fourier", "idw", "detrended")
+
+#: Probe-block size as a multiple of `n_pop`. **1N, the paper's pool shape.**
+#: The 86-arm sweep preferred 2N, but that was measured on dart, where the
+#: probe block was the only stage with any search in it. The composition
+#: question it was really asking -- more probes, or the probes' opposites --
+#: is `opp_ess`, which reaches the same 4N pool as `[N, N_opp, N_ess,
+#: N_ess_opp]` instead of `[N, N_opp, 2N_ess]`.
+_N_ESS_MULT = 1.0
 
 #: Selection rule with its diversity weight, crossed against attraction
 #: rather than swept for its own sake. The 86-arm sweep found this axis
@@ -345,13 +364,22 @@ _FIXED = {
     "opp_ess": False,      # worth 1.6, and compresses the guided margin
 }
 
+#: The attractiveness model only exists where there is attraction to estimate,
+#: so `null`, `rep0` and `a000` are not crossed with it -- doing so would ship
+#: three bit-identical arms under three names and dilute every mean they enter.
+_MODEL_SUFFIX = {"fourier": "f", "idw": "i", "detrended": "d"}
+
 OBLESA_KNOBS = {}
 for _elab, _eng in _ENGINE_LEVELS.items():
-    for _slab, (_sel, _dw) in _SELECTION_LEVELS.items():
-        OBLESA_KNOBS[f"ob_{_elab}_{_slab}"] = dict(
-            _FIXED, selection=_sel, diversity_weight=_dw,
-            _n_ess_mult=_N_ESS_MULT, **_eng,
-        )
+    _guided = _eng.get("force") == "guided" and _eng.get("force_weight", 0) > 0
+    _variants = ([(_elab + _MODEL_SUFFIX[m], m) for m in _ATT_MODELS]
+                 if _guided else [(_elab, None)])
+    for _label, _model in _variants:
+        for _slab, (_sel, _dw) in _SELECTION_LEVELS.items():
+            OBLESA_KNOBS[f"ob_{_label}_{_slab}"] = dict(
+                _FIXED, selection=_sel, diversity_weight=_dw,
+                _n_ess_mult=_N_ESS_MULT, _att_model=_model, **_eng,
+            )
 
 #: The initializers. Every one is run under every optimizer in `OPTIMIZERS`,
 #: on the *same* initial population, so the two axes can be read jointly; a
@@ -364,8 +392,9 @@ ARMS_INIT = BASELINE_ARMS + tuple(OBLESA_KNOBS)
 ENGINE_LABEL = {
     name: {"uniform": "uniform-random-null",
            "repulsive": "dart-largest-empty-sphere",
-           "guided": f"dart-fitness-guided-lambda{kw.get('force_weight', 0):g}",
-           "ess": "ess-relaxation"}[kw["force"]]
+           "guided": "ess-relaxation-w{:g}-{}".format(
+               kw.get("force_weight", 0), kw.get("_att_model") or "none"),
+           }[kw["force"]]
     for name, kw in OBLESA_KNOBS.items()
 }
 
@@ -517,13 +546,13 @@ def initial_population(arm, objective, bounds, n_pop, rng, stats=None, info=None
         # `_n_ess_mult` is an arm-table convention, not an `oblesa` argument.
         mult = kw.pop("_n_ess_mult", 1.0)
         kw["n_ess"] = max(1, int(round(mult * n_pop)))
-        # `attraction_weight` reaches ess.esa through the engine adapter,
-        # which oblesa does not forward by name -- bind it here instead.
-        if kw.get("force") == "ess" and "attraction_weight" in kw:
-            import functools
+        # `force_weight` is forwarded by `oblesa` itself. `att_model` is not --
+        # it is ESS's own knob, below the engine contract -- so it is bound
+        # here, which is the escape hatch `engine=` exists for.
+        model = kw.pop("_att_model", None)
+        if model is not None:
             kw["engine"] = functools.partial(
-                init._ess_engine,
-                attraction_weight=kw.pop("attraction_weight"))
+                init._ess_engine, att_model=model)
             kw["engine"].accepts = init._ess_engine.accepts
             kw.pop("force", None)
         if stats is not None and arm in ENGINE_LABEL:

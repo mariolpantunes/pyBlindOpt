@@ -69,9 +69,15 @@ def evaluate_single_run(
             seed=init_seed,
             **oblesa_params,
         )
-    except Exception as e:
-        logger.warning(f"OBLESA failed with params {oblesa_params}: {e}")
-        return MAX_OPTIMIZER_EPOCHS * 2  # Heavy penalty for crash
+    except ValueError as e:
+        # ValueError only: that is a configuration the *backend* rejected --
+        # an attraction weight that would out-pull repulsion at contact, say --
+        # which is a legitimately bad point in the search space and deserves
+        # the penalty. A TypeError is a keyword this signature does not have,
+        # and scoring it as a bad trial is how this file came to search seven
+        # parameters that did not exist. Let it raise.
+        logger.warning(f"OBLESA refused params {oblesa_params}: {e}")
+        return MAX_OPTIMIZER_EPOCHS * 2
 
     # 3. Setup Optimizer
     # Target is 0.0 for all provided functions. Stop at 0.0 + epsilon.
@@ -112,17 +118,22 @@ def objective(trial: optuna.Trial, n_seeds: int):
     Optuna objective function to tune OBLESA parameters.
     """
     # --- A. Sample Hyperparameters ---
+    # `oblesa`'s own knobs, and only those. This used to search `epochs`,
+    # `lr`, `decay`, `batch_size`, `tol`, `search_mode` and `border_strategy`
+    # -- parameters of the ESS relaxation, one layer below, which `oblesa` has
+    # never accepted. Every trial raised TypeError into the `except Exception`
+    # below, scored the crash penalty, and the study optimised nothing. Reach
+    # the backend's own parameters through `engine=functools.partial(...)`,
+    # which is what that argument is for.
     oblesa_params = {
-        "epochs": trial.suggest_int("epochs", 128, 2048, step=128),
-        "lr": trial.suggest_float("lr", 1e-5, 1e-1, log=True),
-        "decay": trial.suggest_float("decay", 0.9, 0.99),
-        "batch_size": trial.suggest_categorical("batch_size", [32, 64, 128]),
-        "tol": trial.suggest_float("tol", 1e-5, 1e-1, log=True),
-        "search_mode": trial.suggest_categorical("search_mode", ["radius", "knn"]),
-        "border_strategy": trial.suggest_categorical(
-            "border_strategy", ["repulsive", "clipping"]
-        ),
-        "selection": trial.suggest_categorical("selection", ["best", "probabilistic"]),
+        "opp": trial.suggest_categorical("opp", ["standard", "quasi"]),
+        "opp_ess": trial.suggest_categorical("opp_ess", [False, True]),
+        "force": trial.suggest_categorical(
+            "force", ["guided", "repulsive", "uniform"]),
+        # ESS refuses `weight * F_att(0) >= F_rep(0)`, which caps this at 2.5.
+        "force_weight": trial.suggest_float("force_weight", 0.0, 2.0, step=0.25),
+        "selection": trial.suggest_categorical(
+            "selection", ["best", "prob", "maximin"]),
         "diversity_weight": trial.suggest_float("diversity_weight", 0.0, 1.0, step=0.1),
     }
 
