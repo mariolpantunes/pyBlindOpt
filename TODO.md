@@ -35,6 +35,31 @@ the single most damaging knob currently held constant, and it is held at the
 wrong value for at least one optimizer. Sweep it; if the answer is
 optimizer-dependent, that is the finding and it belongs in the paper.
 
+**`opp="quasi"` is also the library default**, not only the benchmark's frozen
+knob — so this is not just a sweep-budget question. Anything calling
+`init.oblesa()` today gets the value that probe contradicted. Downstream users
+running a weak optimizer (distfit runs DE `best/1/bin`) are the exact case
+where it went wrong.
+
+## 1b. `diversity_weight=0.25` rests on the same retired engine
+
+The docstring justifies the default as an interior optimum — *26.7 at 0.0,
+29.4 at 0.25, 24.0 at 0.5* — and those numbers were measured **before**
+`_FORCES["guided"]` became ESS (`git log -S '"guided": _ess_engine'`
+post-dates the commit that wrote them). Two separate reasons they may not
+carry:
+
+- they were taken on the dart engine, like everything else in §"Why";
+- 0.3.0 changed what `compute_crowding_distance` returns at every dimension,
+  which is the quantity this knob weights.
+
+The second point cuts both ways and is worth stating precisely: the evidence
+*was* re-measured after the crowding fix, so it is not stale on that count —
+only on the engine. Re-measure on ESS before quoting the interior-optimum
+claim, and treat 0.25 as a plausible default rather than a measured one until
+then. Cross it with the attraction ladder rather than sweeping it alone: the
+harness already argues the two knobs may interact.
+
 ## 2. Re-run the quality grid against the 3N controls
 
 `BASELINE_ARMS` moved from `random4x, obl2x` (4N) to `random3x, obl15x` (3N)
