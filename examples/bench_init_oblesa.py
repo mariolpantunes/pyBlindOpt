@@ -898,7 +898,19 @@ def run_one_arm(args):
         print(f"[redo] {label}: {done}/{expected} rows, recomputing")
 
     t_arm = time.perf_counter()
-    knobs = OBLESA_KNOBS.get(init_arm, {})
+    # Recorded per row, so a file says which arm produced it without needing
+    # this script's tables to reconstruct it. Callables have to be named
+    # rather than embedded: the engine-backed arms hold a function under
+    # `engine`, and `json.dumps` refuses it -- which killed **every `null`
+    # task** of the first 245-arm run, 15 of 15, seconds in. The null is the
+    # no-search control the whole design rests on ("its presence at every
+    # point of the grid is what lets a margin be attributed to the search"),
+    # so the sweep completed 230/245 having dropped precisely the arm without
+    # which nothing else can be attributed.
+    knobs = {
+        k: (getattr(v, "__name__", repr(v)) if callable(v) else v)
+        for k, v in OBLESA_KNOBS.get(init_arm, {}).items()
+    }
     tmp = path + ".tmp"
     with open(tmp, "w") as fh:
         for n_pop in args.n_pop:
