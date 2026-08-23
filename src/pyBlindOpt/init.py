@@ -486,7 +486,15 @@ def oblesa(
         combined_samples = np.vstack((ran_pop, _oppose(ran_pop, bounds, opp, rng)))
     n_ess = n_pop if n_ess is None else int(n_ess)
 
-    obl_scores = utils.compute_objective(combined_samples, objective, n_jobs)
+    # One call per `n_pop` rows, never a bigger block. Every optimizer here
+    # evaluates a generation of exactly `n_pop`, and an objective may be
+    # sized for it -- a simulator with a fixed job width, a model with a
+    # pinned device batch, a licence metered per call. This stage is the
+    # sampler population stacked with its opposition, so it is `2 * n_pop`
+    # rows and used to go over in a single call.
+    obl_scores = np.concatenate([
+        utils.compute_objective(combined_samples[i:i + n_pop], objective, n_jobs)
+        for i in range(0, combined_samples.shape[0], n_pop)])
 
     if n_ess > 0:
         # Only keywords the engine declares are forwarded. `ess.esa` declares
@@ -514,9 +522,9 @@ def oblesa(
         emp_pop = np.vstack((emp_pop, _oppose(emp_pop, bounds, opp, rng)))
 
     population = np.vstack((combined_samples, emp_pop))
-    scores = np.concatenate((
-        obl_scores, utils.compute_objective(emp_pop, objective, n_jobs)
-        if emp_pop.shape[0] else np.empty(0)))
+    scores = np.concatenate([obl_scores] + [
+        utils.compute_objective(emp_pop[i:i + n_pop], objective, n_jobs)
+        for i in range(0, emp_pop.shape[0], n_pop)])
 
     idx = utils.select_indices(
         population=population,

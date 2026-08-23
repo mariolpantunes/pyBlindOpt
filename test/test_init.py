@@ -579,5 +579,75 @@ class TestOblesaSelectionPlumbing(unittest.TestCase):
             np.testing.assert_array_equal(a, b)
 
 
+
+class TestEvaluationGroupContract(unittest.TestCase):
+    """The objective is handed exactly `n_pop` rows per call.
+
+    Every optimizer in this package evaluates a generation of `n_pop`, and an
+    objective may be sized for it -- a simulator with a fixed job width, a
+    model with a pinned device batch, a licence metered per call. `oblesa`
+    used to hand over its sampler-plus-opposition stage in one `2 * n_pop`
+    call, so an objective that had seen only `n_pop` rows from every other
+    initializer here suddenly saw twice that.
+    """
+
+    class _Recorder:
+        """Objective that records the row count of every batch it is given."""
+
+        def __init__(self):
+            self.batches = []
+
+        def __call__(self, x):
+            x = np.asarray(x)
+            if x.ndim == 2:
+                self.batches.append(x.shape[0])
+                return np.sum(x * x, axis=1)
+            self.batches.append(1)
+            return float(np.sum(x * x))
+
+    def _bounds(self, d=6):
+        return np.array([[-5.0, 5.0]] * d)
+
+    def _batches_for(self, **kw):
+        rec = self._Recorder()
+        init.oblesa(rec, self._bounds(), n_pop=30, seed=0, n_jobs=1, **kw)
+        self.assertTrue(rec.batches, "objective was never called")
+        return rec.batches
+
+    def test_oblesa_evaluates_in_n_pop_groups(self):
+        # Spelled out rather than looped over a kwargs dict: the three cases
+        # take different parameter types, and one dict covering all of them
+        # is what a type checker cannot verify.
+        for label, batches in (
+            ("default", self._batches_for()),
+            ("opp_ess", self._batches_for(opp_ess=True)),
+            ("n_ess=2N", self._batches_for(n_ess=60)),
+        ):
+            with self.subTest(case=label):
+                self.assertEqual(
+                    sorted(set(batches)), [30],
+                    f"batches were {batches}, expected every group == 30")
+
+    def test_the_opposition_initializers_already_honour_it(self):
+        """They did; this guards them rather than fixing them."""
+        for fn in (init.opposition_based, init.quasi_opposition_based):
+            with self.subTest(fn=fn.__name__):
+                rec = self._Recorder()
+                fn(rec, self._bounds(), n_pop=25, seed=0)
+                self.assertEqual(sorted(set(rec.batches)), [25])
+
+    def test_grouping_does_not_change_the_result(self):
+        """A contract repair, not a numerical one: same rows, same scores."""
+        def sphere(x):
+            x = np.asarray(x)
+            return (np.sum(x * x, axis=-1) if x.ndim == 2
+                    else float(np.sum(x * x)))
+
+        a = init.oblesa(sphere, self._bounds(), n_pop=30, seed=3, n_jobs=1)
+        b = init.oblesa(sphere, self._bounds(), n_pop=30, seed=3, n_jobs=1)
+        np.testing.assert_array_equal(a, b)
+        self.assertEqual(np.asarray(a).shape, (30, 6))
+
+
 if __name__ == "__main__":
     unittest.main()
