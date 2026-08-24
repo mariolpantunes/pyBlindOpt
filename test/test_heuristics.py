@@ -1245,3 +1245,390 @@ class TestRS(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def _record_spread(into, epoch, scores, pop):
+    """Append the population's mean per-coordinate spread to `into`."""
+    into.append(float(np.mean(np.std(pop, axis=0))))
+
+
+def _record(into, epoch, scores, pop):
+    """Append the population's best to `into`. A named function rather than a
+    lambda so the list it writes to is bound explicitly, not captured."""
+    into.append(float(np.min(scores)))
+
+
+class TestGAOperators(unittest.TestCase):
+    """The GA operators themselves, not the run they add up to.
+
+    Every defect guarded here was invisible from a converging run: the GA
+    still moved, still improved, still returned a plausible answer. What it
+    did not do was use its population. These are the properties that make the
+    difference between recombination and a restart schedule, and each one is
+    cheap to assert and was previously false.
+    """
+
+    def setUp(self):
+        self.rng = np.random.default_rng(0)
+        self.p1 = np.zeros(6)
+        self.p2 = np.array([1.0, 2.0, 3.0, -1.0, 0.5, 4.0])
+
+    def test_blend_crossover_children_are_not_the_same_point(self):
+        """The old implementation returned the parent midpoint twice.
+
+        `c1 = p1 + a(p2-p1)` and `c2 = p2 - a(p2-p1)` coincide at a = 0.5,
+        which is the default, so a generational GA carried `n_pop / 2`
+        distinct individuals forward and nobody noticed.
+        """
+        for _ in range(50):
+            c1, c2 = ga.blend_crossover(self.p1, self.p2, 1.0, rng=self.rng)
+            if not np.array_equal(c1, c2):
+                return
+        self.fail("blend_crossover returned identical children 50 times")
+
+    def test_blend_crossover_can_leave_the_parent_interval(self):
+        """BLX-alpha's overshoot is the operator, not a rounding artefact.
+
+        Children confined to `[min(p1,p2), max(p1,p2)]` make recombination
+        purely contracting: the population can then only ever narrow, and no
+        amount of crossover re-widens it along a collapsed direction.
+        """
+        lo, hi = np.minimum(self.p1, self.p2), np.maximum(self.p1, self.p2)
+        below = above = False
+        for _ in range(200):
+            for c in ga.blend_crossover(self.p1, self.p2, 1.0, rng=self.rng):
+                below |= bool(np.any(c < lo - 1e-12))
+                above |= bool(np.any(c > hi + 1e-12))
+        self.assertTrue(below and above,
+                        "children never left the interval the parents span")
+
+    def test_blend_crossover_stays_inside_the_alpha_envelope(self):
+        """...but only as far as alpha allows, per gene."""
+        lo, hi = np.minimum(self.p1, self.p2), np.maximum(self.p1, self.p2)
+        span = 0.5 * (hi - lo)
+        for _ in range(200):
+            for c in ga.blend_crossover(self.p1, self.p2, 1.0, rng=self.rng):
+                self.assertTrue(np.all(c >= lo - span - 1e-9))
+                self.assertTrue(np.all(c <= hi + span + 1e-9))
+
+    def test_blend_crossover_varies_per_gene(self):
+        """One scalar draw applied to the whole vector confines the child to
+        the parents' line segment, which is a different (and much weaker)
+        operator that looks identical on a 1-D test."""
+        c = ga.blend_crossover(self.p1, self.p2, 1.0, rng=self.rng)[0]
+        gap = self.p2 - self.p1
+        frac = c[gap != 0] / gap[gap != 0]
+        self.assertGreater(float(np.std(frac)), 1e-6,
+                           "every gene moved by the same fraction")
+
+    def test_blend_crossover_passes_parents_through_when_it_declines(self):
+        c1, c2 = ga.blend_crossover(self.p1, self.p2, 0.0, rng=self.rng)
+        np.testing.assert_array_equal(c1, self.p1)
+        np.testing.assert_array_equal(c2, self.p2)
+
+    def test_elitism_never_loses_the_population_best(self):
+        """Generational replacement keeps nothing by construction.
+
+        `best_score` is tracked separately and so never worsens, which is
+        exactly what hides this: the *returned* answer looks monotone while
+        the population it was supposed to be refining has thrown the point
+        away. Assert on the population, not on the return value.
+        """
+        bounds = np.array([[-5.0, 5.0]] * 8)
+        for elitism, monotone in ((0.1, True), (0, False)):
+            seen = []
+            opt = ga.GeneticAlgorithm(
+                objective=functions.rastrigin, bounds=bounds, n_pop=20,
+                n_iter=30, seed=3, elitism=elitism,
+                callback=functools.partial(_record, seen))
+            opt.optimize()
+            worsened = sum(1 for a, b in itertools.pairwise(seen)
+                           if b > a + 1e-12)
+            if monotone:
+                self.assertEqual(worsened, 0,
+                                 "elitism did not preserve the best individual")
+            else:
+                self.assertGreater(worsened, 0,
+                                   "elitism=0 no longer means pure generational "
+                                   "replacement -- this test is now vacuous")
+
+    def test_default_mutation_rate_is_per_gene(self):
+        """`r_mut=None` resolves to 1/D, and only once the run starts."""
+        for d in (4, 25):
+            opt = ga.GeneticAlgorithm(
+                objective=functions.sphere,
+                bounds=np.array([[-5.0, 5.0]] * d), n_pop=10, n_iter=2, seed=1)
+            self.assertIsNone(opt.r_mut)
+            opt.optimize()
+            self.assertAlmostEqual(float(opt.r_mut or 0.0), 1.0 / d)
+
+    def test_an_explicit_mutation_rate_is_left_alone(self):
+        opt = ga.GeneticAlgorithm(
+            objective=functions.sphere, bounds=np.array([[-5.0, 5.0]] * 10),
+            n_pop=10, n_iter=2, seed=1, r_mut=0.3)
+        opt.optimize()
+        self.assertEqual(opt.r_mut, 0.3)
+
+    def test_elitism_is_a_fraction_below_one_and_a_count_above(self):
+        """0.1 -> 10% of n_pop; 2 -> exactly two; 0 -> off."""
+        for n_pop, elitism, expected in (
+                (30, 0.1, 3), (100, 0.1, 10), (20, 0.25, 5),
+                (30, 2, 2), (30, 1, 1), (30, 0, 0),
+                (5, 0.1, 1),          # floors at one, never rounds to zero
+                (4, 99, 4),           # cannot exceed the population
+        ):
+            opt = ga.GeneticAlgorithm(
+                objective=functions.sphere,
+                bounds=np.array([[-5.0, 5.0]] * 4), n_pop=n_pop, n_iter=2,
+                seed=1, elitism=elitism)
+            opt.optimize()
+            self.assertEqual(opt.n_elite, expected,
+                             f"n_pop={n_pop} elitism={elitism}")
+
+    def test_a_small_population_keeps_its_convergence_guarantee(self):
+        """Rudolph (1994): a canonical GA without elitism does not converge to
+        the global optimum, and retaining the best individual is enough to fix
+        it. A fraction that rounds to zero would lose that silently."""
+        opt = ga.GeneticAlgorithm(
+            objective=functions.sphere, bounds=np.array([[-5.0, 5.0]] * 4),
+            n_pop=6, n_iter=2, seed=1, elitism=0.01)
+        opt.optimize()
+        self.assertEqual(opt.n_elite, 1)
+
+    def test_the_old_defaults_are_still_reachable(self):
+        """Changing a default must not remove the behaviour it replaced."""
+        best, score = ga.genetic_algorithm(
+            functions.sphere, np.array([[-5.0, 5.0]] * 6), n_pop=10, n_iter=10,
+            seed=1, mutation=ga.random_mutation, r_mut=0.3, elitism=0)
+        self.assertTrue(np.isfinite(score))
+        self.assertEqual(best.shape, (6,))
+
+
+class TestDECrossoverExp(unittest.TestCase):
+    """`crossover_exp` must change at least one gene, as `crossover_bin` does.
+
+    Written as a do-while in the literature: copy the first gene, *then* keep
+    going while `rand < cr`. As a plain while loop it copies nothing with
+    probability `1 - cr`, and the trial vector is then an exact clone of its
+    parent -- an evaluation that cannot possibly improve on the point it was
+    spent measuring. At the default `cr = 0.7` that is 30% of every
+    generation; at `cr = 0.1` it is 90%.
+    """
+
+    def test_at_least_one_gene_always_comes_from_the_mutant(self):
+        rng = np.random.default_rng(0)
+        target, mutant = np.zeros(20), np.ones(20)
+        for cr in (0.05, 0.3, 0.7, 0.95):
+            clones = sum(
+                1 for _ in range(3000)
+                if np.array_equal(de.crossover_exp(target, mutant, cr, rng),
+                                  target))
+            self.assertEqual(
+                clones, 0,
+                f"cr={cr}: {clones}/3000 trials were exact copies of the parent")
+
+    def test_bin_already_guarantees_it(self):
+        rng = np.random.default_rng(0)
+        target, mutant = np.zeros(20), np.ones(20)
+        for cr in (0.05, 0.7):
+            for _ in range(500):
+                t = de.crossover_bin(target, mutant, cr, rng)
+                self.assertGreaterEqual(int((t == 1).sum()), 1)
+
+
+class TestEGWOSearchDirection(unittest.TestCase):
+    """EGWO must actually move toward the prey, and must contract.
+
+    The shipped update was `pop - U(-2,2) * |prey - pop|`: anchored on the
+    wolf's own position, with the sign of the separation thrown away by the
+    absolute value and the multiplier symmetric about zero. Expected
+    displacement toward the prey was therefore exactly zero, at every
+    iteration and for every wolf. Nothing about the run *looked* wrong -- it
+    returned finite, improving answers, because greedy selection filters a
+    diffusion just as happily as it filters a search.
+
+    None of these assertions can be made from the return value, which is why
+    they are made here instead.
+    """
+
+    def setUp(self):
+        self.bounds = np.array([[-5.0, 5.0]] * 12)
+
+    def test_late_steps_land_on_the_prey_not_on_the_wolf(self):
+        """The clean discriminator between the two update rules.
+
+        As `a` decays to zero, `A` does too, and `prey - A*|C*prey - X|`
+        collapses onto the prey. The old rule, `X - A*|prey - X|`, collapses
+        onto **X** -- each wolf onto wherever it already was. Early in the run
+        both are wide, which is why this asserts at the end and not at t=0:
+        at `a = 2` a large throw past the prey is exploration working, not a
+        bug.
+        """
+        opt = egwo.EGWO(objective=functions.rastrigin, bounds=self.bounds,
+                        n_pop=30, n_iter=100, seed=2)
+        opt._initialize()
+        opt._update_best(epoch=-1)
+
+        opt._update_iter_params(99)                 # a ~ 0
+        step = opt._generate_offspring(99)
+
+        # At a ~ 0 every wolf is placed on the *same* prey point, so the
+        # offspring cloud has almost no spread. The old rule leaves each wolf
+        # at its own position, so the cloud keeps the population's spread.
+        before = float(np.mean(np.std(opt.pop, axis=0)))
+        after = float(np.mean(np.std(step, axis=0)))
+        self.assertLess(after, 0.1 * before,
+                        "at a~0 the pack did not collapse onto one point -- "
+                        "the step is anchored on each wolf, not on the prey")
+
+        # ...and it moved: the destination is not where the wolves were.
+        self.assertGreater(
+            float(np.mean(np.linalg.norm(step - opt.pop, axis=1))),
+            0.5 * float(np.mean(np.linalg.norm(
+                opt.pop - opt.pop.mean(0), axis=1))))
+
+    def test_the_expected_step_is_not_zero(self):
+        """`X - U(-a,a) * |prey - X|` has expectation exactly `X`: the
+        absolute value discards which side of the prey the wolf is on, and a
+        multiplier symmetric about zero then averages the move away. Measured
+        on the old rule: 0.058 of drift against a separation of 2.70.
+        """
+        opt = egwo.EGWO(objective=functions.rastrigin, bounds=self.bounds,
+                        n_pop=30, n_iter=100, seed=2)
+        opt._initialize()
+        opt._update_best(epoch=-1)
+        opt._update_iter_params(50)
+        drift = np.mean([opt._generate_offspring(50) - opt.pop
+                         for _ in range(256)], axis=0)
+        separation = float(np.mean(np.abs(opt.alpha_pos - opt.pop)))
+        self.assertGreater(float(np.mean(np.abs(drift))), 0.1 * separation,
+                           "mean displacement is sampling noise -- the pack "
+                           "diffuses instead of hunting")
+
+    def test_the_exploration_coefficient_decays(self):
+        """`_update_iter_params` must chain to GWO, which owns `a`."""
+        opt = egwo.EGWO(objective=functions.rastrigin, bounds=self.bounds,
+                        n_pop=10, n_iter=100, seed=2, noise_scale=0.05)
+        opt._initialize()
+        seen = []
+        for t in (0, 25, 50, 99):
+            opt._update_iter_params(t)
+            seen.append((opt.a, opt.epoch_std))
+        a_vals = [a for a, _ in seen]
+        self.assertAlmostEqual(a_vals[0], 2.0)
+        self.assertLess(a_vals[-1], 0.05)
+        self.assertEqual(a_vals, sorted(a_vals, reverse=True))
+        # the noise rides on `a`, so it decays with it rather than dying in
+        # the first few percent of the run regardless of n_iter
+        self.assertGreater(seen[1][1], 0.0)
+        self.assertLess(seen[-1][1], seen[0][1])
+
+    def test_the_noise_schedule_scales_with_n_iter(self):
+        """`exp(-100 (t+1)/T)` is spent by t~10 for any T. Halfway through a
+        run should look the same whatever the run's length.
+
+        Asserted with the noise switched on explicitly, since the schedule is
+        what is under test here and the default turns the term off.
+        """
+        mid = []
+        for n_iter in (50, 200, 1000):
+            opt = egwo.EGWO(objective=functions.rastrigin, bounds=self.bounds,
+                            n_pop=10, n_iter=n_iter, seed=2, noise_scale=0.05)
+            opt._initialize()
+            opt._update_iter_params(n_iter // 2)
+            mid.append(opt.epoch_std)
+        self.assertAlmostEqual(mid[0], mid[1], places=6)
+        self.assertAlmostEqual(mid[1], mid[2], places=6)
+        self.assertGreater(mid[0], 0.0)
+
+    def test_the_population_converges(self):
+        """A pack that never contracts cannot express a good initial
+        population, which is what made every `egwo` sweep row uninformative."""
+        spread = []
+        egwo.EGWO(objective=functions.rastrigin, bounds=self.bounds, n_pop=30,
+                  n_iter=60, seed=1,
+                  callback=functools.partial(_record_spread, spread)).optimize()
+        self.assertLess(spread[-1] / spread[0], 0.5,
+                        "population spread barely moved over the whole run")
+
+    def test_the_noise_scale_is_reachable(self):
+        loud = egwo.EGWO(objective=functions.rastrigin, bounds=self.bounds,
+                         n_pop=10, n_iter=10, seed=2, noise_scale=0.5)
+        loud._initialize()
+        loud._update_iter_params(0)
+        quiet = egwo.EGWO(objective=functions.rastrigin, bounds=self.bounds,
+                          n_pop=10, n_iter=10, seed=2, noise_scale=0.0)
+        quiet._initialize()
+        quiet._update_iter_params(0)
+        self.assertGreater(loud.epoch_std, quiet.epoch_std)
+        self.assertEqual(quiet.epoch_std, 0.0)
+
+
+class TestStepGeometry(unittest.TestCase):
+    """Two defects of one kind: a search that can only move along one line.
+
+    Both came from collapsing a per-coordinate quantity to a scalar, and
+    neither shows up in a convergence test -- the run still improves, because
+    greedy selection improves whatever it is given. What is lost is the
+    ability to reach most of the space at all.
+    """
+
+    def setUp(self):
+        self.bounds = np.array([[-5.0, 5.0]] * 8)
+        self.obj = functions.rastrigin
+
+    def test_hba_steps_are_not_confined_to_the_diagonal(self):
+        r"""HBA's $d_i = x_{prey} - x_i$ is a vector, not a distance.
+
+        With `np.linalg.norm(...)` in its place the honey phase reduced to
+        $x_{prey} + c\,(1, 1, \ldots, 1)$ -- every badger somewhere on the
+        single diagonal line through the prey. Measured on the old code, 12 of
+        30 offsets were exact multiples of the all-ones vector.
+        """
+        opt = hba.HoneyBadgerAlgorithm(objective=self.obj, bounds=self.bounds,
+                                       n_pop=30, n_iter=20, seed=1)
+        opt._initialize()
+        opt._update_best(epoch=-1)
+        step = opt._generate_offspring(0) - opt.best_pos
+
+        ones = np.ones(self.bounds.shape[0])
+        on_diagonal = 0
+        for row in step:
+            norm = np.linalg.norm(row)
+            if norm < 1e-12:
+                continue
+            cosine = abs(float(row @ ones) / (norm * np.linalg.norm(ones)))
+            on_diagonal += abs(cosine - 1.0) < 1e-9
+        self.assertEqual(on_diagonal, 0,
+                         f"{on_diagonal}/{len(step)} badger steps lie exactly "
+                         "along the all-ones diagonal")
+
+    def test_abc_scouts_are_drawn_independently(self):
+        """`get_random_solution` returns one solution of shape (D,).
+
+        Assigning it into a boolean-masked block broadcasts that same point to
+        every scout, so abandoning k exhausted sources produced k identical
+        replacements -- the scout phase exists precisely to restore diversity,
+        and it was removing it.
+        """
+        opt = abc.ArtificialBeeColony(objective=self.obj, bounds=self.bounds,
+                                      n_pop=20, n_iter=5, seed=1, limit=0)
+        opt._initialize()
+        opt._update_best(epoch=-1)
+        opt.trials[:] = 10 ** 6            # force every source to scout
+        opt._generate_offspring(0)
+
+        distinct = len({tuple(np.round(row, 9)) for row in opt.pop})
+        self.assertGreater(distinct, 1,
+                           "every scout landed on the same random point")
+        self.assertEqual(distinct, opt.n_pop)
+
+    def test_pso_accelerations_are_in_a_usable_range(self):
+        """`c1 = c2 = 0.1` is an order of magnitude under any published set,
+        so neither attractor was felt and the swarm coasted on inertia."""
+        opt = pso.ParticleSwarmOptimization(
+            objective=self.obj, bounds=self.bounds, n_pop=10,
+            n_iter=5, seed=1)
+        self.assertGreaterEqual(opt.c1, 1.0)
+        self.assertGreaterEqual(opt.c2, 1.0)
+        self.assertLess(opt.w, 1.0)
