@@ -91,10 +91,10 @@ class HarrisHawksOptimization(Optimizer):
         mean_hawk = np.mean(self.pop, axis=0)
         # (index, Y, Z) for each hawk taking the rapid-dive branch. Collected
         # here and scored together below rather than evaluated inside the
-        # loop: two objective calls per *diving hawk*, each of a single row,
-        # is both a contract breach and the dominant cost of this optimizer.
-        # Measured at n_pop=30, n_iter=5: 122 calls, 116 of them single-row,
-        # against 6 for every other method here.
+        # loop, where each dive asked the objective for a *single row*. The
+        # group size is the contract; the call count is not. Making fewer
+        # calls is a side effect here, never the goal -- see below for the
+        # packing that would reduce it further and must not be done.
         dives = []
 
         # Iterate per hawk (vectorizing HHO's 4 branches is complex and prone to bugs)
@@ -162,6 +162,16 @@ class HarrisHawksOptimization(Optimizer):
             # be a live match of `n_pop` agents, and a server that starts
             # only when `n_pop` players are connected cannot be asked to run
             # a one-player game.
+            #
+            # Do NOT collapse these into one call by packing Y and Z into a
+            # single population when fewer than half the hawks dive. It
+            # would fit -- and it would put hawk `i`'s Y and its Z into the
+            # same match. A collective objective scores an agent against the
+            # others present, so the two candidates would face different
+            # opponents from each other and interference from every other
+            # diver's pair, and the greedy choice below would no longer be
+            # comparing what HHO says it compares. Two calls of `n_pop` is
+            # what keeps both candidates against the same opponents.
             probe_y = self.pop.copy()
             probe_z = self.pop.copy()
             for i, y, z in dives:

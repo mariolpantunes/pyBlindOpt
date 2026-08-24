@@ -65,6 +65,7 @@ import functools
 import json
 import os
 import time
+import zlib
 
 import numpy as np
 
@@ -134,7 +135,7 @@ DEFAULT_FUNCTIONS = ("sphere", "rastrigin", "ackley", "griewank",
                      "rosenbrock", "styblinski", "levy", "dixon")
 
 
-def shifted(name, d, frac=0.8, bounds_half=5.0):
+def shifted(name, d, seed, frac=0.8, bounds_half=5.0):
     """`FUNCTIONS[name]` with its optimum moved, and its value normalised to 0.
 
     The optimum is *placed*, not displaced. Drawing an offset and adding it
@@ -154,9 +155,29 @@ def shifted(name, d, frac=0.8, bounds_half=5.0):
 
     Subtracting `f_opt` makes `f* = 0` for every function, which is what the
     `alpha` success criterion assumes.
+
+    **The offset is keyed on `seed`, and drawn from `zlib.crc32` rather than
+    `hash`.** Both halves of that were bugs, and both were load-bearing.
+
+    `hash(str)` is salted per interpreter process unless `PYTHONHASHSEED` is
+    set, and it is set nowhere here. The sweep runs one process per
+    `(arm, dimension)` task, so every arm was scoring a *different* landscape:
+    measured, three processes gave `f(0) = 30.54 / 71.23 / 56.57` for sphere
+    at `d=8`. Arms were therefore never paired, and a comparison between two
+    of them carried the whole variance of the offset draw. `crc32` is
+    specified, so the same key gives the same landscape in every process, on
+    every machine, forever.
+
+    Keying on `seed` is the other half. Without it the offset is one draw per
+    `(function, dimension)` and the seeds are repetitions of a single problem
+    instance, not independent instances -- so 100 seeds buy precision about
+    one landscape rather than evidence about landscapes, and the `frac` guard
+    below never averages over anything. With it, `--seeds 100` means 100
+    instances, which is what every claim in the report needs it to mean.
     """
     fn, x_opt, f_opt = FUNCTIONS[name]
-    rng = np.random.default_rng(abs(hash(name)) % (2**32) + d)
+    rng = np.random.default_rng(np.random.SeedSequence(
+        [zlib.crc32(name.encode()), int(d), int(seed)]))
     target = rng.uniform(-frac, frac, d) * bounds_half
     off = target - x_opt(d)
     bias = f_opt(d)
@@ -302,7 +323,30 @@ _ENGINE_LEVELS = {
 #: the ladder because this is where the dimension question lives: `idw`
 #: flattens to the pool mean as distances concentrate, `fourier` fits `2d`
 #: ridge coefficients over the whole measured set, `detrended` does both.
-_ATT_MODELS = ("fourier", "idw", "detrended")
+#:
+#: **`projection` and `auto` were missing, and their absence is why the last
+#: sweep could say nothing about `d >= 32`.** OBLESA hands ESS the sampler and
+#: (q)OBL points as measured sources -- `M = 2 * n_pop = 60`, *at every
+#: dimension* -- while `fourier` and `detrended` carry `2d + 1` coefficients.
+#: From `d = 32` (65 coefficients against 60 points) the fit is
+#: underdetermined: it reproduces its own training points and generalises to
+#: nothing. Held-out error at `M = 60`, normalised so 1.0 is what predicting
+#: the mean scores:
+#:
+#: | d | 2d+1 | idw | fourier | detrended | projection |
+#: |---|---|---|---|---|---|
+#: | 8 | 17 | 0.592 | **0.381** | 0.403 | 0.514 |
+#: | 16 | 33 | 0.768 | 0.521 | **0.514** | 0.707 |
+#: | 32 | 65 | 0.706 | 0.805 | 0.805 | **0.665** |
+#: | 64 | 129 | 0.764 | 0.716 | 0.716 | 0.777 |
+#: | 100 | 201 | 0.773 | 0.745 | 0.745 | **0.740** |
+#:
+#: `projection` fits the same basis by correlation instead of by solving, so
+#: it stays defined at any source count; `auto` cross-validates the candidates
+#: on sources already paid for and keeps the winner -- it is **ESS's own
+#: default**, and hard-setting this knob to one of the other three is what
+#: disabled it. Both belong on the ladder before any claim about high `d`.
+_ATT_MODELS = ("fourier", "idw", "detrended", "projection", "auto")
 
 #: Probe-block size as a multiple of `n_pop`: 1N, the paper's 3N pool. The 2N
 #: the earlier sweep preferred was measured on a different engine; `opp_ess`
@@ -372,7 +416,8 @@ _FIXED = {
 
 #: Only crossed where there is attraction to estimate: crossing `null` and
 #: `a000` would ship two bit-identical arms under two names.
-_MODEL_SUFFIX = {"fourier": "f", "idw": "i", "detrended": "d"}
+_MODEL_SUFFIX = {"fourier": "f", "idw": "i", "detrended": "d",
+                 "projection": "p", "auto": "x"}
 
 OBLESA_KNOBS = {}
 for _elab, _eng in _ENGINE_LEVELS.items():
@@ -577,9 +622,15 @@ def split_arm(arm):
     return init_arm, (opt or "de")
 
 
-def objective_for(fname, d):
-    """The landscape for one cell, shifted or not, always with f* = 0."""
-    return (shifted(fname, d, SHIFT_FRAC[0]) if SHIFT[0]
+def objective_for(fname, d, seed):
+    """The landscape for one cell, shifted or not, always with f* = 0.
+
+    `seed` selects the instance. Every arm at the same `(fname, d, seed)` gets
+    the identical landscape, which is what makes the arm axis paired; a
+    different `seed` is a different instance, which is what makes the seed
+    axis independent.
+    """
+    return (shifted(fname, d, seed, SHIFT_FRAC[0]) if SHIFT[0]
             else unshifted(fname, d))
 
 
@@ -612,7 +663,7 @@ def one_cell(init_arm, fname, d, seed, n_pop, n_iter, optimizers):
         dict: one result row per optimizer, in `optimizers` order.
     """
     bounds = np.array([[-5.0, 5.0]] * d)
-    objective = objective_for(fname, d)
+    objective = objective_for(fname, d, seed)
     counted = _Counted(objective)
     rng_init = np.random.default_rng(seed)
 
