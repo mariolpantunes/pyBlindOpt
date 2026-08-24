@@ -1,37 +1,46 @@
-"""Acceleration rate and best fitness, per dimension, for every optimizer.
+"""Acceleration rate and best fitness, with effect sizes, per dimension.
 
 The cross-optimizer view of a finished sweep. `report_init_oblesa.py` renders
-one optimizer at a time into HTML and is the analysis of record; this answers
-the different question of whether an effect *holds across* optimizers and
-dimensions, in one table you can read at a glance.
+one optimizer at a time into HTML; this answers whether an effect *holds
+across* optimizers and dimensions.
 
-Uses this project's own definitions (`report_init_oblesa.py`):
+**Two metrics, and only two.** An initializer either gets the optimizer to a
+given quality sooner, or it ends up somewhere better. Everything else here is
+a way of putting an error bar on one of those.
 
-  target (VTR)  the MEDIAN FINAL VALUE the `random` baseline reaches in that
-                (function, dimension, optimizer) cell. A fixed tolerance
-                cannot work across functions spanning 1e-83 to 1e3 -- the
-                same alpha is unreachable for rastrigin at d=32 and passed in
-                two generations by sphere. Targeting what the baseline
-                actually achieves keeps acceleration meaningful everywhere,
-                and guarantees ~half the baseline runs reach it.
+  AR %          Acceleration rate. Per landscape, the target is the value the
+                `random` baseline *finished* at on that same landscape, and
+                AR is `(1 - iterations_to_reach / budget) * 100`. Positive
+                means the arm reached random's final quality with that share
+                of the budget left. A run that never reaches it is censored at
+                the full budget and scores 0, which is the paper's convention.
 
-  AR %          (1 - iterations_arm / iterations_random) * 100, summed over
-                the cells of a dimension. POSITIVE = reaches the target in
-                fewer iterations than random. A run that never reaches it is
-                censored at the full budget, which is the paper's convention.
+  dlog10 fit    Best fitness achieved, as `log10(arm / random)` on the same
+                landscape. **Negative is better**: -1.0 is a final value one
+                order of magnitude below what random reached. A ratio is the
+                only scale-free comparison available when the eight functions
+                finish anywhere between 1e-83 and 1e3, and the log makes it
+                symmetric so a 10x win and a 10x loss weigh alike.
 
-  success %     share of runs that reached the target at all.
+**Why not a win rate or a rank.** Both discard the margin. "Better in 54% of
+cells" is compatible with winning by nothing and losing by a lot, and it was
+how an earlier reading of this sweep talked itself into an effect. Report the
+size of the difference, or do not report it.
 
-  best fitness  mean normalised rank of the final value, 0.00 = best of the
-                compared arms, 1.00 = worst. Ranked because raw values are
-                not comparable across functions and dimensions.
+**The unit of independence is the landscape.** `shifted()` draws the optimum
+from `(function, dimension, seed)`, so every seed is a different problem
+instance and the confidence intervals below are bootstrapped over instances,
+not over repetitions of one. That was not true before commit 451d3c2: the
+offset came from `hash()`, which is salted per process, so each arm was scored
+on a landscape of its own and no comparison between two arms meant anything.
 
-8 functions x 5 dimensions x 100 seeds per arm per optimizer.
+8 functions x 100 seeds = 800 landscapes per (dimension, optimizer) cell.
 
 Run against a completed sweep, from the repository root::
 
     python examples/report_acceleration.py
     python examples/report_acceleration.py --sweep-dir examples/out/sweep
+    python examples/report_acceleration.py --arms qobl ob_a200i_s00
 """
 import argparse
 import collections
@@ -44,76 +53,107 @@ import numpy as np
 DIMS = [8, 16, 32, 64, 100]
 OPTS = ["de", "jade", "ga", "cs", "egwo"]
 BASE = "random"
-SHOW = ["lhs", "qobl", "ob_null_s00", "ob_a000_s00", "ob_a050f_s00",
-        "ob_a100f_s00", "ob_a200f_s00"]
-PRETTY = {"lhs": "lhs", "qobl": "qobl", "ob_null_s00": "OBLESA null",
-          "ob_a000_s00": "OBLESA w=0", "ob_a050f_s00": "OBLESA w=0.5",
-          "ob_a100f_s00": "OBLESA w=1", "ob_a200f_s00": "OBLESA w=2"}
-N_POP, ITERS = 30, 200
-BUDGET = N_POP * ITERS
+
+#: Default arms: the cost-matched baselines, then the attraction ladder at the
+#: models that stay identifiable. `x` is `auto`, ESS's own default.
+SHOW = ["lhs", "qobl", "obl2x", "random4x", "ob_null_s00", "ob_a000_s00",
+        "ob_a050d_s00", "ob_a050i_s00", "ob_a050x_s00",
+        "ob_a200d_s00", "ob_a200p_s00", "ob_a200i_s00", "ob_a200x_s00"]
+PRETTY = {
+    "lhs": "lhs", "qobl": "qobl", "obl2x": "obl2x (4N)",
+    "random4x": "random4x (4N)", "ob_null_s00": "oblesa null",
+    "ob_a000_s00": "oblesa w=0",
+    "ob_a050d_s00": "oblesa w=.5 detr", "ob_a050i_s00": "oblesa w=.5 idw",
+    "ob_a050x_s00": "oblesa w=.5 auto",
+    "ob_a200d_s00": "oblesa w=2 detr", "ob_a200p_s00": "oblesa w=2 proj",
+    "ob_a200i_s00": "oblesa w=2 idw", "ob_a200x_s00": "oblesa w=2 auto",
+}
+FLOOR = 1e-30           # both sides of the ratio, so log10 stays finite
 
 _ap = argparse.ArgumentParser(description=__doc__)
 _ap.add_argument("--sweep-dir", default="examples/out/sweep",
                  help="directory of per-task JSONL written by the sweep")
+_ap.add_argument("--arms", nargs="+", default=None,
+                 help="override the default arm list")
+_ap.add_argument("--boot", type=int, default=2000,
+                 help="bootstrap resamples for the confidence intervals")
 _args = _ap.parse_args()
+if _args.arms:
+    SHOW = list(_args.arms)
+    PRETTY = {a: PRETTY.get(a, a) for a in SHOW}
 
-rows = collections.defaultdict(list)          # (fn, d, opt, arm) -> rows
-_files = sorted(glob.glob(os.path.join(_args.sweep_dir, "*.jsonl")))
-if not _files:
-    raise SystemExit(f"no sweep output under {_args.sweep_dir!r}")
-for p in _files:
-    with open(p) as fh:
+WANT = set(SHOW) | {BASE}
+cell = collections.defaultdict(dict)      # (fn, d, seed, opt) -> {arm: row}
+for _p in sorted(glob.glob(os.path.join(_args.sweep_dir, "*.jsonl"))):
+    with open(_p) as fh:
         for line in fh:
             r = json.loads(line)
             arm, _, opt = r["arm"].partition("@")
-            if arm in SHOW or arm == BASE:
-                rows[(r["function"], r["d"], opt, arm)].append(r)
+            if arm in WANT:
+                cell[(r["function"], r["d"], r["seed"], opt)][arm] = r
+if not cell:
+    raise SystemExit(f"no sweep output under {_args.sweep_dir!r}")
 
 
-def trip(r, vtr):
-    for g, v in enumerate(r["curve"]):
+def reached(row, vtr):
+    """Iterations until the curve first reaches `vtr`, censored at the budget."""
+    for g, v in enumerate(row["curve"]):
         if v <= vtr:
             return g + 1, True
-    return len(r["curve"]), False
+    return len(row["curve"]), False
+
+
+def ci(vals, boot, rng):
+    """Median and a 95% percentile bootstrap interval over landscapes."""
+    a = np.asarray(vals, dtype=np.float64)
+    if a.size == 0:
+        return float("nan"), float("nan"), float("nan")
+    idx = rng.integers(0, a.size, size=(boot, a.size))
+    meds = np.median(a[idx], axis=1)
+    return (float(np.median(a)), float(np.percentile(meds, 2.5)),
+            float(np.percentile(meds, 97.5)))
 
 
 print(__doc__)
+_rng = np.random.default_rng(0)
 for opt in OPTS:
-    fns = sorted({k[0] for k in rows if k[2] == opt})
-    print(f"\n{'=' * 92}\noptimizer: {opt}   functions: {len(fns)}\n{'=' * 92}")
-    print(f"{'arm':<14}" + "".join(f"{'d=' + str(d):>13}" for d in DIMS)
-          + f"{'success':>10}")
-    print(f"{'':<14}" + "".join(f"{'AR%  fit':>13}" for _ in DIMS) + f"{'%':>10}")
-    print("-" * 92)
+    print(f"\n{'=' * 104}\noptimizer: {opt}\n{'=' * 104}")
+    print(f"{'arm':<20}" + "".join(f"{'d=' + str(d):>16}" for d in DIMS)
+          + f"{'reached':>9}")
+    print(f"{'':<20}" + "".join(f"{'AR%   dlog10':>16}" for _ in DIMS)
+          + f"{'%':>9}")
+    print("-" * 104)
     for arm in SHOW:
-        cells_line, ok_tot, n_tot = [], 0, 0
+        line, hit, tot = [], 0, 0
         for d in DIMS:
-            it_a = it_b = 0
-            ranks = []
-            for f in fns:
-                base = rows.get((f, d, opt, BASE))
-                cur = rows.get((f, d, opt, arm))
-                if not base or not cur:
+            ars, dls = [], []
+            for (fn, dd, seed, oo), v in cell.items():
+                if dd != d or oo != opt or arm not in v or BASE not in v:
                     continue
-                vtr = float(np.median([r["curve"][-1] if r["curve"]
-                                       else r["score"] for r in base]))
-                for r in base:
-                    it_b += trip(r, vtr)[0]
-                for r in cur:
-                    g, ok = trip(r, vtr)
-                    it_a += g
-                    ok_tot += ok
-                    n_tot += 1
-                # rank the final value of this arm among all shown arms
-                allv = {a: rows[(f, d, opt, a)] for a in [BASE] + SHOW
-                        if rows.get((f, d, opt, a))}
-                per = sorted(allv)
-                med = {a: float(np.median([x["score"] for x in allv[a]]))
-                       for a in per}
-                order = sorted(per, key=lambda a: med[a])
-                ranks.append(order.index(arm) / (len(per) - 1))
-            ar = (1 - it_a / it_b) * 100 if it_b else float("nan")
-            cells_line.append(f"{ar:6.1f} {np.mean(ranks):5.2f}")
-        succ = 100.0 * ok_tot / n_tot if n_tot else float("nan")
-        print(f"{PRETTY[arm]:<14}"
-              + "".join(f"{c:>13}" for c in cells_line) + f"{succ:10.1f}")
+                base, cur = v[BASE], v[arm]
+                budget = len(base["curve"])
+                if not budget:
+                    continue
+                # The target is what random ended at on THIS landscape, so the
+                # comparison never crosses instances of different difficulty.
+                vtr = base["curve"][-1]
+                g, ok = reached(cur, vtr)
+                ars.append((1 - g / budget) * 100)
+                hit += ok
+                tot += 1
+                dls.append(np.log10(max(cur["score"], FLOOR)
+                                    / max(base["score"], FLOOR)))
+            ar, _, _ = ci(ars, _args.boot, _rng)
+            dl, lo, hi = ci(dls, _args.boot, _rng)
+            sig = (lo < 0) == (hi < 0) and not np.isnan(dl)
+            star = "*" if sig else " "
+            line.append(f"{ar:6.1f} {dl:+7.2f}{star}")
+        rate = 100.0 * hit / tot if tot else float("nan")
+        print(f"{PRETTY.get(arm, arm):<20}"
+              + "".join(f"{c:>16}" for c in line) + f"{rate:9.1f}")
+
+print("\n* the 95% bootstrap interval for dlog10 excludes 0 "
+      "(resampled over landscapes).")
+print("AR% > 0: reached random's final value with that share of the budget "
+      "unspent.   dlog10 < 0: ended below random by that many orders of "
+      "magnitude.")
