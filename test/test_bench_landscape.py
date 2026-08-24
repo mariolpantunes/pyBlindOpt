@@ -101,3 +101,110 @@ class TestLandscapeIsReproducible(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestLandscapeCoverage(unittest.TestCase):
+    """The benchmark set has to *vary* the properties it claims to test.
+
+    A set that is uniformly separable cannot show whether joint-space coverage
+    helps, because on a separable landscape a coordinate-marginal design is
+    already near-optimal. Seven of the original eight landscapes were
+    separable at D=32, so the sweep could not have answered the question it
+    was built for -- and no amount of extra seeds would have helped, because
+    the missing thing was variance across landscapes, not precision within
+    one.
+
+    These assert the set still spans both axes, so trimming it later cannot
+    silently collapse it back.
+    """
+
+    @staticmethod
+    def _bench():
+        sys.path.insert(0, EXAMPLES)
+        sys.path.insert(0, os.path.join(ROOT, "src"))
+        import bench_init_oblesa  # type: ignore[reportMissingImports]
+        return bench_init_oblesa
+
+    @staticmethod
+    def _coupling(fn, d, rng, n_pairs=40, n_pts=8, h=1e-4):
+        """Fraction of coordinate pairs with a non-zero mixed second
+        difference, which is zero for every pair iff f is additively
+        separable."""
+        import numpy as np
+        hits = []
+        for _ in range(n_pts):
+            x = rng.uniform(-5.0, 5.0, d)
+            base = float(fn(x))
+            for _ in range(n_pairs):
+                i, j = rng.choice(d, 2, replace=False)
+                xi, xj, xij = x.copy(), x.copy(), x.copy()
+                xi[i] += h; xj[j] += h; xij[i] += h; xij[j] += h
+                mixed = float(fn(xij)) - float(fn(xi)) - float(fn(xj)) + base
+                hits.append(abs(mixed) / (h * h * max(abs(base), 1e-12)))
+        return float((np.array(hits) > 1e-3).mean())
+
+    def test_the_default_set_contains_coupled_landscapes(self):
+        import numpy as np
+        b = self._bench()
+        rng = np.random.default_rng(0)
+        coupled = [name for name in b.DEFAULT_FUNCTIONS
+                   if self._coupling(b.shifted(name, 8, 0), 8, rng) > 0.5]
+        self.assertGreaterEqual(
+            len(coupled), 4,
+            f"only {len(coupled)} densely coupled landscapes in the default "
+            f"set; joint-space coverage cannot be distinguished from "
+            f"coordinate-marginal coverage on separable problems")
+
+    def test_rotation_actually_couples(self):
+        """A rotated landscape must be coupled where its unrotated twin is
+        not -- otherwise `rot_` is a label, not a transformation."""
+        import numpy as np
+        b = self._bench()
+        rng = np.random.default_rng(1)
+        for name in ("rastrigin", "levy", "dixon"):
+            plain = self._coupling(b.shifted(name, 8, 0), 8, rng)
+            rot = self._coupling(b.shifted(f"rot_{name}", 8, 0), 8, rng)
+            self.assertLess(plain, 0.5, f"{name} was already coupled")
+            self.assertGreater(rot, 0.5, f"rot_{name} did not couple")
+
+    def test_every_landscape_attains_zero_at_its_optimum(self):
+        """`f* = 0` is what the alpha success criterion measures against. A
+        floor that is not reachable is a target no run can ever hit."""
+        import zlib
+
+        import numpy as np
+        b = self._bench()
+        for name in b.DEFAULT_FUNCTIONS:
+            for d in (8, 32):
+                g = b.shifted(name, d, 0)
+                rng = np.random.default_rng(np.random.SeedSequence(
+                    [zlib.crc32(name.encode()), d, 0]))
+                target = rng.uniform(-0.8, 0.8, d) * 5.0
+                if name in b.SIGN_FLIP_ONLY:
+                    sign = rng.choice((-1.0, 1.0), size=d)
+                    target = sign * b._SCHWEFEL_X
+                self.assertLess(
+                    abs(float(g(target))), 1e-8,
+                    f"{name} d={d} does not reach 0 at its stated optimum")
+
+    def test_no_landscape_goes_below_its_stated_floor(self):
+        """The other half: nothing in the searched box may beat f* = 0.
+
+        Schwefel breaches this without a boundary penalty -- its sine term
+        keeps growing past the native domain, so a D=32 point outside it
+        scores about -15160 against a claimed optimum of 0, and every
+        'improvement' past zero is the benchmark leaking rather than the
+        optimizer working.
+        """
+        import numpy as np
+        b = self._bench()
+        rng = np.random.default_rng(3)
+        for name in b.DEFAULT_FUNCTIONS:
+            for d in (8, 32):
+                g = b.shifted(name, d, 0)
+                worst = float(np.min([float(g(x)) for x in
+                                      rng.uniform(-5.0, 5.0, (400, d))]))
+                self.assertGreater(
+                    worst, -1e-6,
+                    f"{name} d={d} reaches {worst} inside the box, below its "
+                    f"stated floor of 0")

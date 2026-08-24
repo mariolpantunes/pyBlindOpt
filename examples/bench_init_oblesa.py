@@ -111,6 +111,27 @@ _ST_X = float(_ST_ROOTS[np.argmin(0.5 * (_ST_ROOTS**4 - 16 * _ST_ROOTS**2
                                          + 5 * _ST_ROOTS))])
 _ST_F = float(0.5 * (_ST_X**4 - 16 * _ST_X**2 + 5 * _ST_X))
 
+# Schwefel's per-coordinate optimum, solved for the same reason. The quoted
+# 420.9687 is rounded at the seventh digit, which leaves f* about 9e-9 above 0
+# at d=32 -- small, but the alpha criterion measures a *relative* deviation
+# from f* = 0, so a floor that is not actually 0 is a floor no run can reach.
+# Bisection rather than a root-finder because scipy is not a dependency here.
+def _schwefel_x():
+    """Stationary point of x sin(sqrt(x)), i.e. sin(u) + u cos(u)/2 = 0."""
+    df = lambda t: np.sin(np.sqrt(t)) + np.sqrt(t) * np.cos(np.sqrt(t)) / 2.0
+    lo, hi = 400.0, 440.0
+    for _ in range(200):
+        mid = 0.5 * (lo + hi)
+        if df(lo) * df(mid) <= 0.0:
+            hi = mid
+        else:
+            lo = mid
+    return 0.5 * (lo + hi)
+
+
+# /100 because `functions.schwefel` is posed on the module's [-5, 5] box.
+_SCHWEFEL_X = _schwefel_x() / 100.0
+
 # name -> (callable, x_opt(d), f_opt(d))
 FUNCTIONS = {
     # --- even, and three of them periodic ---
@@ -128,11 +149,107 @@ FUNCTIONS = {
                                      / 2.0 ** np.arange(1, d + 1)),
                    lambda d: 0.0),
     # Even, but neither separable nor permutation-invariant, and increasingly
-    # ill-conditioned. Not in the default eight; name it on --functions.
+    # ill-conditioned. Not in the default set; name it on --functions.
     "zakharov":   (functions.zakharov,   _ZEROS, lambda d: 0.0),
+    # --- weak global structure; see the block below ---
+    "schwefel":   (functions.schwefel,
+                   lambda d: np.full(d, _SCHWEFEL_X), lambda d: 0.0),
+    "lunacek":    (functions.lunacek_bi_rastrigin,
+                   lambda d: np.full(d, 1.25), lambda d: 0.0),
 }
-DEFAULT_FUNCTIONS = ("sphere", "rastrigin", "ackley", "griewank",
-                     "rosenbrock", "styblinski", "levy", "dixon")
+
+# ---------------------------------------------------------------------------
+# What the set has to span, and what it did not
+# ---------------------------------------------------------------------------
+# A benchmark set generalises an *initializer* only if it varies the two
+# properties that decide whether initialisation can matter at all.
+#
+#   coupling  fraction of coordinate pairs with a non-zero mixed second
+#             difference. Zero for every pair iff f is additively separable.
+#   fdc_loc   correlation between a *local* optimum's fitness and its distance
+#             to the global one, over 200 descents. Near 1 means one funnel:
+#             descend from anywhere and you arrive, so where the population
+#             started cannot change where it ends.
+#
+# fdc_loc is measured on the local optima rather than on uniform samples of
+# the box, because almost every landscape here falls toward its optimum *on
+# average* -- box-wide FDC reads 0.71-1.00 across the original eight and says
+# nothing. It is also budget-sensitive where it matters: Lunacek at D=32 reads
+# 0.947 under a 250-evaluation descent and 0.683 under 4000, because a weak
+# local search never finds the second funnel and then reports that there is
+# only one. The figures below use 1000.
+#
+#   landscape        cpl(32)  fdc_loc(8)  fdc_loc(32)
+#   sphere              0.00       0.990        0.997
+#   rastrigin           0.00       0.983        0.978
+#   griewank            0.00       0.250        0.238
+#   styblinski          0.00       0.818        0.821
+#   levy                0.00       0.870        0.834
+#   dixon               0.01       0.447        0.895
+#   rosenbrock          0.03       0.580        0.687
+#   ackley              0.58       0.998        0.988
+#   rot_rastrigin       0.99       0.979        0.982
+#   rot_styblinski      0.56       0.849        0.763
+#   rot_levy            0.96       0.946        0.988
+#   rot_dixon           0.69       0.407        0.938
+#   schwefel            0.00       0.287        0.293
+#   lunacek             0.00       0.327        0.718
+#
+# **The gap that mattered was coupling.** Seven of the original eight are
+# separable at D=32, so each coordinate can be optimised independently and a
+# coordinate-marginal design -- LHS, qOBL, plain uniform -- is already close to
+# optimal. OBLESA's premise is *joint* coverage, and on a separable landscape
+# joint coverage buys nothing marginal coverage does not already have. The set
+# was therefore structurally unable to show the thing it was built to measure,
+# and no number of seeds would have helped: the missing quantity was variance
+# across landscapes, not precision within one. Checked directly on sweep 8565
+# (1.58M runs) -- with ackley the only coupled landscape, the
+# separable-minus-coupled margin came out +0.022 for `cs` and -0.031 for `de`,
+# opposite signs and both inside noise. Unanswerable, rather than answered.
+#
+# It also got *worse* with dimension -- griewank 0.65 -> 0.00, dixon 0.19 ->
+# 0.01, rosenbrock 0.20 -> 0.03 from D=8 to D=32 -- which is exactly the regime
+# OBLESA targets. Some part of "the advantage thins out at high d" is the
+# benchmark thinning out.
+#
+# Global structure was the *smaller* gap, and an earlier version of this note
+# overstated it by reading box-wide FDC. The original eight already spanned
+# 0.25 (griewank) to 1.00, so weak-funnel landscapes were represented. What
+# they had none of was a *deceptive* one -- an optimum pinned against the
+# boundary, which is where constrained problems put theirs.
+#
+# `rot_*` supplies the coupling: a per-instance random rotation turns any
+# separable function into a densely coupled one (0.00 -> 0.96-1.00 at D=8)
+# without touching its modality, conditioning or optimum value. Sphere is
+# deliberately not rotated -- it is rotation-invariant, so the unrotated pair
+# is a null control. `schwefel` and `lunacek` fill in the weak-funnel corner
+# at 0.29 and 0.33.
+#
+# The default set is a 2x2 over {separable, coupled} x {one funnel, weak
+# funnel}, which is what makes a per-class breakdown readable. Trim it with
+# --functions if the budget will not carry 14; `test_bench_landscape` fails if
+# a trim drops the coupled class below four.
+
+#: Landscapes whose instances come from per-coordinate sign flips rather than
+#: a translation, because their optimum's *position* is the property under
+#: test. See `shifted`.
+SIGN_FLIP_ONLY = ("schwefel",)
+
+#: Landscapes that get a per-instance random rotation. Sphere is excluded on
+#: purpose: rotating it changes nothing, which is the point of having it.
+ROTATED = ("rastrigin", "styblinski", "levy", "dixon", "lunacek")
+for _r in ROTATED:
+    FUNCTIONS[f"rot_{_r}"] = FUNCTIONS[_r]
+
+DEFAULT_FUNCTIONS = (
+    # separable / one funnel
+    "sphere", "rastrigin", "ackley", "griewank",
+    "rosenbrock", "styblinski", "levy", "dixon",
+    # coupled / one funnel
+    "rot_rastrigin", "rot_styblinski", "rot_levy", "rot_dixon",
+    # weak global structure
+    "schwefel", "lunacek",
+)
 
 
 def shifted(name, d, seed, frac=0.8, bounds_half=5.0):
@@ -179,11 +296,53 @@ def shifted(name, d, seed, frac=0.8, bounds_half=5.0):
     rng = np.random.default_rng(np.random.SeedSequence(
         [zlib.crc32(name.encode()), int(d), int(seed)]))
     target = rng.uniform(-frac, frac, d) * bounds_half
-    off = target - x_opt(d)
     bias = f_opt(d)
+    x_star = x_opt(d)
 
-    def g(x):
-        return fn(np.asarray(x) - off) - bias
+    if name in SIGN_FLIP_ONLY:
+        # Translating this one destroys the property it was added for. Its
+        # optimum sits at 0.84 of the half-width *by design*, so carrying it
+        # to an interior target drags the whole box outward: measured, 96.8%
+        # of box points then have at least one coordinate outside the native
+        # domain, where the boundary penalty dominates. The penalty is a
+        # convex bowl, so the landscape the optimizer actually sees becomes
+        # single-funnel -- fitness-distance correlation over local optima rose
+        # from 0.05 to 0.43, i.e. the deception was translated away.
+        #
+        # Per-coordinate sign flips generate instances instead. The term
+        # x sin(sqrt|x|) is odd, so a flip is a genuinely different landscape
+        # rather than a relabelling, the optimum stays hard against the
+        # boundary at +/-4.21, and nothing ever leaves the native domain.
+        sign = rng.choice((-1.0, 1.0), size=d)
+
+        def g(x):
+            return fn(sign * np.asarray(x)) - bias
+    elif not name.startswith("rot_"):
+        off = target - x_star
+
+        def g(x):
+            return fn(np.asarray(x) - off) - bias
+    else:
+        # Rotation is taken about the optimum, so the optimum stays exactly at
+        # `target` and `f* = 0` still holds -- a rotation about the origin
+        # would move it, and the alpha criterion would then be chasing a
+        # value the landscape no longer attains.
+        #
+        # Haar-uniform via QR, with the sign correction: `np.linalg.qr` fixes
+        # no sign convention, so taking Q raw gives a distribution biased
+        # toward particular reflections. Multiplying by sign(diag(R)) is what
+        # makes it uniform over O(d), which matters because a biased rotation
+        # is a *fixed* structure that an arm could exploit across instances.
+        #
+        # Keyed on (name, d, seed) like the shift, so every instance gets its
+        # own rotation and no arm can be measured against a single one.
+        q_rng = np.random.default_rng(np.random.SeedSequence(
+            [zlib.crc32(f"rot::{name}".encode()), int(d), int(seed)]))
+        q, r = np.linalg.qr(q_rng.standard_normal((d, d)))
+        q = q * np.sign(np.diag(r))
+
+        def g(x):
+            return fn(q @ (np.asarray(x) - target) + x_star) - bias
 
     g.__name__ = f"{name}_shifted"
     return g
