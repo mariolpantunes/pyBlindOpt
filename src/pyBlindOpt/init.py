@@ -493,6 +493,13 @@ def oblesa(
         n_jobs (int): Number of parallel jobs for objective evaluation.
         n_ess (int | None): Size of the empty-space block. Defaults to `n_pop`.
             Zero disables the stage, reducing this to OBL under `selection`.
+
+            Must be a whole number of populations -- `n_ess`, or `2 * n_ess`
+            when `opp_ess` is set, has to divide by `n_pop`. Every objective
+            call this function makes is exactly `n_pop` rows, and a block that
+            does not divide evenly leaves a short final call, which breaks
+            callers whose objective is sized for a fixed batch. Rejected up
+            front rather than left to surface as an odd-shaped call.
         rounds (int): How many times the empty-space stage runs, each round
             probing against everything the previous rounds placed **and
             measured**. Defaults to 1, which is the single-pass pipeline.
@@ -564,6 +571,23 @@ def oblesa(
     else:
         combined_samples = np.vstack((ran_pop, _oppose(ran_pop, bounds, opp, rng)))
     n_ess = n_pop if n_ess is None else int(n_ess)
+    if n_ess < 0:
+        raise ValueError(f"n_ess must be >= 0, got {n_ess}")
+
+    # The batch invariant, enforced rather than hoped for. Every objective
+    # call below is a slice of `n_pop` rows, so a probe block that is not a
+    # whole number of populations leaves a short final call -- which breaks
+    # callers whose objective is sized for a fixed batch. `opp_ess` doubles
+    # the block, so it can mask the problem for some `n_ess` and expose it
+    # for others; that is worse than failing, so both are checked together.
+    probe_block = n_ess * (2 if (opp_ess and opp != "none") else 1)
+    if probe_block % n_pop:
+        raise ValueError(
+            f"the empty-space block must be a whole number of populations so "
+            f"every objective call is exactly n_pop rows: n_ess={n_ess}"
+            + (" doubled by opp_ess" if probe_block != n_ess else "")
+            + f" gives {probe_block}, which is not a multiple of n_pop={n_pop}"
+        )
 
     # One call per `n_pop` rows, never a bigger block. Every optimizer here
     # evaluates a generation of exactly `n_pop`, and an objective may be

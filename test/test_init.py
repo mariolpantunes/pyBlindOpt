@@ -636,6 +636,28 @@ class TestEvaluationGroupContract(unittest.TestCase):
                 fn(rec, self._bounds(), n_pop=25, seed=0)
                 self.assertEqual(sorted(set(rec.batches)), [25])
 
+    def test_a_ragged_probe_block_is_refused_not_silently_shortened(self):
+        """The case the original test missed, and the reason it survived.
+
+        Every case above happens to divide evenly. When `n_ess` is not a whole
+        number of populations the final slice is short -- `n_pop=30, n_ess=45`
+        used to evaluate in groups of [30, 15] -- which is exactly the batch
+        break this class exists to prevent. `opp_ess` doubles the block, so it
+        masked the fault for some `n_ess` and exposed it for others; both are
+        pinned here so the flag cannot hide it again.
+        """
+        for n_ess, opp_ess in ((45, False), (15, False), (15, True), (45, True)):
+            block = n_ess * (2 if opp_ess else 1)
+            with self.subTest(n_ess=n_ess, opp_ess=opp_ess):
+                if block % 30:
+                    with self.assertRaises(ValueError) as cm:
+                        self._batches_for(n_ess=n_ess, opp_ess=opp_ess)
+                    self.assertIn("n_pop", str(cm.exception))
+                else:
+                    self.assertEqual(
+                        sorted(set(self._batches_for(
+                            n_ess=n_ess, opp_ess=opp_ess))), [30])
+
     def test_grouping_does_not_change_the_result(self):
         """A contract repair, not a numerical one: same rows, same scores."""
         def sphere(x):
