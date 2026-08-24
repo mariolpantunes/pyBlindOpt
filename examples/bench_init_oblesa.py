@@ -320,9 +320,17 @@ _ENGINE_LEVELS = {
 }
 
 #: How ESS estimates attractiveness where it has no measurement. Crossed with
-#: the ladder because this is where the dimension question lives: `idw`
-#: flattens to the pool mean as distances concentrate, `fourier` fits `2d`
-#: ridge coefficients over the whole measured set, `detrended` does both.
+#: the ladder because this is where the dimension question lives.
+#:
+#: The estimate exists so the pairwise force balance is well posed for points
+#: that were never measured -- **not** to name a position better than anything
+#: measured. See `ess.attraction`'s module docstring; reasoning about it as an
+#: extrapolating surrogate gets every conclusion here backwards, `idw`'s in
+#: particular. This comment used to say `idw` "flattens to the pool mean as
+#: distances concentrate", which is true of the values and false as a verdict:
+#: measured at `force_weight=2`, `idw` holds 74.9 / 73.1 / 72.1 / 71.0 percent
+#: of the selected population at d = 8 / 16 / 32 / 64, while `detrended` falls
+#: 70.4 -> 13.8 over the same range.
 #:
 #: **`projection` and `auto` were missing, and their absence is why the last
 #: sweep could say nothing about `d >= 32`.** OBLESA hands ESS the sampler and

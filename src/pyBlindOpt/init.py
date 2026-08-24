@@ -306,7 +306,36 @@ def _ess_engine(
         attraction_weight (float): Pull strength in ESS's units. The default
             is ESS's own measured optimum; it is **not** `force_weight`, see
             above.
-        att_model (str): How ESS estimates the attractiveness of a position it
+        att_model (str): **Which model, and why it decides high-`d` behaviour.**
+            OBLESA hands ESS the sampler and (q)OBL blocks as the measured
+            anchors, so the source count is `2 * n_pop` *at every dimension* --
+            60 at the default `n_pop=30`. `'fourier'` and `'detrended'` carry
+            `2d + 1` coefficients, so from `d = 32` (65 coefficients against
+            60 points) they are underdetermined: the fit reproduces its own
+            sources and generalises to nothing. `'idw'` has no coefficients and
+            `'projection'` correlates rather than solves, so both stay defined
+            at any count.
+
+            Measured, as the share of the selected population won by the
+            relaxed block at `force_weight=2` (8 functions x 8 seeds; the block
+            is a third of the pool, so 33% is parity):
+
+            ===========  =====  =====  =====  =====
+            att_model    d=8    d=16   d=32   d=64
+            ===========  =====  =====  =====  =====
+            detrended    70.4   41.9   18.0   13.8
+            projection   71.4   56.8   41.1   27.9
+            idw          74.9   73.1   72.1   71.0
+            auto         70.9   72.2   70.0   64.1
+            ===========  =====  =====  =====  =====
+
+            `'auto'` -- the default, and ESS's own -- cross-validates on
+            sources already paid for and so tracks whichever wins. **Naming any
+            other model here overrides that**, which is how a sweep can end up
+            measuring an underdetermined fit at every dimension without
+            anything reporting a problem.
+
+            How ESS estimates the attractiveness of a position it
             has no measurement for -- 'fourier' fits one function of position
             and evaluates it, 'idw' weights the nearest measured points,
             'detrended' does both. The default 'auto' cross-validates them on
