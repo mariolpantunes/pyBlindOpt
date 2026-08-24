@@ -651,3 +651,90 @@ class TestEvaluationGroupContract(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestOblesaRounds(unittest.TestCase):
+    """The empty-space stage, run more than once against measured anchors.
+
+    `rounds` costs the same evaluations as an equally large single block --
+    `n_ess=2*n_pop, rounds=1` and `n_ess=n_pop, rounds=2` are both 4N -- so
+    what it has to justify is not its budget but its shape. These assert the
+    shape: that the default is untouched, that each round's points really do
+    enter the next round's anchor set carrying their measured scores, and that
+    the `n_pop` evaluation-group contract survives the loop.
+    """
+
+    def setUp(self):
+        self.bounds = np.array([[-5.0, 5.0]] * 6)
+        self.obj = lambda X: functions.rastrigin(np.atleast_2d(X))
+
+    def test_the_default_is_a_single_round(self):
+        a = init.oblesa(self.obj, self.bounds, n_pop=8, seed=4)
+        b = init.oblesa(self.obj, self.bounds, n_pop=8, seed=4, rounds=1)
+        np.testing.assert_array_equal(a, b)
+
+    def test_each_round_adds_its_own_block_to_the_pool(self):
+        for rounds in (1, 2, 4):
+            for opp_ess in (False, True):
+                info = {}
+                init.oblesa(self.obj, self.bounds, n_pop=8, seed=4,
+                            rounds=rounds, opp_ess=opp_ess, info=info)
+                per_round = 8 * (2 if opp_ess else 1)
+                self.assertEqual(info["pool_size"], 2 * 8 + rounds * per_round,
+                                 f"rounds={rounds} opp_ess={opp_ess}")
+
+    def test_rounds_do_nothing_without_an_empty_space_stage(self):
+        """`n_ess=0` removes the stage, so repeating it must stay free."""
+        info = {}
+        init.oblesa(self.obj, self.bounds, n_pop=8, seed=4, n_ess=0, rounds=5,
+                    info=info)
+        self.assertEqual(info["pool_size"], 16)
+
+    def test_a_later_round_sees_the_earlier_one_as_anchors(self):
+        """The point of a round: the previous block is *measured* input.
+
+        If each round were handed the same 2N anchors, rounds would be
+        independent draws and this would be a more expensive `n_ess`. The
+        engine must see a growing anchor set whose scores are all real.
+        """
+        seen = []
+
+        def spy(samples, bounds, n, seed, **kw):
+            seen.append((samples.shape[0], kw.get("scores")))
+            rng = np.random.default_rng(0)
+            return rng.uniform(bounds[:, 0], bounds[:, 1], (n, bounds.shape[0]))
+
+        spy.accepts = frozenset({"scores"})  # type: ignore[reportFunctionMemberAccess]
+        init.oblesa(self.obj, self.bounds, n_pop=8, seed=4, rounds=3,
+                    engine=spy)
+        self.assertEqual([n for n, _ in seen], [16, 24, 32])
+        for n, sc in seen:
+            self.assertIsNotNone(sc)
+            self.assertEqual(len(sc), n, "scores did not track the anchors")
+            self.assertTrue(np.all(np.isfinite(sc)),
+                            "an anchor entered a later round unmeasured")
+
+    def test_every_evaluation_is_one_group_of_n_pop_at_most(self):
+        """Rounds must not widen a batch. `n_pop` is the objective's contract."""
+        widths = []
+
+        def obj(X):
+            X = np.atleast_2d(X)
+            widths.append(X.shape[0])
+            return functions.rastrigin(X)
+
+        init.oblesa(obj, self.bounds, n_pop=8, seed=4, rounds=3, opp_ess=True)
+        self.assertTrue(widths)
+        self.assertLessEqual(max(widths), 8, f"widths seen: {sorted(set(widths))}")
+
+    def test_rounds_must_be_at_least_one(self):
+        for bad in (0, -1):
+            with self.assertRaises(ValueError):
+                init.oblesa(self.obj, self.bounds, n_pop=8, seed=4, rounds=bad)
+
+    def test_the_result_is_reproducible(self):
+        kw = {"n_pop": 8, "seed": 4, "rounds": 3, "opp_ess": True,
+              "force_weight": 2.0}
+        np.testing.assert_array_equal(
+            init.oblesa(self.obj, self.bounds, **kw),
+            init.oblesa(self.obj, self.bounds, **kw))

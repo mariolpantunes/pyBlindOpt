@@ -472,6 +472,28 @@ for _flab, _fkw in _FOCUS_BASE.items():
                 _n_ess_mult=_mult, **_fkw, opp_ess=_oe,
             )
 
+#: `rounds` spends the same evaluations as `_n_ess_mult` and buys something
+#: different with them. `r2` is `n2`'s budget-matched twin -- both 4N -- but
+#: places its second N of probes against anchors that now *include* the first
+#: N, measured. The two therefore separate exactly the question 8200 could not
+#: answer: whether the empty-space stage fails at high d for want of
+#: candidates or for want of anchors to fit a field against.
+#:
+#: Locally, on `cs`, at the same 4N: `r2` beats `n2` at every dimension tried
+#: (dlog10 vs qOBL -0.215/-0.054/-0.046 against -0.052/-0.051/-0.024 at
+#: d=8/32/64), and the share of the selected population that came from an ESS
+#: round holds at 86.7% under `r2` against 73.3% under `n2` at d=64. That is a
+#: 24-run local read on 3 landscapes; these arms are what settles it.
+for _flab, _fkw in _FOCUS_BASE.items():
+    for _r, _rlab in ((2, "r2"), (3, "r3")):
+        for _oe, _olab in ((False, ""), (True, "oe")):
+            if _r == 3 and _oe:
+                continue            # 7N; past the budget the controls cover
+            OBLESA_KNOBS[f"ob_{_flab}{_rlab}{_olab}_s00"] = dict(
+                _FIXED, selection="best", diversity_weight=0.0,
+                _n_ess_mult=1.0, rounds=_r, **_fkw, opp_ess=_oe,
+            )
+
 #: The initializers. Every one is run under every optimizer in `OPTIMIZERS`,
 #: on the *same* initial population, so the two axes can be read jointly; a
 #: result row is named `<initializer>@<optimizer>`. The crossing is implicit

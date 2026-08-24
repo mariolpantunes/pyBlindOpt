@@ -394,6 +394,7 @@ def oblesa(
     seed: int | np.random.Generator | None = None,
     n_jobs: int = 1,
     n_ess: int | None = None,
+    rounds: int = 1,
     k_cand: int = 64,
     engine: collections.abc.Callable | None = None,
     diversity_weight: float = 0.25,
@@ -410,12 +411,15 @@ def oblesa(
 
         P_0    <- sample                        n_pop points
         P_obl  <- oppose(P_0)         `opp`     n_pop points
-        P_ess  <- probe empty space   `force`   n_ess points
-        P_eop  <- oppose(P_ess)       `opp_ess` n_ess points
-        return select(P_0 u P_obl u P_ess u P_eop)   `selection`
+        A      <- P_0 u P_obl                            (the anchors)
+        repeat `rounds` times:
+            P_ess  <- probe empty space in A   `force`   n_ess points
+            P_eop  <- oppose(P_ess)            `opp_ess` n_ess points
+            A      <- A u P_ess u P_eop                  (now measured)
+        return select(A)                       `selection`
 
-    so the candidate pool is `2 * n_pop + 2 * n_ess` at most: 2N for plain
-    OBL (`n_ess=0`), the paper's 3N by default, 4N with `opp_ess=True`.
+    so the candidate pool is `2 * n_pop + rounds * 2 * n_ess` at most: 2N for
+    plain OBL (`n_ess=0`), the paper's 3N by default, 4N with `opp_ess=True`.
 
     **How much of the empty-space block survives is a selection question,
     not a reserved-slot one.** The empty-space candidates are probes: one that
@@ -445,11 +449,28 @@ def oblesa(
             down: an empty-region centroid is a guess, and the segment from the
             centre toward its opposite is where quasi-opposition says the
             payoff tends to sit. Ignored when `opp='none'` or `n_ess=0`.
-            Default False: worth 1.6 points of acceleration rate on the
-            factorial, against 10.6 for `opp` and 8.4 for `selection`, and it
-            *compresses* what the guided search itself earns -- the margin over
-            the uniform null falls from +6.1 to +3.6 when it is on. It competes
-            with the attraction term rather than adding to it.
+            Default False, and that default is now the conservative choice
+            rather than the measured one. The figures it was set from (worth
+            1.6 points of acceleration rate; *compressing* the guided margin
+            from +6.1 to +3.6) were taken on a different empty-space backend
+            that no longer exists, and this knob was then held fixed at False
+            through every sweep since, so nothing re-checked it against
+            `ess.esa` until now.
+
+            Against `ess.esa` it helps, and it helps more as dimension rises.
+            On `cs`, acceleration rate at `force_weight=2` with `att_model`
+            `idw`, 5 landscapes x 8 seeds:
+
+            | d              |   8 |  16 |  32 |  64 | 100 |
+            |----------------|-----|-----|-----|-----|-----|
+            | `opp_ess=False`| 32.5| 29.5| 31.0| 44.0| 52.0|
+            | `opp_ess=True` | 32.5| 29.5| 33.2| 52.0| 62.0|
+
+            which is the opposite sign to the note it replaced: at d>=64 it
+            buys more than doubling `n_ess` does, for the same 4N. It still
+            does nothing on `de` or `egwo`. Left False because flipping a
+            default changes every downstream comparison, not because the
+            evidence favours False.
         force (str): Which force field the probes feel. 'guided' (and its
             explicit spelling 'ess') is the EmptySpaceSearch relaxation: it
             places each probe on a blend of novelty and the attractiveness the
@@ -472,6 +493,33 @@ def oblesa(
         n_jobs (int): Number of parallel jobs for objective evaluation.
         n_ess (int | None): Size of the empty-space block. Defaults to `n_pop`.
             Zero disables the stage, reducing this to OBL under `selection`.
+        rounds (int): How many times the empty-space stage runs, each round
+            probing against everything the previous rounds placed **and
+            measured**. Defaults to 1, which is the single-pass pipeline.
+
+            This is not the same purchase as a larger `n_ess`, though it costs
+            the same evaluations: `n_ess=2*n_pop, rounds=1` places 2N probes
+            against 2N anchors in one shot, while `n_ess=n_pop, rounds=2`
+            places N, *evaluates them*, and places the second N against 3N
+            anchors that now include N points in the regions the first round
+            chose.
+
+            That difference is the whole point, and it is a high-dimensional
+            one. The attraction field is fitted once per round from the
+            anchors (see `force_weight`); with only 2N anchors it is
+            extrapolating everywhere the probes actually go, and above roughly
+            d=32 there are not enough of them to pin a field down at all.
+            A round converts the previous round's guesses into measurements
+            sited exactly where the field was least sure, which is the cheapest
+            available way to buy back identifiability.
+
+            Rounds keep the `n_pop` evaluation-group contract intact: each one
+            adds whole `n_pop`-sized calls, never a wider batch.
+
+            The cost is serial. `rounds` rounds mean `rounds` separate
+            relaxations and `rounds` field fits, which cannot overlap, so wall
+            clock grows with it even where the evaluation count does not.
+
         k_cand (int): Candidates the probe search draws per placed point,
             reaching `ess.esa` as `init_pool`. Accuracy knob of the placement;
             higher is closer to the exact largest empty sphere and linearly
@@ -503,6 +551,8 @@ def oblesa(
 
     if opp not in ("none", "standard", "quasi"):
         raise ValueError(f"opp must be 'none', 'standard' or 'quasi', got {opp!r}")
+    if rounds < 1:
+        raise ValueError(f"rounds must be >= 1, got {rounds}")
     if engine is None and force not in _FORCES:
         raise ValueError(f"force must be one of {sorted(_FORCES)}, got {force!r}")
     probe = _FORCES[force] if engine is None else engine
@@ -525,35 +575,46 @@ def oblesa(
         utils.compute_objective(combined_samples[i:i + n_pop], objective, n_jobs)
         for i in range(0, combined_samples.shape[0], n_pop)])
 
-    if n_ess > 0:
-        # Only keywords the engine declares are forwarded. `ess.esa` declares
-        # nothing and pushes anything it does not recognise into its metric
-        # kernel, where it dies; this is what keeps it substitutable.
-        accepts = getattr(probe, "accepts", frozenset())
-        eng_kw = {}
-        if "k_cand" in accepts:
-            eng_kw["k_cand"] = k_cand
-        # `force_weight` under whichever name the engine calls it. ESS scales a
-        # pairwise force; an external engine scoring a candidate cloud calls the
-        # same knob `lam`. One `force` level, one attraction strength, whatever
-        # the backend spells it.
-        if "attraction_weight" in accepts:
-            eng_kw["attraction_weight"] = force_weight
-        elif "lam" in accepts:
-            eng_kw["lam"] = force_weight
+    # Only keywords the engine declares are forwarded. `ess.esa` declares
+    # nothing and pushes anything it does not recognise into its metric
+    # kernel, where it dies; this is what keeps it substitutable.
+    accepts = getattr(probe, "accepts", frozenset())
+    eng_kw = {}
+    if "k_cand" in accepts:
+        eng_kw["k_cand"] = k_cand
+    # `force_weight` under whichever name the engine calls it. ESS scales a
+    # pairwise force; an external engine scoring a candidate cloud calls the
+    # same knob `lam`. One `force` level, one attraction strength, whatever
+    # the backend spells it.
+    if "attraction_weight" in accepts:
+        eng_kw["attraction_weight"] = force_weight
+    elif "lam" in accepts:
+        eng_kw["lam"] = force_weight
+
+    # The pool *is* the anchor set: every round probes against everything
+    # placed so far and hands back points that join it. At `rounds=1` this
+    # loop runs once and the result is the single-pass pipeline unchanged.
+    population = combined_samples
+    scores = obl_scores
+    for _ in range(rounds if n_ess > 0 else 0):
         if "scores" in accepts:
-            eng_kw["scores"] = obl_scores
-        emp_pop = probe(combined_samples, bounds, n=n_ess, seed=rng, **eng_kw)
-    else:
-        emp_pop = np.empty((0, bounds.shape[0]))
+            # Measured, never inferred. The whole reason a round is worth more
+            # than the same budget spent in one larger block is that the
+            # previous round's probes enter the next field fit at the same
+            # standing as the sampler's own points.
+            eng_kw["scores"] = scores
+        emp_pop = probe(population, bounds, n=n_ess, seed=rng, **eng_kw)
 
-    if opp_ess and opp != "none" and emp_pop.shape[0]:
-        emp_pop = np.vstack((emp_pop, _oppose(emp_pop, bounds, opp, rng)))
+        if opp_ess and opp != "none" and emp_pop.shape[0]:
+            emp_pop = np.vstack((emp_pop, _oppose(emp_pop, bounds, opp, rng)))
 
-    population = np.vstack((combined_samples, emp_pop))
-    scores = np.concatenate([obl_scores] + [
-        utils.compute_objective(emp_pop[i:i + n_pop], objective, n_jobs)
-        for i in range(0, emp_pop.shape[0], n_pop)])
+        emp_scores = np.concatenate([
+            utils.compute_objective(emp_pop[i:i + n_pop], objective, n_jobs)
+            for i in range(0, emp_pop.shape[0], n_pop)]) if emp_pop.shape[0] \
+            else np.empty(0)
+
+        population = np.vstack((population, emp_pop))
+        scores = np.concatenate((scores, emp_scores))
 
     idx = utils.select_indices(
         population=population,
