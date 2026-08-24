@@ -28,7 +28,11 @@ typeCheckingMode = "standard"
 include = ["src/pyBlindOpt", "test", "examples"]
 
 [tool.vulture]
-paths = ["src/pyBlindOpt"]
+# `examples` as well as the package. Dead code in a benchmark harness is
+# rot with a cost: the sweep scripts are where a retired knob or a
+# deleted engine leaves a reference behind. `test` stays out -- vulture
+# reads unused fixtures and helpers as dead and is noise there.
+paths = ["src/pyBlindOpt", "examples"]
 min_confidence = 80
 # `**ignored` is deliberate: the guided engine accepts and drops the
 # relaxation parameters so it stays drop-in for `ess.esa`.

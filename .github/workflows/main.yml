@@ -38,8 +38,9 @@ jobs:
           # both sides run the same version. Unpinned, a ruff release that
           # enables new rules by default fails a PR that changed none of the
           # code it flags, which is exactly what happened at 0.16.
-          pip install ruff==0.16.1 basedpyright==1.39.8 vulture==2.16
-          pip install .
+          # Pinned in setup.cfg's `dev` extra, the single source of truth
+          # this job and `pre-commit` both install from.
+          pip install ".[dev]"
 
       - name: Lint with Ruff
         # `src` alone reported green over 33 errors in tracked files: the
@@ -53,5 +54,7 @@ jobs:
       - name: Dead code with Vulture
         run: vulture
 
-      - name: Run tests
-        run: python -m unittest discover -s test
+      - name: Run tests with coverage
+        run: |
+          python -m coverage run --source=pyBlindOpt -m unittest discover -s test
+          python -m coverage report -m --fail-under=90

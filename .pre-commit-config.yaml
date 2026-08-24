@@ -39,24 +39,38 @@ repos:
   - repo: local
     hooks:
       - id: ruff
-        name: ruff (src)
-        entry: ruff check src
+        name: ruff (src, test, examples)
+        entry: ruff check src test examples
         language: system
-        files: '(\.py$|^pyproject\.toml$)'
+        files: '(\.py$|^pyproject\.toml$|^setup\.cfg$)'
         pass_filenames: false
 
       - id: basedpyright
         name: basedpyright
         entry: basedpyright
         language: system
-        files: '(\.py$|^pyproject\.toml$)'
+        files: '(\.py$|^pyproject\.toml$|^setup\.cfg$)'
         pass_filenames: false
 
       - id: vulture
         name: vulture
         entry: vulture
         language: system
-        files: '(\.py$|^pyproject\.toml$)'
+        files: '(\.py$|^pyproject\.toml$|^setup\.cfg$)'
+        pass_filenames: false
+
+      - id: coverage
+        name: coverage (unittest, --fail-under)
+        # The same run as `unittest`, measured, and kept separate so a
+        # coverage drop reads as a coverage failure rather than a test one.
+        # The floor ratchets: raise it when the number rises, never lower it
+        # to make a commit pass.
+        entry: >-
+          bash -c 'PYTHONPATH=src venv/bin/python -m coverage run
+          --source=pyBlindOpt -m unittest discover -s test -q &&
+          venv/bin/python -m coverage report --fail-under=90'
+        language: system
+        files: '(\.py$|^pyproject\.toml$|^setup\.cfg$)'
         pass_filenames: false
 
       - id: unittest
@@ -71,5 +85,5 @@ repos:
         # installs the package first and has no such problem; a commit hook does.
         entry: env PYTHONPATH=src venv/bin/python -m unittest discover -s test
         language: system
-        files: '(\.py$|^pyproject\.toml$)'
+        files: '(\.py$|^pyproject\.toml$|^setup\.cfg$)'
         pass_filenames: false
