@@ -1508,38 +1508,59 @@ class TestEGWOSearchDirection(unittest.TestCase):
     def test_the_exploration_coefficient_decays(self):
         """`_update_iter_params` must chain to GWO, which owns `a`."""
         opt = egwo.EGWO(objective=functions.rastrigin, bounds=self.bounds,
-                        n_pop=10, n_iter=100, seed=2, noise_scale=0.05)
+                        n_pop=10, n_iter=100, seed=2)
         opt._initialize()
         seen = []
         for t in (0, 25, 50, 99):
             opt._update_iter_params(t)
-            seen.append((opt.a, opt.epoch_std))
-        a_vals = [a for a, _ in seen]
-        self.assertAlmostEqual(a_vals[0], 2.0)
-        self.assertLess(a_vals[-1], 0.05)
-        self.assertEqual(a_vals, sorted(a_vals, reverse=True))
-        # the noise rides on `a`, so it decays with it rather than dying in
-        # the first few percent of the run regardless of n_iter
-        self.assertGreater(seen[1][1], 0.0)
-        self.assertLess(seen[-1][1], seen[0][1])
+            seen.append(opt.a)
+        self.assertAlmostEqual(seen[0], 2.0)
+        self.assertLess(seen[-1], 0.05)
+        self.assertEqual(seen, sorted(seen, reverse=True))
 
-    def test_the_noise_schedule_scales_with_n_iter(self):
-        """`exp(-100 (t+1)/T)` is spent by t~10 for any T. Halfway through a
-        run should look the same whatever the run's length.
+    def test_the_prey_error_is_scaled_by_the_leaders_disagreement(self):
+        """The error on an *estimate* should track how unsure the estimate is.
 
-        Asserted with the noise switched on explicitly, since the schedule is
-        what is under test here and the default turns the term off.
+        The previous schedule was `exp(-100 (t+1)/T)`: absolute, unrelated to
+        the size of the search box, and with the -100 hard-coded so it ignored
+        `n_iter` and was spent within a few percent of any run. Tying it to the
+        leaders' spread makes the annealing emergent -- and, unlike an absolute
+        scale, it cannot still be injecting box-sized noise into a pack that
+        has already converged.
         """
-        mid = []
+        opt = egwo.EGWO(objective=functions.rastrigin, bounds=self.bounds,
+                        n_pop=10, n_iter=100, seed=2, noise_scale=0.25)
+        opt._initialize()
+        opt._update_best(epoch=-1)
+        opt._update_iter_params(0)
+
+        opt._generate_offspring(0)
+        scattered = float(np.mean(opt.epoch_std))
+        self.assertGreater(scattered, 0.0)
+
+        # leaders in perfect agreement -> no error on the estimate
+        opt.beta_pos = opt.alpha_pos.copy()
+        opt.gamma_pos = opt.alpha_pos.copy()
+        opt._generate_offspring(1)
+        self.assertEqual(float(np.mean(opt.epoch_std)), 0.0,
+                         "the prey estimate still carries error after the "
+                         "leaders have converged")
+
+    def test_the_prey_error_does_not_depend_on_the_run_length(self):
+        """There is no decay constant left to get wrong: at a fixed state the
+        error is the same whatever `n_iter` is."""
+        stds = []
         for n_iter in (50, 200, 1000):
             opt = egwo.EGWO(objective=functions.rastrigin, bounds=self.bounds,
-                            n_pop=10, n_iter=n_iter, seed=2, noise_scale=0.05)
+                            n_pop=10, n_iter=n_iter, seed=2)
             opt._initialize()
+            opt._update_best(epoch=-1)
             opt._update_iter_params(n_iter // 2)
-            mid.append(opt.epoch_std)
-        self.assertAlmostEqual(mid[0], mid[1], places=6)
-        self.assertAlmostEqual(mid[1], mid[2], places=6)
-        self.assertGreater(mid[0], 0.0)
+            opt._generate_offspring(n_iter // 2)
+            stds.append(float(np.mean(opt.epoch_std)))
+        self.assertGreater(stds[0], 0.0)
+        for other in stds[1:]:
+            self.assertAlmostEqual(stds[0], other, places=9)
 
     def test_the_population_converges(self):
         """A pack that never contracts cannot express a good initial
@@ -1552,16 +1573,19 @@ class TestEGWOSearchDirection(unittest.TestCase):
                         "population spread barely moved over the whole run")
 
     def test_the_noise_scale_is_reachable(self):
-        loud = egwo.EGWO(objective=functions.rastrigin, bounds=self.bounds,
-                         n_pop=10, n_iter=10, seed=2, noise_scale=0.5)
-        loud._initialize()
-        loud._update_iter_params(0)
-        quiet = egwo.EGWO(objective=functions.rastrigin, bounds=self.bounds,
-                          n_pop=10, n_iter=10, seed=2, noise_scale=0.0)
-        quiet._initialize()
-        quiet._update_iter_params(0)
-        self.assertGreater(loud.epoch_std, quiet.epoch_std)
-        self.assertEqual(quiet.epoch_std, 0.0)
+        """`noise_scale=0` removes the term; larger values widen it."""
+        stds = []
+        for scale in (0.0, 0.25, 1.0):
+            opt = egwo.EGWO(objective=functions.rastrigin, bounds=self.bounds,
+                            n_pop=10, n_iter=10, seed=2, noise_scale=scale)
+            opt._initialize()
+            opt._update_best(epoch=-1)
+            opt._update_iter_params(0)
+            opt._generate_offspring(0)
+            stds.append(float(np.mean(opt.epoch_std)))
+        self.assertEqual(stds[0], 0.0)
+        self.assertGreater(stds[1], 0.0)
+        self.assertGreater(stds[2], stds[1])
 
 
 class TestStepGeometry(unittest.TestCase):

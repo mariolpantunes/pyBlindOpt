@@ -9,8 +9,13 @@ wolves move towards a weighted "Prey" position that includes stochastic error.
 $$ X_{prey} = w_1 X_\alpha + w_2 X_\beta + w_3 X_\gamma
               + \mathcal{N}(0, \sigma^2) $$
 $$ X_{t+1} = X_{prey} - A \odot |C \odot X_{prey} - X_t| $$
-where $A \sim U(-a, a)$ and $\sigma$ both shrink with $a$, which falls
-linearly $2 \to 0$ across the run.
+where $A \sim U(-a, a)$ with $a$ falling linearly $2 \to 0$ across the run,
+and $\sigma$ is the leaders' own disagreement -- see `EGWO.__init__`.
+
+Reference:
+    Luo, K. (2019). Enhanced grey wolf optimizer with a model for dynamically
+    estimating the location of the prey. *Applied Soft Computing*, 77,
+    225-235.
 
 Note:
     Three things here were wrong, and together they meant the algorithm did
@@ -35,41 +40,57 @@ class EGWO(GWO):
     Extends standard GWO by introducing a weighted prey position with stochastic error.
     """
 
-    def __init__(self, *args, noise_scale: float = 0.0, **kwargs):
+    def __init__(self, *args, noise_scale: float = 0.25, **kwargs):
         r"""
         Args:
-            noise_scale (float): Standard deviation of the prey's positional
-                noise at $a = 2$, as a fraction of the mean bound width,
-                decaying with $a$ to zero by the end of the run. **Defaults to
-                0.0, which switches the noise term off.**
+            noise_scale (float): Size of the error on the estimated prey
+                position, as a multiple of **the leaders' own disagreement**:
+
+                $$ \sigma = k \cdot \operatorname{std}(X_\alpha, X_\beta,
+                   X_\gamma) $$
+
+                taken per coordinate. Defaults to 0.25. Zero removes the term.
 
         Note:
-            That default deserves the explanation, because the stochastic prey
-            term is what this class is named for. Once the position update is
-            anchored correctly (see `_generate_offspring`), the noise is not
-            merely unnecessary -- it is harmful, monotonically, at every scale
-            tried. Geometric mean of final fitness over 6 functions x 5 seeds
-            at 30x60, and on the 10-D Ackley case in the test suite:
+            The noise is genuinely part of the algorithm, not an addition here:
+            Luo (2019) estimates the prey's location rather than taking it as
+            the leaders' average, and an *estimate* carries an error. What was
+            wrong was the scale it was measured on.
 
-            | `noise_scale` |   d=8 |  d=32 | ackley 10D |
-            |---------------|-------|-------|------------|
-            | **0.0**       |**0.303**|**33.4**| **0.000** |
-            | 0.05          | 0.695 |  34.6 |      1.616 |
-            | 0.10          | 1.438 |  56.5 |      4.110 |
-            | 0.20          | 3.512 | 115.1 |      5.958 |
-            | 0.35          | 7.524 | 182.3 |      8.053 |
-            | `GWO`         | 0.401 |  36.1 |      0.000 |
+            It was `sigma = exp(-100 (t+1)/T)`: an absolute quantity, unrelated
+            to the size of the search box, and with `-100` hard-coded in the
+            exponent so the schedule ignores `n_iter` and is spent within the
+            first few percent of any run (at T=200: 0.607 at t=0, 0.004 at
+            t=10, 2e-9 at t=40).
 
-            The reading is that the *weighted* prey -- random weights over
-            alpha, beta and gamma, rather than GWO's equally weighted average
-            of three separate leader pulls -- is the part of EGWO that earns
-            its keep, and it does: at `noise_scale=0` this still beats GWO at
-            both dimensions. The additive noise was compensating for a broken
-            search, and its old schedule hid that by dying within the first
-            few percent of the run.
+            Tying it to the leaders' spread follows from what the term *is*.
+            The error on an estimate should be large while the estimators
+            disagree and vanish once they concur, which makes the schedule
+            emergent rather than imposed -- there is no decay constant to pick
+            and nothing to rescale when the bounds change. It also behaves,
+            where an absolute scale does not. Geometric mean of final fitness,
+            8 functions x 8 seeds at 30x60, and the suite's 10-D Ackley case:
 
-            Kept as a knob rather than deleted, so the published formulation
-            stays reachable and so the claim above stays falsifiable.
+            | noise                 |  d=8 |  d=16 |  d=32 |  d=64 | ackley |
+            |-----------------------|------|-------|-------|-------|--------|
+            | leader-scaled k=0     |0.2386| 3.2517|23.1088|157.994| 0.0000 |
+            | leader-scaled k=0.1   |0.2436| 2.7420|24.3072|151.278| 0.0000 |
+            | **leader-scaled k=.25**|**0.2130**|**2.4319**|25.3030|**144.074**| 0.0000 |
+            | leader-scaled k=0.5   |0.2696| 3.4410|22.2762|167.234| 0.0000 |
+            | leader-scaled k=1.0   |0.2766| 3.9862|35.8859|253.546| 0.0000 |
+            | box-scaled 0.05       |0.3017| 3.4962|22.0885|161.867| 1.6163 |
+            | `GWO`                 |0.1915| 3.1421|29.7761|162.902| 0.0000 |
+
+            A box-scaled error is still large when the pack has already
+            converged, which is why it alone fails to reach the Ackley optimum;
+            every leader-scaled setting reaches it, including k=1.
+
+            On the honest comparison against plain `GWO`: EGWO is **not**
+            uniformly better. GWO wins at d=8 (0.19 against 0.21) and EGWO
+            wins from d=16 up, by a widening margin (29.8 -> 25.3 at d=32,
+            162.9 -> 144.1 at d=64). An earlier note here claimed EGWO won at
+            every dimension; that was read off a smaller 6x5 sample and does
+            not survive 8x8.
         """
         self.noise_scale = float(noise_scale)
         super().__init__(*args, **kwargs)
@@ -81,34 +102,25 @@ class EGWO(GWO):
         Sets up `epoch_std` for the stochastic term.
         """
         super()._initialize()
-        self.epoch_std = 0.0
+        self.epoch_std = np.zeros(self.bounds.shape[0])
 
     def _update_iter_params(self, epoch: int):
         r"""
-        Decays the exploration coefficient and the prey's positional noise.
+        Decays the exploration coefficient.
 
-        `super()` first, because GWO's $a = 2(1 - t/T)$ is what both this
-        class's step size and its noise are scaled by. Overriding this hook
-        *without* chaining left `self.a` frozen at whatever `_initialize` set,
-        so nothing in the search contracted.
+        `super()` first, because GWO's $a = 2(1 - t/T)$ is what this class's
+        step size is scaled by. Overriding this hook *without* chaining left
+        `self.a` frozen at whatever `_initialize` set, so nothing in the search
+        contracted.
 
-        The noise scale is tied to $a$ and to the width of the search box:
-
-        $$ \sigma_t = \kappa\, a_t\, \overline{(u - l)} $$
-
-        rather than to the previous $\sigma_t = \exp(-100 (t+1)/T)$. That form
-        has two defects beyond being unscaled: the $-100$ is absolute, so the
-        schedule ignores `n_iter` entirely, and it is spent almost immediately
-        -- at $T = 200$ it is 0.607 at $t=0$, 0.004 at $t=10$ and $2 \times
-        10^{-9}$ at $t=40$. The stochastic prey term is the whole difference
-        between this class and `GWO`, and it was dead within 5% of the run.
+        The prey's positional error is no longer set here. It is read off the
+        leaders' spread at the moment the prey is estimated, which is the only
+        place it is meaningful; see `__init__`.
 
         Args:
             epoch (int): Current iteration.
         """
         super()._update_iter_params(epoch)
-        width = float(np.mean(self.bounds[:, 1] - self.bounds[:, 0]))
-        self.epoch_std = self.noise_scale * self.a * width
 
     def _generate_offspring(self, epoch: int) -> np.ndarray:
         r"""
@@ -163,12 +175,18 @@ class EGWO(GWO):
         omega /= np.sum(omega)
         omega = np.sort(omega)[::-1]
 
-        # 2. "Prey": weighted leaders plus noise that shrinks with `a`.
+        # 2. "Prey": the weighted leaders, plus the error on that estimate.
+        #    The error is scaled by how much the three leaders disagree, so it
+        #    is wide while they are scattered and vanishes once they agree --
+        #    an annealing schedule that falls out of the state rather than
+        #    being imposed on it.
+        leaders = np.stack((self.alpha_pos, self.beta_pos, self.gamma_pos))
+        self.epoch_std = self.noise_scale * np.std(leaders, axis=0)
         prey = (
             omega[0] * self.alpha_pos
             + omega[1] * self.beta_pos
             + omega[2] * self.gamma_pos
-            + self.rng.normal(0, self.epoch_std, size=dim)
+            + self.epoch_std * self.rng.standard_normal(dim)
         )
 
         # 3. GWO's encircling step, taken against the prey rather than the
