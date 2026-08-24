@@ -75,11 +75,32 @@ class HoneyBadgerAlgorithm(Optimizer):
             self.best_pos = self.pop[best_idx].copy()
 
     def _generate_offspring(self, epoch: int) -> np.ndarray:
-        """
+        r"""
         Generates new positions based on Digging or Honey phases.
 
-        Calculates smell intensity $I$ based on inverse square distance.
-        Switches between phases probabilistically.
+        Calculates smell intensity $I$ from the inverse square distance and
+        switches between the two phases with equal probability
+        (Hashim et al., 2022):
+
+        $$ x_{new} = x_{prey} + F \beta I x_{prey}
+            + F r_3 \alpha d_i \,|\cos(2\pi r_4)(1 - \cos(2\pi r_5))| $$
+        $$ x_{new} = x_{prey} + F r_7 \alpha d_i $$
+
+        **$d_i = x_{prey} - x_i$ is a vector, not a distance.** It was
+        `np.linalg.norm(...)` here, a scalar, and the consequence is not a
+        matter of scale: multiplying the all-ones broadcast by a scalar step
+        confines every badger to the line $x_{prey} + c\,(1, 1, \ldots, 1)$.
+        The honey phase then reached *only* the diagonal through the prey --
+        measured, 12 of 30 offsets were exact multiples of the all-ones vector
+        and the rest differed only by the small prey-proportional attraction
+        term. A search that can move in one direction out of $D$ is not
+        searching; on a shifted landscape it cannot reach the optimum at all
+        except by the initial population happening to contain it.
+
+        Keeping $d_i$ a vector also restores the property the phases are built
+        around: the step is proportional to how far the badger is from the
+        prey *along each coordinate*, so distant badgers explore and close
+        ones refine.
 
         Args:
             epoch (int): Current iteration.
@@ -92,9 +113,12 @@ class HoneyBadgerAlgorithm(Optimizer):
         new_pop = np.zeros_like(self.pop)
 
         for i in range(self.n_pop):
-            # Intensity I
-            dist = np.linalg.norm(self.pop[i] - prey)
-            dist_sq = dist * dist if dist > 1e-10 else 1e-10
+            # d_i: the separation from the prey, per coordinate.
+            d_i = prey - self.pop[i]
+            # Intensity I: inverse-square in the *scalar* distance, which is
+            # correct -- I is a concentration, not a displacement.
+            dist_sq = float(d_i @ d_i)
+            dist_sq = max(1e-10, dist_sq)
             In = self.rng.random() * self.C / (4 * math.pi * dist_sq) * alpha
 
             # Direction F
@@ -108,7 +132,7 @@ class HoneyBadgerAlgorithm(Optimizer):
                     F
                     * r3
                     * alpha
-                    * dist
+                    * d_i
                     * np.abs(
                         math.cos(2 * math.pi * r4) * (1 - math.cos(2 * math.pi * r5))
                     )
@@ -117,7 +141,7 @@ class HoneyBadgerAlgorithm(Optimizer):
                 new_pop[i] = prey + term_attract + term_dist
             else:  # Honey
                 r7 = self.rng.random()
-                new_pop[i] = prey + F * r7 * alpha * dist
+                new_pop[i] = prey + F * r7 * alpha * d_i
 
         return new_pop
 

@@ -149,8 +149,16 @@ class ArtificialBeeColony(Optimizer):
 
         # 3. Scout Phase
         scout_mask = self.trials > self.limit
-        if np.any(scout_mask):
-            self.pop[scout_mask] = utils.get_random_solution(self.bounds, self.rng)
+        n_scouts = int(np.count_nonzero(scout_mask))
+        if n_scouts:
+            # One draw *per scout*. `get_random_solution` returns a single
+            # solution of shape (D,), so assigning it to a boolean-masked
+            # block broadcasts the same point to every scout: abandoning k
+            # exhausted sources produced k identical replacements, and the
+            # diversity the scout phase exists to restore was never restored.
+            self.pop[scout_mask] = self.rng.uniform(
+                self.bounds[:, 0], self.bounds[:, 1],
+                size=(n_scouts, self.bounds.shape[0]))
             # Evaluate immediately to keep self.scores consistent
             self.scores[scout_mask] = self.evaluate(self.pop[scout_mask])
             self.trials[scout_mask] = 0
