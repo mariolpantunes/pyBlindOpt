@@ -298,3 +298,109 @@ def dixon_price(x: np.ndarray) -> np.ndarray:
         idx * np.power(2.0 * np.power(x[..., 1:], 2) - x[..., :-1], 2), axis=-1
     )
     return head + tail
+
+
+# ==============================================================================
+# Weak global structure
+# ==============================================================================
+# Everything above has one funnel. Local minima differ in depth, but the deeper
+# ones sit nearer the global optimum, so fitness predicts distance-to-optimum
+# and a descent method walks home from wherever it started. Measured as the
+# fitness-distance correlation over the box at D=32, the eight landscapes above
+# score 0.71 to 1.00.
+#
+# That makes them a poor test of an *initializer*. If any starting point leads
+# to the same basin, where the population starts cannot change where it ends,
+# and the initializer is reduced to buying a slightly better first guess.
+#
+# The two below break the global structure rather than the symmetry. Schwefel
+# is deceptive -- the second-best basin lies at the opposite end of the box
+# from the best -- and puts its optimum near the boundary. Lunacek's
+# bi-Rastrigin has two funnels outright, the deeper one narrower, so a
+# population that commits to the wrong one converges neatly to the wrong
+# answer. Their FDC is 0.32 and 0.38, which is the range the set was missing.
+
+
+def schwefel(x: np.ndarray) -> np.ndarray:
+    """
+    Schwefel Function.
+
+    Multimodal, separable, and **deceptive**: the global minimum sits near a
+    corner of the box, while the next-best basin lies far away from it, so the
+    global structure actively misleads a method that follows the best basin it
+    has found. Posed here on the same box as the rest of this module, with the
+    input scaled internally to the native $[-500, 500]$ domain.
+
+    **Equation:**
+    $$ f(x) = 418.9829 D
+       - \\sum_{i=1}^{D} x_i \\sin\\left(\\sqrt{|x_i|}\\right) $$
+
+    **Global Minimum:**
+    $f(x) = 0$ at $x_i = 420.9687$ (i.e. $4.209687$ before scaling).
+
+    A boundary penalty is part of the definition here, not a guard bolted on.
+    The sine term keeps growing in amplitude past the native domain, so a
+    coordinate outside $[-5, 5]$ (i.e. $|z| > 500$) contributes as little as
+    $-473.7$ against the $0$ it contributes at the optimum -- at $D = 32$ a
+    point at $x_i \approx -8.95$ scores $-15160$, and "the global minimum is
+    0" stops being true. Benchmark harnesses that place the optimum away from
+    the centre make that reachable inside the box they search, so BBOB's
+    $100\\sum_i \\max(0, |x_i| - 5)^2$ is applied and the floor holds.
+
+    Args:
+        x (np.ndarray): Input vector(s), on the module's $[-5, 5]$ scale.
+
+    Returns:
+        np.ndarray: Computed function values.
+    """
+    x = np.asarray(x)
+    z = x * 100.0
+    core = 418.9828872724339 * z.shape[-1] - np.sum(
+        z * np.sin(np.sqrt(np.abs(z))), axis=-1)
+    penalty = 100.0 * np.sum(np.power(np.maximum(0.0, np.abs(x) - 5.0), 2),
+                             axis=-1)
+    return core + penalty
+
+
+def lunacek_bi_rastrigin(x: np.ndarray) -> np.ndarray:
+    """
+    Lunacek bi-Rastrigin Function.
+
+    **Two funnels**, not one. A smooth double-sphere term places one basin at
+    $\\mu_0$ and a second, shallower-but-wider one at $\\mu_1$, and a Rastrigin
+    term covers both in local minima. A population that settles into the wrong
+    funnel converges cleanly to the wrong answer, which is what makes this the
+    standard test of whether an initial population's *placement* matters at
+    all rather than merely its best value.
+
+    The funnel separation widens with $D$ through $s$, so the trap does not
+    dissolve at scale the way Griewank's local structure does.
+
+    **Equation:**
+    $$ f(x) = \\min\\left(\\sum_i (x_i - \\mu_0)^2,\\;
+       Ds + s\\sum_i (x_i - \\mu_1)^2\\right)
+       + 10\\sum_i \\left(1 - \\cos(2\\pi(x_i - \\mu_0))\\right) $$
+    with $\\mu_0 = 2.5$, $s = 1 - (2\\sqrt{D + 20} - 8.2)^{-1}$ and
+    $\\mu_1 = -\\sqrt{(\\mu_0^2 - 1)/s}$.
+
+    **Global Minimum:**
+    $f(x) = 0$ at $x_i = \\mu_0$ (i.e. $1.25$ before scaling).
+
+    Args:
+        x (np.ndarray): Input vector(s), on the module's $[-5, 5]$ scale.
+
+    Returns:
+        np.ndarray: Computed function values.
+    """
+    z = np.asarray(x) * 2.0
+    d = z.shape[-1]
+    mu0 = 2.5
+    s = 1.0 - 1.0 / (2.0 * np.sqrt(d + 20.0) - 8.2)
+    mu1 = -np.sqrt((mu0 ** 2 - 1.0) / s)
+
+    sphere_0 = np.sum(np.power(z - mu0, 2), axis=-1)
+    sphere_1 = d * s + s * np.sum(np.power(z - mu1, 2), axis=-1)
+    rastrigin_term = 10.0 * np.sum(
+        1.0 - np.cos(2.0 * np.pi * (z - mu0)), axis=-1)
+
+    return np.minimum(sphere_0, sphere_1) + rastrigin_term

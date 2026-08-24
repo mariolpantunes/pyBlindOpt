@@ -179,3 +179,70 @@ class TestFunctions(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestWeakGlobalStructure(unittest.TestCase):
+    """The two landscapes added because the set had no weak global structure.
+
+    Every other function here has one funnel: fitness predicts distance to the
+    optimum, so a descent method walks home from anywhere and the initial
+    population cannot change the outcome. These two break that, and the tests
+    assert the properties they were added *for* -- not merely that they run.
+    """
+
+    def test_schwefel_minimum(self):
+        for d in (2, 8, 32):
+            x = np.full(d, 4.20968746359982)
+            self.assertAlmostEqual(float(functions.schwefel(x)), 0.0, places=6)
+
+    def test_schwefel_optimum_is_near_the_boundary(self):
+        """Its optimum sits at 0.84 of the half-width, not near the centre.
+
+        Every other landscape here has its optimum comfortably interior, so a
+        method that drifts toward the middle of the box is never punished.
+        """
+        self.assertGreater(4.20968746359982 / 5.0, 0.8)
+
+    def test_schwefel_is_deceptive(self):
+        """The basin next to the global one is *not* the second best.
+
+        That is what deceptive means operationally: following the local
+        gradient structure from near the optimum leads away from it.
+        """
+        d = 5
+        opt = np.full(d, 4.20968746359982)
+        # the mirrored basin, which a symmetric method would try next
+        mirrored = np.full(d, -4.20968746359982)
+        neighbour = np.full(d, -3.0)
+        self.assertGreater(float(functions.schwefel(mirrored)),
+                           float(functions.schwefel(opt)))
+        self.assertGreater(float(functions.schwefel(neighbour)),
+                           float(functions.schwefel(opt)))
+
+    def test_lunacek_minimum(self):
+        for d in (2, 8, 32):
+            x = np.full(d, 1.25)
+            self.assertAlmostEqual(float(functions.lunacek_bi_rastrigin(x)),
+                                   0.0, places=9)
+
+    def test_lunacek_has_a_second_funnel(self):
+        r"""A distinct basin at $\mu_1$, worse than the global one but a local
+        attractor: a population that commits to it converges to the wrong
+        answer rather than merely converging slowly."""
+        for d in (5, 20):
+            s = 1.0 - 1.0 / (2.0 * np.sqrt(d + 20.0) - 8.2)
+            mu1 = -np.sqrt((2.5 ** 2 - 1.0) / s)
+            second = float(functions.lunacek_bi_rastrigin(np.full(d, mu1 / 2.0)))
+            best = float(functions.lunacek_bi_rastrigin(np.full(d, 1.25)))
+            self.assertGreater(second, best, "the second funnel is not worse")
+            # ...but it is a funnel, not a wall: better than a random point
+            far = float(functions.lunacek_bi_rastrigin(np.full(d, 4.5)))
+            self.assertLess(second, far,
+                            "the second funnel is not an attractor at all")
+
+    def test_both_accept_batches(self):
+        X = np.random.default_rng(0).uniform(-5, 5, (7, 6))
+        for fn in (functions.schwefel, functions.lunacek_bi_rastrigin):
+            out = np.asarray(fn(X))
+            self.assertEqual(out.shape, (7,))
+            self.assertTrue(np.all(np.isfinite(out)))
