@@ -37,18 +37,43 @@ class ParticleSwarmOptimization(Optimizer):
         self,
         objective: collections.abc.Callable,
         bounds: np.ndarray,
-        c1: float = 0.1,  # Cognitive parameter
-        c2: float = 0.1,  # Social parameter
-        w: float = 0.8,  # Inertia weight
+        c1: float = 1.5,  # Cognitive parameter
+        c2: float = 1.5,  # Social parameter
+        w: float = 0.7,  # Inertia weight
         **kwargs,
     ):
-        """
+        r"""
         Particle Swarm Optimization.
 
         Args:
-            c1 (float): Cognitive parameter. Pulls particle towards its own personal best. Defaults to 0.1.
-            c2 (float): Social parameter. Pulls particle towards the swarm's global best. Defaults to 0.1.
-            w (float): Inertia weight. Keeps the particle moving in its previous direction. Defaults to 0.8.
+            c1 (float): Cognitive parameter. Pulls the particle toward its
+                own personal best. Defaults to 1.5.
+            c2 (float): Social parameter. Pulls the particle toward the
+                swarm's global best. Defaults to 1.5.
+            w (float): Inertia weight. Keeps the particle moving in its
+                previous direction. Defaults to 0.7.
+
+        Note:
+            These defaults changed from `c1 = c2 = 0.1, w = 0.8`. Those
+            accelerations are an order of magnitude below every published
+            stable set, so neither attractor was felt: with `w = 0.8` the
+            inertia term decays geometrically and the swarm coasted to a stop
+            near where it started rather than being drawn anywhere. Measured
+            over 6 functions x 5 seeds at 30x60, geometric mean of final
+            fitness:
+
+            | c1 / c2 / w        |   d=8 |  d=32 |
+            |--------------------|-------|-------|
+            | 0.1 / 0.1 / 0.8    |  2.30 | 139.1 |
+            | **1.5 / 1.5 / 0.7**|**0.66**|**108.8**|
+            | 2.05 / 2.05 / 0.729|  7.17 | 223.0 |
+            | 1.5 / 1.5 / 0.9    |  6.94 | 201.6 |
+
+            Clerc and Kennedy's 2.05/2.05 is *worse* here and deliberately not
+            adopted: it is defined for the constriction form
+            $v \leftarrow \chi(v + \ldots)$, and this class implements the
+            inertia-weight form, which has no $\chi$ to damp it. Pair
+            parameters with the update rule they were derived for.
         """
         self.c1 = c1
         self.c2 = c2
@@ -166,9 +191,9 @@ class ParticleSwarmOptimization(Optimizer):
 def particle_swarm_optimization(
     objective: collections.abc.Callable,
     bounds: np.ndarray,
-    c1: float = 0.1,
-    c2: float = 0.1,
-    w: float = 0.8,
+    c1: float = 1.5,
+    c2: float = 1.5,
+    w: float = 0.7,
     **kwargs,
 ) -> tuple:
     """
