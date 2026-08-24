@@ -544,10 +544,24 @@ class TestOblesaSelectionPlumbing(unittest.TestCase):
             (("opp", "none"),): 20,                   # sample + probes
         }
         for kw, expected in cases.items():
-            info = {}
-            init.oblesa(functions.sphere, self.bounds, n_pop=10, seed=1,
-                        info=info, **dict(kw))
-            self.assertEqual(info["pool_size"], expected, f"knobs={dict(kw)}")
+            d = dict(kw)
+            self.assertEqual(
+                init.oblesa_pool_size(
+                    10, n_ess=d.get("n_ess"), rounds=d.get("rounds", 1),
+                    opp=d.get("opp", "quasi"), opp_ess=d.get("opp_ess", False)),
+                expected, f"knobs={d}")
+            # The prediction is only worth having if it matches a real run.
+            # Every point in the pool is evaluated exactly once, so the
+            # objective's own call count is the pool size.
+            seen = []
+
+            def counted(x, _seen=seen):
+                x = np.asarray(x)
+                _seen.append(x.shape[0] if x.ndim == 2 else 1)
+                return functions.sphere(x)
+
+            init.oblesa(counted, self.bounds, n_pop=10, seed=1, **d)
+            self.assertEqual(sum(seen), expected, f"knobs={d}")
 
     def test_engine_is_pluggable(self):
         """A custom engine must be used verbatim, with no ESS involvement."""
@@ -696,19 +710,16 @@ class TestOblesaRounds(unittest.TestCase):
     def test_each_round_adds_its_own_block_to_the_pool(self):
         for rounds in (1, 2, 4):
             for opp_ess in (False, True):
-                info = {}
-                init.oblesa(self.obj, self.bounds, n_pop=8, seed=4,
-                            rounds=rounds, opp_ess=opp_ess, info=info)
                 per_round = 8 * (2 if opp_ess else 1)
-                self.assertEqual(info["pool_size"], 2 * 8 + rounds * per_round,
-                                 f"rounds={rounds} opp_ess={opp_ess}")
+                self.assertEqual(
+                    init.oblesa_pool_size(8, rounds=rounds, opp_ess=opp_ess),
+                    2 * 8 + rounds * per_round,
+                    f"rounds={rounds} opp_ess={opp_ess}")
 
     def test_rounds_do_nothing_without_an_empty_space_stage(self):
         """`n_ess=0` removes the stage, so repeating it must stay free."""
-        info = {}
-        init.oblesa(self.obj, self.bounds, n_pop=8, seed=4, n_ess=0, rounds=5,
-                    info=info)
-        self.assertEqual(info["pool_size"], 16)
+        self.assertEqual(
+            init.oblesa_pool_size(8, n_ess=0, rounds=5), 16)
 
     def test_a_later_round_sees_the_earlier_one_as_anchors(self):
         """The point of a round: the previous block is *measured* input.

@@ -377,12 +377,41 @@ _ess_engine.accepts = frozenset(  # type: ignore[reportFunctionMemberAccess]
     {"scores", "k_cand", "attraction_weight"})
 
 
-# One engine: OBLESA's empty-space stage is ESS. Controls an experiment needs
-# belong to that experiment and arrive through `engine=`.
-_FORCES = {
-    "guided": _ess_engine,
-    "ess": _ess_engine,
-}
+def oblesa_pool_size(
+    n_pop: int,
+    *,
+    n_ess: int | None = None,
+    rounds: int = 1,
+    opp: str = "quasi",
+    opp_ess: bool = False,
+) -> int:
+    """
+    How many points `oblesa` will evaluate, from the knobs alone.
+
+    The pool size is fully determined before anything runs, so it is a
+    function of the arguments rather than something a caller has to discover
+    by executing a search and reading a value back out. Budget accounting
+    needs it up front -- an experiment sizing a run against a fixed evaluation
+    budget cannot afford to spend the budget to learn what it cost.
+
+    Args:
+        n_pop (int): Population size, and the size of every objective call.
+        n_ess (int | None): Empty-space block per round. Defaults to `n_pop`;
+            zero disables the stage.
+        rounds (int): How many times the empty-space stage runs.
+        opp (str): 'none', 'standard' or 'quasi'.
+        opp_ess (bool): Whether each probe block is opposed as well.
+
+    Returns:
+        int: Total points evaluated, which is also the pool `selection` picks
+        `n_pop` rows from.
+    """
+    block = n_pop if opp == "none" else 2 * n_pop
+    n_ess = n_pop if n_ess is None else int(n_ess)
+    if n_ess <= 0:
+        return block
+    per_round = n_ess * (2 if (opp_ess and opp != "none") else 1)
+    return block + rounds * per_round
 
 
 def oblesa(
@@ -394,7 +423,6 @@ def oblesa(
     selection: str = "best",
     opp: str = "quasi",
     opp_ess: bool = False,
-    force: str = "guided",
     force_weight: float = 0.5,
     seed: int | np.random.Generator | None = None,
     n_jobs: int = 1,
@@ -403,7 +431,6 @@ def oblesa(
     k_cand: int = 64,
     engine: collections.abc.Callable | None = None,
     diversity_weight: float = 0.25,
-    info: dict | None = None,
 ) -> np.ndarray:
     """
     OBLESA (Opposition-Based Learning with Empty Space Search) Initialization.
@@ -418,7 +445,7 @@ def oblesa(
         P_obl  <- oppose(P_0)         `opp`     n_pop points
         A      <- P_0 u P_obl                            (the anchors)
         repeat `rounds` times:
-            P_ess  <- probe empty space in A   `force`   n_ess points
+            P_ess  <- probe empty space in A   `engine`  n_ess points
             P_eop  <- oppose(P_ess)            `opp_ess` n_ess points
             A      <- A u P_ess u P_eop                  (now measured)
         return select(A)                       `selection`
@@ -476,19 +503,6 @@ def oblesa(
             does nothing on `de` or `egwo`. Left False because flipping a
             default changes every downstream comparison, not because the
             evidence favours False.
-        force (str): Which force field the probes feel. 'guided' (and its
-            explicit spelling 'ess') is the EmptySpaceSearch relaxation: it
-            places each probe on a blend of novelty and the attractiveness the
-            position is *expected* to have, then relaxes the block under
-            repulsion and attraction together.
-
-            That is the only backend, and the knob is kept for the name rather
-            than for a choice. Anything else -- a null that spends the same
-            candidates without searching, some other placement rule -- is a
-            control for an experiment, so it belongs to the harness running it
-            and arrives through `engine`.
-
-            Ignored when `engine` is given.
         force_weight (float): Attraction strength, as ESS's
             `attraction_weight`. Bounded by a collapse condition: ESS refuses
             anything at or above 2.5. Zero reduces the placement to pure
@@ -538,22 +552,33 @@ def oblesa(
             more expensive. ESS relaxes the block afterwards, so the
             placement only has to be a reasonable starting point: raising this
             to 2048 costs 4.5-7.1x and returns the same population.
-        engine (Callable | None): Empty-space backend override, called as
-            `engine(samples, bounds, n=..., seed=..., ...)`. When None it is
-            chosen by `force`. Pass `ess.esa` for the published implementation;
-            engines declare which extra keywords they accept via an `accepts`
-            attribute, and anything without one receives only the four
+        engine (Callable | None): The empty-space backend, called as
+            `engine(samples, bounds, n=..., seed=..., ...)`. None selects
+            EmptySpaceSearch, which places each probe on a blend of novelty
+            and the attractiveness the position is *expected* to have, then
+            relaxes the block under repulsion and attraction together.
+
+            This is the only extension point, and the single one deliberately.
+            Anything else -- a null that spends the same candidates without
+            searching, some other placement rule -- is a control for an
+            experiment, so it belongs to the harness running it rather than to
+            a mode string here.
+
+            Engines declare which extra keywords they accept via an `accepts`
+            attribute; one without it receives only the four
             positional-equivalent arguments.
         diversity_weight (float): Trade-off between fitness (0.0) and spatial
             diversity (1.0) using crowding distance. The default is an interior
             optimum, not a corner: 26.7 at 0.0, 29.4 at 0.25, 24.0 at 0.5. It
             exists only under `selection='best'` -- the other rules already
             spend their own randomness on spread.
-        info (dict | None): If given, filled in place with `pool_size`.
-
     Returns:
         np.ndarray: Optimized population of shape (n_pop, D), ordered by
         ascending score.
+
+    See Also:
+        oblesa_pool_size: how many points this will evaluate, from the knobs
+        alone, without running anything.
     """
     rng = (
         np.random.default_rng(seed)
@@ -565,8 +590,6 @@ def oblesa(
         raise ValueError(f"opp must be 'none', 'standard' or 'quasi', got {opp!r}")
     if rounds < 1:
         raise ValueError(f"rounds must be >= 1, got {rounds}")
-    if engine is None and force not in _FORCES:
-        raise ValueError(f"force must be one of {sorted(_FORCES)}, got {force!r}")
     if not 0.0 <= diversity_weight <= 1.0:
         raise ValueError(
             "diversity_weight is a mixing fraction and must lie in [0, 1], "
@@ -580,7 +603,7 @@ def oblesa(
         )
     if k_cand < 1:
         raise ValueError(f"k_cand must be >= 1, got {k_cand}")
-    probe = _FORCES[force] if engine is None else engine
+    probe = _ess_engine if engine is None else engine
 
     ran_pop, n_pop = _parse_population_arg(population, n_pop, bounds, rng)
     if n_pop < 1:
@@ -668,8 +691,5 @@ def oblesa(
         diversity_weight=diversity_weight,
         rng=rng,
     )
-
-    if info is not None:
-        info["pool_size"] = int(population.shape[0])
 
     return population[idx]

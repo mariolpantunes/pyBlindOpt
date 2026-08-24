@@ -477,11 +477,11 @@ def _uniform_null(samples, bounds, *, n, seed=None, **ignored):
 #: into this one.
 _ENGINE_LEVELS = {
     "null": {"engine": _uniform_null},
-    "a000": {"force": "guided", "force_weight": 0.00},     # ESS, novelty only
-    "a025": {"force": "guided", "force_weight": 0.25},
-    "a050": {"force": "guided", "force_weight": 0.50},     # ESS's own default
-    "a100": {"force": "guided", "force_weight": 1.00},
-    "a200": {"force": "guided", "force_weight": 2.00},     # just under refusal
+    "a000": {"force_weight": 0.00},     # ESS, novelty only
+    "a025": {"force_weight": 0.25},
+    "a050": {"force_weight": 0.50},     # ESS's own default
+    "a100": {"force_weight": 1.00},
+    "a200": {"force_weight": 2.00},     # just under refusal
 }
 
 #: How ESS estimates attractiveness where it has no measurement. Crossed with
@@ -594,7 +594,7 @@ _MODEL_SUFFIX = {"fourier": "f", "idw": "i", "detrended": "d",
 
 OBLESA_KNOBS = {}
 for _elab, _eng in _ENGINE_LEVELS.items():
-    _guided = _eng.get("force") == "guided" and _eng.get("force_weight", 0) > 0
+    _guided = _eng.get("force_weight", 0) > 0
     _variants = ([(_elab + _MODEL_SUFFIX[m], m) for m in _ATT_MODELS]
                  if _guided else [(_elab, None)])
     for _label, _model in _variants:
@@ -624,8 +624,8 @@ for _elab, _eng in _ENGINE_LEVELS.items():
 #: 2bc9590. Crossing it against `_n_ess_mult` separates "more candidates" from
 #: "opposed candidates", which a single 4N arm cannot.
 _FOCUS_BASE = {
-    "a050x": {"force": "guided", "force_weight": 0.50, "_att_model": "auto"},
-    "a200i": {"force": "guided", "force_weight": 2.00, "_att_model": "idw"},
+    "a050x": {"force_weight": 0.50, "_att_model": "auto"},
+    "a200i": {"force_weight": 2.00, "_att_model": "idw"},
 }
 for _flab, _fkw in _FOCUS_BASE.items():
     for _mult, _mlab in ((1.0, ""), (2.0, "n2")):
@@ -830,11 +830,15 @@ def initial_population(arm, objective, bounds, n_pop, rng, stats=None, info=None
                 init._ess_engine, att_model=model)
             kw["engine"].accepts = (  # type: ignore[reportAttributeAccessIssue]
                 init._ess_engine.accepts)  # type: ignore[reportFunctionMemberAccess]
-            kw.pop("force", None)
         if stats is not None and arm in ENGINE_LABEL:
             stats["engine"] = ENGINE_LABEL[arm]
         if info is not None:
-            kw["info"] = info
+            info["pool_size"] = init.oblesa_pool_size(
+                n_pop,
+                n_ess=kw.get("n_ess"),
+                rounds=kw.get("rounds", 1),
+                opp=kw.get("opp", "quasi"),
+                opp_ess=kw.get("opp_ess", False))
         return init.oblesa(objective, bounds, n_pop=n_pop, seed=rng, **kw)
     raise ValueError(f"unknown arm {arm!r}")
 
@@ -915,7 +919,6 @@ def one_cell(init_arm, fname, d, seed, n_pop, n_iter, optimizers):
         # that is discarded did its job, so a survival count is not evidence
         # either way and must not be read as one. Kept in the JSON only so a
         # later question can be asked of an existing run.
-        "ess_share": ess_info.get("ess_share"),
         "pool_size": ess_info.get("pool_size"),
         # ESS layer, scored in bounded space (see `centered_discrepancy`).
         **{f"pop_{k}": v for k, v in
