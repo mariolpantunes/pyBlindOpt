@@ -140,18 +140,41 @@ def crossover_bin(
 def crossover_exp(
     target: np.ndarray, mutant: np.ndarray, cr: float, rng: np.random.Generator
 ) -> np.ndarray:
-    """
+    r"""
     Exponential Crossover.
-    Swaps a contiguous block of genes starting from a random index.
+
+    Swaps a contiguous, wrapping block of genes starting from a random index.
+    The block length $L$ is geometric in $CR$, and **at least one**: the first
+    gene is copied unconditionally, and the loop then continues while
+    $\text{rand} < CR$.
+
+    That first unconditional copy is the same guarantee `crossover_bin` spends
+    its `j_rand` on, and it is not optional. Written as a plain `while` the
+    block is empty with probability $1 - CR$, and the trial vector is then an
+    exact copy of its parent: an evaluation spent re-measuring a point whose
+    score is already known, which by construction cannot survive selection as
+    an improvement. At the default $CR = 0.7$ that wastes 30% of every
+    generation, and it gets worse as $CR$ falls -- 90% at $CR = 0.1$, exactly
+    where a low $CR$ is chosen to keep the trial close to its parent.
+
+    Args:
+        target (np.ndarray): The parent, shape (D,).
+        mutant (np.ndarray): The mutant vector, shape (D,).
+        cr (float): Continuation probability for the block.
+        rng (np.random.Generator): Source of randomness.
+
+    Returns:
+        np.ndarray: The trial vector, shape (D,). Differs from `target` in at
+        least one gene whenever `mutant` does.
     """
     dim = target.shape[0]
     trial = target.copy()
-    j = rng.integers(0, dim)
-    L = 0
-    while rng.random() < cr and L < dim:
+    j = int(rng.integers(0, dim))
+    for _ in range(dim):
         trial[j] = mutant[j]
         j = (j + 1) % dim
-        L += 1
+        if rng.random() >= cr:
+            break
     return trial
 
 
