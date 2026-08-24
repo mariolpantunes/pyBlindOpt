@@ -23,6 +23,22 @@ Note:
     `EGWO._update_iter_params`; the short version is that the position update
     was anchored on the wolf rather than on the prey, so its expected
     displacement toward the prey was exactly zero at every iteration.
+
+Variant:
+    Selection is inherited from `GWO` and is **greedy**, which canonical GWO
+    is not -- see `GWO._selection`.
+
+Insensitivity to initialization:
+    This family does not benefit from a better starting population, and at
+    d=32 is mildly *harmed* by one. Measured, three explanations are ruled
+    out: it is not diversity collapse (EGWO retains more population spread
+    than GWO at every epoch), not the restored noise term (removing it does
+    not restore a response), and not the non-canonical greedy selection
+    (unconditional replacement gives the same null). What remains, and is
+    untested, is that `a` decays on a fixed schedule -- `2(1 - t/T)`,
+    independent of the population -- so unlike the difference vectors of
+    DE/JADE or the recombination of GA, nothing in the step rule can convert
+    a better-distributed population into a better search.
 """
 
 
@@ -198,8 +214,9 @@ class EGWO(GWO):
 
         return prey - A * np.abs(C * prey - self.pop)
 
-    # _selection and _update_best are inherited from GWO
-    # as they are identical (Greedy selection & Top-3 hierarchy)
+    # _selection and _update_best are inherited from GWO: greedy acceptance
+    # and the top-3 hierarchy. The greedy step is a variant, not canonical --
+    # see `GWO._selection`.
 
 
 def enhanced_grey_wolf_optimization(
