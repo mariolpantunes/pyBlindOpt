@@ -89,6 +89,13 @@ class HarrisHawksOptimization(Optimizer):
 
         X_new = np.zeros_like(self.pop)
         mean_hawk = np.mean(self.pop, axis=0)
+        # (index, Y, Z) for each hawk taking the rapid-dive branch. Collected
+        # here and scored together below rather than evaluated inside the
+        # loop: two objective calls per *diving hawk*, each of a single row,
+        # is both a contract breach and the dominant cost of this optimizer.
+        # Measured at n_pop=30, n_iter=5: 122 calls, 116 of them single-row,
+        # against 6 for every other method here.
+        dives = []
 
         # Iterate per hawk (vectorizing HHO's 4 branches is complex and prone to bugs)
         for i in range(self.n_pop):
@@ -141,19 +148,31 @@ class HarrisHawksOptimization(Optimizer):
                     Y = self._check_bounds(Y[np.newaxis, :])
                     Z = self._check_bounds(Z[np.newaxis, :])
 
-                    score_Y = self.evaluate(Y)[0]
-                    score_Z = self.evaluate(Z)[0]
+                    dives.append((i, Y[0], Z[0]))
 
-                    # Greedy choice between Y, Z (and implicit X_old)
-                    # We return the best of Y or Z.
-                    # The base class _selection will compare this result vs X_old.
-                    if score_Y < score_Z:
-                        X_new[i] = Y[0]
-                    else:
-                        X_new[i] = Z[0]
-
-                    # Note: If both Y and Z are worse than X_old, we still return one here.
-                    # _selection will reject it later.
+        if dives:
+            # Two calls, each of exactly `n_pop` rows: the diving hawks carry
+            # their candidate, everyone else carries their current position
+            # and their score is discarded. The choice below sees the same Y
+            # and Z values it saw before, so the search is unchanged -- what
+            # changes is that the objective is asked once for a full
+            # population instead of twice per diving hawk.
+            #
+            # That is the contract this package is built to: an objective may
+            # be a live match of `n_pop` agents, and a server that starts
+            # only when `n_pop` players are connected cannot be asked to run
+            # a one-player game.
+            probe_y = self.pop.copy()
+            probe_z = self.pop.copy()
+            for i, y, z in dives:
+                probe_y[i] = y
+                probe_z[i] = z
+            scores_y = self.evaluate(probe_y)
+            scores_z = self.evaluate(probe_z)
+            for i, y, z in dives:
+                # Greedy choice between Y and Z; the base class `_selection`
+                # still compares the winner against X_old afterwards.
+                X_new[i] = y if scores_y[i] < scores_z[i] else z
 
         return X_new
 

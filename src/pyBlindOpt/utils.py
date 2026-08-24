@@ -724,6 +724,28 @@ def compute_objective(
     2. Serial (n_jobs=1): Uses np.apply_along_axis for row-wise evaluation.
     3. Parallel (n_jobs!=1): Uses Joblib for multiprocessing.
 
+    **`n_jobs` decides how the population reaches the objective, and the two
+    modes are not interchangeable.**
+
+    With ``n_jobs=1`` the whole ``(n_pop, d)`` matrix is offered to the
+    function in a single call, and used if it returns ``n_pop`` values. This
+    is the mode for an objective that is *inherently collective* -- a match
+    played by ``n_pop`` agents together, which returns one score per agent
+    and cannot be decomposed. It is also the fast path for anything
+    vectorized in NumPy.
+
+    With ``n_jobs != 1`` the population is dispatched **one row per task**.
+    That is the mode for an objective where individuals are independent and
+    each evaluation is expensive enough to be worth a process. It is the
+    wrong mode for a collective objective: ``n_pop`` separate one-individual
+    calls is not the same experiment as one call with ``n_pop`` individuals,
+    and for a server that starts only when ``n_pop`` players are connected
+    it does not run at all.
+
+    Note also that the vectorized path is *only* tried when ``n_jobs == 1``.
+    A NumPy-vectorized objective under ``n_jobs=4`` is called row by row in
+    four processes, which is slower than calling it once -- often by a lot.
+
     Args:
         population (np.ndarray): The population of solutions to evaluate.
         function (Callable[[object], float]): The objective function to apply.
@@ -754,20 +776,35 @@ def compute_objective(
 
     # 3. Parallel Execution (Joblib)
     else:
+        # The backend is chosen *before* anything runs.
+        #
+        # This used to call loky inside a bare `except Exception` and fall
+        # back to threading, which conflates two unrelated failures: a
+        # function that cannot be serialized, and a function that raised
+        # because it has a bug. The second case re-ran the whole population
+        # under a different backend before surfacing the error -- so an
+        # objective with side effects executed twice, and in this package an
+        # objective may be a live match on a game server.
+        #
+        # Picklability is a property of the function, so ask once. loky
+        # serializes with cloudpickle, which handles lambdas and closures
+        # that plain pickle refuses, so that is what decides -- testing with
+        # `pickle` instead would push perfectly good closures onto threads
+        # and silently lose the GIL-free execution they were asking for.
         try:
-            # Backend 'loky' is robust for generic Python objects.
-            obj_list = joblib.Parallel(backend="loky", n_jobs=n_jobs)(
-                joblib.delayed(function)(c) for c in population
-            )
+            from joblib.externals import cloudpickle as _serializer
+        except ImportError:                              # pragma: no cover
+            import pickle as _serializer
+        try:
+            _serializer.dumps(function)
+            backend = "loky"
         except Exception as e:
-            # Fallback to threading if serialization (pickling) fails
-            logger.debug(
-                f"Fallback to threading if serialization (pickling) fails: {e}"
-            )
-            obj_list = joblib.Parallel(backend="threading", n_jobs=n_jobs)(
-                joblib.delayed(function)(c) for c in population
-            )
+            logger.debug(f"objective is not serializable, using threads: {e}")
+            backend = "threading"
 
+        obj_list = joblib.Parallel(backend=backend, n_jobs=n_jobs)(
+            joblib.delayed(function)(c) for c in population
+        )
         return np.array(obj_list)
 
 

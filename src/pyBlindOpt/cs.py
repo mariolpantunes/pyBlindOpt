@@ -117,7 +117,27 @@ class CuckooSearch(Optimizer):
             step = self.rng.random() * (p1[abandon_mask] - p2[abandon_mask])
             new_nests = self.pop[abandon_mask] + step
 
-            # Bound check & Evaluate manually
+            # Bound check & Evaluate manually.
+            #
+            # **This is a documented exception to the `n_pop` evaluation
+            # group size.** Everything else in this package hands the
+            # objective exactly `n_pop` rows per call, because an objective
+            # here may be a live match of `n_pop` agents on a server that
+            # starts only when `n_pop` players connect. Cuckoo abandonment
+            # scores only the nests `pa` selected -- groups of 5 to 8 at
+            # `n_pop = 30`, varying per generation.
+            #
+            # Left as it is on cost. Padding the probe to a full population
+            # gives bit-identical results (verified), but takes the per
+            # generation total from `n_pop + pa * n_pop` to `2 * n_pop`, a
+            # 60% increase in evaluations at the default `pa = 0.25`, spent
+            # entirely on rows whose score is discarded. That is the wrong
+            # trade for a cheap objective, and this is the only optimizer
+            # here where honouring the group size costs anything.
+            #
+            # For a deployment that cannot evaluate a partial population,
+            # use one of the other optimizers, or set `pa = 1.0` so the
+            # abandonment step covers the whole population.
             new_nests = self._check_bounds(new_nests)
             new_scores = self.evaluate(new_nests)
 
@@ -148,5 +168,16 @@ def cuckoo_search(
 
     Returns:
         tuple: (best_pos, best_score).
+
+    Note:
+        **Exception to the `n_pop` evaluation group size.** The
+        abandonment step scores only the nests `pa` selected, so the
+        objective sees groups smaller than `n_pop` (5 to 8 rows at
+        `n_pop = 30`, varying per generation). Every other optimizer
+        here evaluates exactly `n_pop` rows per call. If the objective
+        cannot run a partial population -- a live match needing all
+        `n_pop` agents -- either choose another optimizer or set
+        `pa = 1.0`. See the comment in `_selection` for why this is
+        not simply padded.
     """
     return CuckooSearch(objective, bounds, pa, alpha, beta, **kwargs).optimize()
