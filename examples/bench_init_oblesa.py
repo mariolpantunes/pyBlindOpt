@@ -439,6 +439,39 @@ for _elab, _eng in _ENGINE_LEVELS.items():
                 _n_ess_mult=_N_ESS_MULT, _att_model=_model, **_eng,
             )
 
+#: **The budget axis, added after sweep 8200.** Two knobs were pinned on
+#: dart-era evidence and both are implicated by that sweep's own results, so
+#: they are crossed here on the two settings worth carrying rather than across
+#: the whole ladder -- 8 arms instead of 292.
+#:
+#: `_n_ess_mult=2` takes the pool from 3N to 4N. 8200 showed `ga` responding
+#: almost entirely to *budget*: `obl2x` and `random4x` scored within a point of
+#: each other at 4N (AR 30.5/48.8/52.8/62.5/60.5 against 29.3/49.8/52.2/60.0/
+#: 60.5), so opposition contributed nothing there and the 33% extra evaluations
+#: contributed everything -- while oblesa was being asked to beat them from 3N.
+#: At 4N the comparison is like-for-like. The earlier 86-arm sweep also
+#: preferred 2N under both optimizers it ran.
+#:
+#: `opp_ess=True` opposes the empty-space block as well, which is the other
+#: route to 4N -- and it has **never been measured on `ess.esa`**. The figures
+#: in `oblesa`'s docstring (worth 1.6 points of AR, and compressing the guided
+#: margin from +6.1 to +3.6) are all from `emptyspace.dart_esa`, deleted in
+#: 2bc9590. Crossing it against `_n_ess_mult` separates "more candidates" from
+#: "opposed candidates", which a single 4N arm cannot.
+_FOCUS_BASE = {
+    "a050x": {"force": "guided", "force_weight": 0.50, "_att_model": "auto"},
+    "a200i": {"force": "guided", "force_weight": 2.00, "_att_model": "idw"},
+}
+for _flab, _fkw in _FOCUS_BASE.items():
+    for _mult, _mlab in ((1.0, ""), (2.0, "n2")):
+        for _oe, _olab in ((False, ""), (True, "oe")):
+            if not _mlab and not _olab:
+                continue            # already in the ladder above
+            OBLESA_KNOBS[f"ob_{_flab}{_mlab}{_olab}_s00"] = dict(
+                _FIXED, selection="best", diversity_weight=0.0,
+                _n_ess_mult=_mult, **_fkw, opp_ess=_oe,
+            )
+
 #: The initializers. Every one is run under every optimizer in `OPTIMIZERS`,
 #: on the *same* initial population, so the two axes can be read jointly; a
 #: result row is named `<initializer>@<optimizer>`. The crossing is implicit
