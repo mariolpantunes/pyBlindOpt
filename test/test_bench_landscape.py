@@ -208,3 +208,38 @@ class TestLandscapeCoverage(unittest.TestCase):
                     worst, -1e-6,
                     f"{name} d={d} reaches {worst} inside the box, below its "
                     f"stated floor of 0")
+
+    def test_every_landscape_evaluates_a_whole_population_at_once(self):
+        """A landscape must accept an (n, d) matrix, not just one point.
+
+        `utils.compute_objective` tries the vectorised call and falls back to
+        row-by-row on ValueError/TypeError, which is a deliberate courtesy to
+        objectives that are not vectorised. For a *benchmark* landscape it is
+        a trap: the fallback is silent, so a landscape that raises on a batch
+        still produces correct scores while quietly costing one counted
+        evaluation per row. The rotated landscapes did exactly that -- written
+        as `q @ (x - target)`, which is only valid for a single point -- and
+        every rotated arm reported 120 initial evaluations where its unrotated
+        twin reported 60. The scores were right and the budget was double.
+
+        Worse at n == d, where `q @ X` is a legal matmul that rotates *across
+        individuals* instead of within one. No exception, no fallback, wrong
+        landscape.
+        """
+        import numpy as np
+        b = self._bench()
+        rng = np.random.default_rng(7)
+        for name in b.DEFAULT_FUNCTIONS:
+            for d in (4, 8):
+                g = b.shifted(name, d, 0)
+                for n in (1, 5, d):          # d included on purpose
+                    X = rng.uniform(-5.0, 5.0, (n, d))
+                    out = np.asarray(g(X))
+                    self.assertEqual(
+                        out.shape, (n,),
+                        f"{name} d={d} returned {out.shape} for a ({n}, {d}) "
+                        f"population")
+                    rows = np.array([float(g(x)) for x in X])
+                    np.testing.assert_allclose(
+                        out, rows, rtol=1e-9, atol=1e-9,
+                        err_msg=f"{name} d={d} n={n}: batched != row-wise")

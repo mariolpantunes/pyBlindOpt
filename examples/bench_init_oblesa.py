@@ -342,7 +342,13 @@ def shifted(name, d, seed, frac=0.8, bounds_half=5.0):
         q = q * np.sign(np.diag(r))
 
         def g(x):
-            return fn(q @ (np.asarray(x) - target) + x_star) - bias
+            # `(x - target) @ q.T`, not `q @ (x - target)`: the objective is
+            # handed a whole population of shape (n, d) as often as a single
+            # point of shape (d,), and the matmul form only accepts the
+            # latter. It does not merely fail on a batch -- it fails *loudly*
+            # for n != d and silently returns the wrong thing for n == d,
+            # rotating across individuals instead of within one.
+            return fn((np.asarray(x) - target) @ q.T + x_star) - bias
 
     g.__name__ = f"{name}_shifted"
     return g
