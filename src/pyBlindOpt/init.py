@@ -374,14 +374,14 @@ def _ess_engine(
 
 
 _ess_engine.accepts = frozenset(  # type: ignore[reportFunctionMemberAccess]
-    {"scores", "k_cand", "attraction_weight"})
+    {"scores", "k_cand", "attraction_weight", "att_model"})
 
 
 def oblesa_pool_size(
     n_pop: int,
     *,
     n_ess: int | None = None,
-    rounds: int = 1,
+    rounds: int = 3,
     opp: str = "quasi",
     opp_ess: bool = False,
 ) -> int:
@@ -398,7 +398,8 @@ def oblesa_pool_size(
         n_pop (int): Population size, and the size of every objective call.
         n_ess (int | None): Empty-space block per round. Defaults to `n_pop`;
             zero disables the stage.
-        rounds (int): How many times the empty-space stage runs.
+        rounds (int): How many times the empty-space stage runs. The defaults
+            here mirror `oblesa`'s, so calling both bare describes one run.
         opp (str): 'none', 'standard' or 'quasi'.
         opp_ess (bool): Whether each probe block is opposed as well.
 
@@ -419,7 +420,7 @@ def oblesa(
     bounds: np.ndarray,
     *,
     population: np.ndarray | utils.Sampler | None = None,
-    n_pop: int = 10,
+    n_pop: int = 30,
     selection: str = "best",
     opp: str = "quasi",
     opp_ess: bool = False,
@@ -427,8 +428,9 @@ def oblesa(
     seed: int | np.random.Generator | None = None,
     n_jobs: int = 1,
     n_ess: int | None = None,
-    rounds: int = 1,
+    rounds: int = 3,
     k_cand: int = 64,
+    att_model: str = "idw",
     engine: collections.abc.Callable | None = None,
     diversity_weight: float = 0.25,
 ) -> np.ndarray:
@@ -467,7 +469,8 @@ def oblesa(
         bounds (np.ndarray): Search space boundaries of shape (D, 2).
         population (ndarray | Sampler | None): Initial population or Sampler.
             If None, RandomSampler is used.
-        n_pop (int): Number of individuals to select for the final population.
+        n_pop (int): Number of individuals to select for the final population,
+            and the size of every objective call this function makes.
         selection (str): Selection strategy: 'best' (greedy), 'prob' (roulette
             over the blended score -- *not* uniform sampling) or 'maximin'
             (sequential maximin over the fittest candidates). See
@@ -521,7 +524,13 @@ def oblesa(
             front rather than left to surface as an odd-shaped call.
         rounds (int): How many times the empty-space stage runs, each round
             probing against everything the previous rounds placed **and
-            measured**. Defaults to 1, which is the single-pass pipeline.
+            measured**. `rounds=1` is the single-pass pipeline.
+
+            The default is 3 because that is what two sweeps measured as the
+            best setting at every dimension on every optimizer that responds
+            to initialization at all -- it was the largest single effect
+            found. It costs `rounds * n_ess` evaluations, so a caller on a
+            tight budget lowers it deliberately rather than inheriting it.
 
             This is not the same purchase as a larger `n_ess`, though it costs
             the same evaluations: `n_ess=2*n_pop, rounds=1` places 2N probes
@@ -552,6 +561,31 @@ def oblesa(
             more expensive. ESS relaxes the block afterwards, so the
             placement only has to be a reasonable starting point: raising this
             to 2048 costs 4.5-7.1x and returns the same population.
+        att_model (str): Which model ESS uses to estimate the attractiveness
+            of a position it has no measurement for -- 'idw', 'auto',
+            'detrended', 'projection', 'fourier'. Forwarded to the engine when
+            it declares `att_model` in its `accepts`; ignored by engines that
+            do not.
+
+            **Provisional, and expected to be removed.** This is not a knob
+            anyone should need: the evidence so far says one model wins
+            everywhere, and the intent is to hardcode it and delete the
+            parameter. It is exposed now only so a sweep can settle the
+            question end to end rather than on the surrogate-accuracy proxy
+            that currently favours it.
+
+            'idw' is the default on that evidence. It beat 'auto' at every
+            dimension in this module's own measurements (74.9 / 73.1 / 72.1 /
+            71.0 against 70.9 / 72.2 / 70.0 / 64.1) while 'auto' additionally
+            pays for cross-validation to get there, and it beat every
+            alternative on top-decile precision at d >= 32 -- including a
+            clamped harmonic field over a kNN graph, which lost by 0.085
+            (95% CI [0.058, 0.112]) at d=100. It is also the cheapest: at
+            d=100 it is roughly 3x faster than the 2d+1 fitted models and 10x
+            faster than graph propagation.
+
+            Remove this parameter once a sweep confirms the ranking on final
+            solution quality; until then, leaving it alone is correct.
         engine (Callable | None): The empty-space backend, called as
             `engine(samples, bounds, n=..., seed=..., ...)`. None selects
             EmptySpaceSearch, which places each probe on a blend of novelty
@@ -657,6 +691,8 @@ def oblesa(
         eng_kw["attraction_weight"] = force_weight
     elif "lam" in accepts:
         eng_kw["lam"] = force_weight
+    if "att_model" in accepts:
+        eng_kw["att_model"] = att_model
 
     # The pool *is* the anchor set: every round probes against everything
     # placed so far and hands back points that join it. At `rounds=1` this

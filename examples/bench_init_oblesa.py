@@ -61,7 +61,6 @@ population, and each is scored only against its own random baseline.
 from __future__ import annotations
 
 import argparse
-import functools
 import json
 import os
 import time
@@ -822,14 +821,12 @@ def initial_population(arm, objective, bounds, n_pop, rng, stats=None, info=None
         # `_n_ess_mult` is an arm-table convention, not an `oblesa` argument.
         mult = kw.pop("_n_ess_mult", 1.0)
         kw["n_ess"] = max(1, round(mult * n_pop))
-        # `oblesa` forwards `force_weight`; `att_model` is ESS's own knob,
-        # below the engine contract, so bind it through `engine=`.
+        # `att_model` is an `oblesa` argument now, so the arm table can name
+        # it directly instead of binding a partial over a private engine and
+        # re-attaching the `accepts` attribute that `partial` drops.
         model = kw.pop("_att_model", None)
         if model is not None:
-            kw["engine"] = functools.partial(
-                init._ess_engine, att_model=model)
-            kw["engine"].accepts = (  # type: ignore[reportAttributeAccessIssue]
-                init._ess_engine.accepts)  # type: ignore[reportFunctionMemberAccess]
+            kw["att_model"] = model
         if stats is not None and arm in ENGINE_LABEL:
             stats["engine"] = ENGINE_LABEL[arm]
         if info is not None:

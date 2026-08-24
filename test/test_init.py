@@ -165,7 +165,7 @@ class TestInit(unittest.TestCase):
             {"k_cand", "lam", "scores"})
         pop = init.oblesa(
             functions.sphere, bounds, n_pop=5, seed=1, engine=engine,
-            k_cand=77, force_weight=3.5,
+            k_cand=77, force_weight=3.5, rounds=1,
         )
 
         self.assertEqual(pop.shape, (5, 2))
@@ -189,7 +189,7 @@ class TestInit(unittest.TestCase):
             return np.zeros((n, bounds.shape[0]))
 
         init.oblesa(functions.sphere, bounds, n_pop=5, seed=1, engine=engine,
-                    k_cand=77, force_weight=3.5)
+                    k_cand=77, force_weight=3.5, rounds=1)
 
         self.assertEqual(seen, [{}])
 
@@ -322,6 +322,7 @@ class TestInit(unittest.TestCase):
             opp="standard",
             selection="best",
             seed=42,
+            rounds=1,
         )
 
         fitness = functions.sphere(result)
@@ -344,6 +345,7 @@ class TestInit(unittest.TestCase):
             opp="quasi",
             selection="best",
             seed=42,
+            rounds=1,
         )
 
         fitness = functions.sphere(result)
@@ -536,19 +538,20 @@ class TestOblesaSelectionPlumbing(unittest.TestCase):
         default, 4N with `opp_ess=True`, and N with no opposition at all.
         """
         cases = {
-            (): 30,                                   # default: the paper's 3N
-            (("opp_ess", True),): 40,                 # probes opposed too: 4N
-            (("n_ess", 0),): 20,                      # OBL: 2N
-            (("n_ess", 20),): 40,                     # oversized probe block
+            (): 50,                                   # default: 2N + 3 rounds
+            (("rounds", 1),): 30,                     # single pass: the 3N
+            (("rounds", 1), ("opp_ess", True)): 40,   # probes opposed too: 4N
+            (("n_ess", 0),): 20,                      # OBL: 2N, rounds are free
+            (("rounds", 1), ("n_ess", 20)): 40,       # oversized probe block
             (("opp", "none"), ("n_ess", 0)): 10,      # bare sample
-            (("opp", "none"),): 20,                   # sample + probes
+            (("opp", "none"), ("rounds", 1)): 20,     # sample + probes
         }
         for kw, expected in cases.items():
             d = dict(kw)
             self.assertEqual(
                 init.oblesa_pool_size(
-                    10, n_ess=d.get("n_ess"), rounds=d.get("rounds", 1),
-                    opp=d.get("opp", "quasi"), opp_ess=d.get("opp_ess", False)),
+                    10, **{k: v for k, v in d.items()
+                           if k in ("n_ess", "rounds", "opp", "opp_ess")}),
                 expected, f"knobs={d}")
             # The prediction is only worth having if it matches a real run.
             # Every point in the pool is evaluated exactly once, so the
@@ -563,6 +566,22 @@ class TestOblesaSelectionPlumbing(unittest.TestCase):
             init.oblesa(counted, self.bounds, n_pop=10, seed=1, **d)
             self.assertEqual(sum(seen), expected, f"knobs={d}")
 
+    def test_pool_size_defaults_track_oblesa(self):
+        """The predictor is only useful if calling both bare describes one run.
+
+        Two functions carrying the same defaults will drift the moment one is
+        tuned -- `rounds` already did, within a single commit.
+        """
+        import inspect
+        a = inspect.signature(init.oblesa).parameters
+        b = inspect.signature(init.oblesa_pool_size).parameters
+        shared = set(a) & set(b) - {"n_pop"}
+        self.assertTrue(shared, "expected shared knobs to compare")
+        for name in sorted(shared):
+            with self.subTest(param=name):
+                self.assertEqual(a[name].default, b[name].default,
+                                 f"{name} default differs between the two")
+
     def test_engine_is_pluggable(self):
         """A custom engine must be used verbatim, with no ESS involvement."""
         marker = np.full((10, 4), 4.25)
@@ -573,7 +592,8 @@ class TestOblesaSelectionPlumbing(unittest.TestCase):
             return marker[:n]
 
         pop = init.oblesa(
-            functions.sphere, self.bounds, n_pop=10, seed=1, engine=engine)
+            functions.sphere, self.bounds, n_pop=10, seed=1, engine=engine,
+            rounds=1)
 
         self.assertEqual(calls, [((20, 4), 10)])
         # The marker points all score identically, so whichever ten the
