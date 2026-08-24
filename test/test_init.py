@@ -671,8 +671,6 @@ class TestEvaluationGroupContract(unittest.TestCase):
         self.assertEqual(np.asarray(a).shape, (30, 6))
 
 
-if __name__ == "__main__":
-    unittest.main()
 
 
 class TestOblesaRounds(unittest.TestCase):
@@ -760,3 +758,51 @@ class TestOblesaRounds(unittest.TestCase):
         np.testing.assert_array_equal(
             init.oblesa(self.obj, self.bounds, **kw),
             init.oblesa(self.obj, self.bounds, **kw))
+
+
+class TestOblesaArgumentValidation(unittest.TestCase):
+    """Out-of-range arguments are refused with a message, not absorbed.
+
+    Each of these used to be accepted and produce a plausible-looking
+    population: a mixing fraction outside [0, 1], an attraction strength that
+    pulls toward the worst regions rather than the best, a negative block
+    size. A wrong knob that returns an answer is worse than one that raises,
+    because a sweep will happily run a whole arm on it.
+    """
+
+    def setUp(self):
+        self.bounds = np.array([[-5.0, 5.0]] * 6)
+
+    def obj(self, x):
+        x = np.asarray(x)
+        return (np.sum(x * x, axis=-1) if x.ndim == 2
+                else float(np.sum(x * x)))
+
+    def test_rejects_out_of_range_arguments(self):
+        for label, kw in (
+            ("diversity_weight below 0", {"diversity_weight": -1.0}),
+            ("diversity_weight above 1", {"diversity_weight": 5.0}),
+            ("negative force_weight", {"force_weight": -3.0}),
+            ("negative n_ess", {"n_ess": -5}),
+            ("k_cand below 1", {"k_cand": 0}),
+        ):
+            with self.subTest(case=label), self.assertRaises(ValueError):
+                init.oblesa(self.obj, self.bounds, n_pop=10, seed=0,
+                            n_jobs=1, **kw)
+
+    def test_accepts_the_endpoints_of_the_valid_ranges(self):
+        """The guards bound the range without excluding its edges."""
+        for label, kw in (
+            ("diversity_weight=0", {"diversity_weight": 0.0}),
+            ("diversity_weight=1", {"diversity_weight": 1.0}),
+            ("force_weight=0", {"force_weight": 0.0}),
+            ("n_ess=0 disables the stage", {"n_ess": 0}),
+        ):
+            with self.subTest(case=label):
+                out = init.oblesa(self.obj, self.bounds, n_pop=10, seed=0,
+                                  n_jobs=1, **kw)
+                self.assertEqual(np.asarray(out).shape, (10, 6))
+
+
+if __name__ == "__main__":
+    unittest.main()

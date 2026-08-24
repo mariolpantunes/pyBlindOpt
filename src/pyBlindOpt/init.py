@@ -47,6 +47,11 @@ def _parse_population_arg(
 
     Converts user input (None, Array, or Sampler) into a concrete population array.
     """
+    if not isinstance(population, np.ndarray) and n_pop < 1:
+        # Only a drawn population is sized by `n_pop`; a supplied array
+        # overrides it below, so it is not this function's business then.
+        raise ValueError(f"n_pop must be >= 1, got {n_pop}")
+
     if isinstance(population, utils.Sampler):
         pop = get_initial_population(n_pop, bounds, population)
     elif isinstance(population, np.ndarray):
@@ -562,9 +567,24 @@ def oblesa(
         raise ValueError(f"rounds must be >= 1, got {rounds}")
     if engine is None and force not in _FORCES:
         raise ValueError(f"force must be one of {sorted(_FORCES)}, got {force!r}")
+    if not 0.0 <= diversity_weight <= 1.0:
+        raise ValueError(
+            "diversity_weight is a mixing fraction and must lie in [0, 1], "
+            f"got {diversity_weight}"
+        )
+    if force_weight < 0.0:
+        raise ValueError(
+            "force_weight is an attraction strength and must be >= 0; a "
+            f"negative value would pull probes toward the worst regions, got "
+            f"{force_weight}"
+        )
+    if k_cand < 1:
+        raise ValueError(f"k_cand must be >= 1, got {k_cand}")
     probe = _FORCES[force] if engine is None else engine
 
     ran_pop, n_pop = _parse_population_arg(population, n_pop, bounds, rng)
+    if n_pop < 1:
+        raise ValueError(f"n_pop must be >= 1, got {n_pop}")
 
     if opp == "none":
         combined_samples = ran_pop
