@@ -62,6 +62,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import os
 import time
 import zlib
@@ -769,8 +770,18 @@ def population_dispersion(pop, bounds):
 
 
 def _best_of(pool, objective, n_pop):
-    """Greedy best `n_pop` of an evaluated pool — OBL's own selection rule."""
-    scores = utils.compute_objective(pool, objective, 1)
+    """Greedy best `n_pop` of an evaluated pool -- OBL's own selection rule.
+
+    Evaluated one `n_pop` group at a time, matching `init.oblesa`. These are
+    the cost controls the whole comparison rests on, so they have to be
+    comparable in *shape* as well as in total evaluations: they used to hand
+    the objective their entire 4N pool in a single call, which is a different
+    contract from the one every OBLESA arm honours and would break a caller
+    whose objective is sized for a generation.
+    """
+    scores = np.concatenate([
+        utils.compute_objective(pool[i:i + n_pop], objective, 1)
+        for i in range(0, pool.shape[0], n_pop)])
     return pool[np.argpartition(scores, n_pop)[:n_pop]]
 
 
@@ -861,6 +872,143 @@ def objective_for(fname, d, seed):
     """
     return (shifted(fname, d, seed, SHIFT_FRAC[0]) if SHIFT[0]
             else unshifted(fname, d))
+
+
+#: **Sweep v8's configuration space.** A flat product over the four knobs
+#: that survived v7 as genuinely open questions, named so the arm string can
+#: be parsed back into its settings: `v8_w050_r3_s25_oq` is `force_weight=0.5,
+#: rounds=3, diversity_weight=0.25, opp='quasi'`.
+#:
+#: The v7 arms above are kept unchanged so the two sweeps stay comparable;
+#: this is a separate table rather than an extension of that naming, which had
+#: run out of room.
+#:
+#: `att_model` is deliberately *not* an axis here. It is a decision to be
+#: retired, not a factor to cross with everything else: Stage D varies it
+#: alone at each cell's tuned operating point, and if one model wins or ties
+#: everywhere the parameter is deleted.
+V8_W = {"w000": 0.0, "w050": 0.5, "w200": 2.0}
+V8_R = {"r1": 1, "r2": 2, "r3": 3}
+V8_S = {"s00": 0.0, "s25": 0.25, "s50": 0.5}
+#: Opposition is an axis for the first time. Quasi-opposition draws each
+#: opposite point between the box *centre* and the exact reflection, biasing
+#: the population inward, and it is the one factor separating every arm that
+#: harms the GWO family from every arm that does not.
+V8_O = {"oq": "quasi", "os": "standard"}
+
+for _wl, _w in V8_W.items():
+    for _rl, _r in V8_R.items():
+        for _sl, _s in V8_S.items():
+            for _ol, _o in V8_O.items():
+                OBLESA_KNOBS[f"v8_{_wl}_{_rl}_{_sl}_{_ol}"] = {
+                    "selection": "best", "force_weight": _w, "rounds": _r,
+                    "diversity_weight": _s, "opp": _o, "opp_ess": False,
+                    "_n_ess_mult": 1.0, "att_model": "idw"}
+
+#: Stage D: the model decision, at one fixed configuration per cell. Filled in
+#: from the Stage A/B winner rather than guessed; these are the four models
+#: crossed with the v7 default shape so the arm exists before the winner is
+#: known.
+for _m in ("idw", "auto", "detrended", "projection"):
+    OBLESA_KNOBS[f"v8d_{_m}"] = {
+        "selection": "best", "force_weight": 0.5, "rounds": 3,
+        "diversity_weight": 0.25, "opp": "quasi", "opp_ess": False,
+        "_n_ess_mult": 1.0, "att_model": _m}
+
+#: The arms Stage A ranks, and the baselines Stage B reports against.
+V8_ARMS = [a for a in OBLESA_KNOBS if a.startswith("v8_")]
+V8_STAGE_D = [a for a in OBLESA_KNOBS if a.startswith("v8d_")]
+#: `random4x`/`obl2x` are the budget-matched controls the whole claim rests
+#: on: is any of this beating "sample more and keep the best"?
+V8_BASELINES = ["random", "lhs", "qobl", "obl2x", "random4x"]
+
+
+#: **Population rules, the axis every earlier sweep pinned.** `n_pop=30` was
+#: held from d=8 to d=100, so anchors-per-dimension fell by more than an order
+#: of magnitude across the range and the decaying returns with dimension were
+#: partly a measurement of that rather than of the initializer. Measured
+#: offline, anchor count is the single largest lever available: raising it
+#: from 60 to 480 buys +0.167 top-decile surrogate precision at d=32 against
+#: +0.013 for the best attraction-model change.
+#:
+#: The four rules span the literature. `log` is CMA-ES's default shape, and it
+#: is here as the null -- if it wins, OBLESA's gains were never about
+#: population size.
+N_POP_RULES = {
+    "fixed30": lambda d: 30,
+    "log": lambda d: math.ceil(8 + 6 * math.log(d)),
+    "root": lambda d: math.ceil(10 * math.sqrt(d)),
+    "linear": lambda d: 2 * d,
+}
+
+
+def population_for(args, d):
+    """The population sizes to run at dimension `d`.
+
+    A rule replaces the explicit `--n-pop` list rather than multiplying it:
+    the point of the rule is that one number per dimension is *derived*, so
+    crossing it with a hand-written list would defeat the comparison.
+    """
+    if getattr(args, "n_pop_rule", None):
+        return [N_POP_RULES[args.n_pop_rule](d)]
+    return list(args.n_pop)
+
+
+def iters_for(args, arm, d, n_pop):
+    """Iterations from an evaluation budget, not a fixed count.
+
+    Once `n_pop` varies with dimension, "200 iterations" stops being a budget
+    -- it is 6k evaluations at n_pop=30 and 40k at n_pop=200, so a rule that
+    raises the population would be handed proportionally more objective calls
+    and win on that alone. Fix total evaluations instead and derive the
+    iteration count, charging initialization against the same budget.
+
+    `BUDGET_PER_DIM * d` follows the BBOB convention of scaling budget with
+    dimension. Returns `--iters` unchanged when no budget is set, so every
+    existing invocation reproduces bit for bit.
+    """
+    if not getattr(args, "budget_per_dim", 0):
+        return args.iters
+    budget = args.budget_per_dim * d
+    n_iter = (budget - init_cost(arm, n_pop)) // n_pop
+    if n_iter < 1:
+        raise ValueError(
+            f"budget {budget} at d={d} does not cover initialization for "
+            f"{arm!r} at n_pop={n_pop} ({init_cost(arm, n_pop)} evaluations); "
+            f"raise --budget-per-dim or lower n_pop")
+    return int(n_iter)
+
+
+def init_cost(arm, n_pop):
+    """Evaluations an arm spends before the optimizer starts.
+
+    Known from the knobs, so the budget can be split before anything runs --
+    see `init.oblesa_pool_size`. The samplers are one population; the cost
+    controls are their stated multiple; OBLESA reads off its own stage knobs.
+    """
+    base, _ = split_arm(arm)
+    if base in ("random", "sobol", "lhs"):
+        # Pure samplers: they draw a population and evaluate none of it. The
+        # optimizer pays for the first generation either way, so charging
+        # them `n_pop` here would double-count it and hand every other arm a
+        # free population's worth of budget.
+        return 0
+    if base in ("obl", "qobl"):
+        return 2 * n_pop
+    if base in ("random3x", "obl15x"):
+        return 3 * n_pop
+    if base in ("random4x", "obl2x"):
+        return 4 * n_pop
+    if base in OBLESA_KNOBS:
+        kw = dict(OBLESA_KNOBS[base])
+        mult = kw.pop("_n_ess_mult", 1.0)
+        return init.oblesa_pool_size(
+            n_pop,
+            n_ess=max(1, round(mult * n_pop)),
+            rounds=kw.get("rounds", 1),
+            opp=kw.get("opp", "quasi"),
+            opp_ess=kw.get("opp_ess", False))
+    raise ValueError(f"unknown arm {arm!r}")
 
 
 def one_cell(init_arm, fname, d, seed, n_pop, n_iter, optimizers):
@@ -1025,11 +1173,27 @@ def wilcoxon_signed_rank(a, b):
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--seeds", type=int, default=10)
+    ap.add_argument("--seed-start", type=int, default=0,
+                    help="first seed, so tuning and evaluation can run on "
+                         "disjoint instances: --seed-start 0 --seeds 50 "
+                         "selects a config, --seed-start 50 --seeds 50 "
+                         "reports it on seeds it was never chosen on")
     # Population size is an axis, not a constant. Kazimipour et al. found
     # initialization matters more at small populations; and ESS only reaches
     # torann's LSH path above the brute-force crossover (512 points), so at
     # n_pop=30 the index under test is never exercised at all.
     ap.add_argument("--n-pop", type=int, nargs="+", default=[30])
+    ap.add_argument("--n-pop-rule", choices=sorted(N_POP_RULES),
+                    default=None,
+                    help="derive n_pop from the dimension instead of taking "
+                         "--n-pop; replaces that list rather than crossing "
+                         "with it")
+    ap.add_argument("--budget-per-dim", type=int, default=0,
+                    help="total objective evaluations per run, as this many "
+                         "times the dimension (BBOB convention). Iterations "
+                         "are derived from it and initialization is charged "
+                         "against it, which is what makes population rules "
+                         "comparable. 0 keeps the fixed --iters.")
     ap.add_argument("--iters", type=int, default=200,
                     help="iterations per run, identical for every arm; "
                          "initialization is measured but not charged")
@@ -1090,15 +1254,17 @@ def main():
         return
 
     rows = []
-    for n_pop in args.n_pop:
-        for fname in args.functions:
-            for d in args.dims:
+    for fname in args.functions:
+        for d in args.dims:
+            for n_pop in population_for(args, d):
                 for arm in args.arms:
                     t0 = time.perf_counter()
+                    n_iter = iters_for(args, arm, d, n_pop)
                     cell = []
-                    for seed in range(args.seeds):
+                    for seed in range(args.seed_start,
+                                      args.seed_start + args.seeds):
                         cell.extend(one_cell(arm, fname, d, seed, n_pop,
-                                             args.iters, args.optimizers))
+                                             n_iter, args.optimizers))
                     rows.extend(cell)
                     # One median per optimizer, not one across them: the five
                     # reach wildly different values on the same population,
@@ -1162,7 +1328,7 @@ def run_one_arm(args):
     tasks = sweep_tasks(args)
     init_arm, d = tasks[args.arm_index]
     optimizers = list(args.optimizers)
-    expected = (len(args.n_pop) * len(args.functions)
+    expected = (len(population_for(args, d)) * len(args.functions)
                 * args.seeds * len(optimizers))
     os.makedirs(args.out_dir, exist_ok=True)
     path = os.path.join(args.out_dir, f"{init_arm}_d{d}.jsonl")
@@ -1192,16 +1358,19 @@ def run_one_arm(args):
     }
     tmp = path + ".tmp"
     with open(tmp, "w") as fh:
-        for n_pop in args.n_pop:
+        for n_pop in population_for(args, d):
+            n_iter = iters_for(args, init_arm, d, n_pop)
             for fname in args.functions:
                 t0 = time.perf_counter()
-                for seed in range(args.seeds):
+                for seed in range(args.seed_start,
+                                  args.seed_start + args.seeds):
                     for row in one_cell(init_arm, fname, d, seed, n_pop,
-                                        args.iters, optimizers):
+                                        n_iter, optimizers):
                         row["arm_knobs"] = knobs
                         fh.write(json.dumps(row) + "\n")
                 fh.flush()
                 print(f"  {label:<24} {fname:<12} n_pop={n_pop:<4} "
+                      f"n_iter={n_iter:<5} "
                       f"{time.perf_counter() - t0:6.1f}s", flush=True)
     os.replace(tmp, path)
     print(f"[done] {label}: {expected} rows in "
