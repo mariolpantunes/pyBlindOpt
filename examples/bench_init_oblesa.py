@@ -876,8 +876,8 @@ def objective_for(fname, d, seed):
 
 #: **Sweep v8's configuration space.** A flat product over the four knobs
 #: that survived v7 as genuinely open questions, named so the arm string can
-#: be parsed back into its settings: `v8_w050_r3_s25_oq` is `force_weight=0.5,
-#: rounds=3, diversity_weight=0.25, opp='quasi'`.
+#: be parsed back into its settings: `f8_w050_midw_r3_s25_oq_e0` is `force_weight=0.5, att_model='idw',
+#: rounds=3, diversity_weight=0.25, opp='quasi', opp_ess=False`.
 #:
 #: The v7 arms above are kept unchanged so the two sweeps stay comparable;
 #: this is a separate table rather than an extension of that naming, which had
@@ -887,51 +887,43 @@ def objective_for(fname, d, seed):
 #: retired, not a factor to cross with everything else: Stage D varies it
 #: alone at each cell's tuned operating point, and if one model wins or ties
 #: everywhere the parameter is deleted.
-V8_W = {"w000": 0.0, "w050": 0.5, "w200": 2.0}
-V8_R = {"r1": 1, "r2": 2, "r3": 3}
-V8_S = {"s00": 0.0, "s25": 0.25, "s50": 0.5}
-#: Opposition is an axis for the first time. Quasi-opposition draws each
-#: opposite point between the box *centre* and the exact reflection, biasing
-#: the population inward -- and it is the one factor separating every v7 arm
-#: that harms the GWO family (`qobl`, every `ob_*`) from every arm that does
-#: not (`obl2x`, `random4x`, `lhs`), across 1400 instances per cell.
-#:
-#: That is a between-arm pattern, and those arms differ in more than their
-#: opposition rule. A direct paired manipulation -- the same configuration
-#: under each mode, 200 instances at d=32 -- found no difference on any of
-#: four optimizers, with every interval spanning zero: GWO -0.025
-#: [-0.086, +0.038], EGWO -0.003, CS +0.015, DE +0.022. The signs split the
-#: way the story predicts, the magnitudes are around 0.02, and the intervals
-#: are three times that wide, so the preview is simply underpowered rather
-#: than contradictory. It is an axis here because this sweep can resolve
-#: 0.02 and that one could not.
-V8_O = {"oq": "quasi", "os": "standard"}
+#: **The full factorial.** Six knobs crossed, because the per-optimizer
+#: pattern is the thing being looked for and a fractional design cannot show
+#: an interaction it did not vary. Concretely: whether the best attraction
+#: weight moves with the model, whether opposition interacts with the probe
+#: block, whether any of it depends on the optimizer.
+F8_W = {"w000": 0.0, "w050": 0.5, "w100": 1.0, "w200": 2.0}
+F8_M = {"midw": "idw", "maut": "auto", "mdet": "detrended", "mprj": "projection"}
+F8_R = {"r1": 1, "r2": 2, "r3": 3}
+F8_S = {"s00": 0.0, "s25": 0.25, "s50": 0.5}
+F8_O = {"oq": "quasi", "os": "standard"}
+F8_E = {"e0": False, "e1": True}
 
-for _wl, _w in V8_W.items():
-    for _rl, _r in V8_R.items():
-        for _sl, _s in V8_S.items():
-            for _ol, _o in V8_O.items():
-                OBLESA_KNOBS[f"v8_{_wl}_{_rl}_{_sl}_{_ol}"] = {
-                    "selection": "best", "force_weight": _w, "rounds": _r,
-                    "diversity_weight": _s, "opp": _o, "opp_ess": False,
-                    "_n_ess_mult": 1.0, "att_model": "idw"}
+#: `force_weight=0` turns the attraction field off, so the model is unused and
+#: all four produce bit-identical populations -- verified, not assumed. Crossing
+#: them there would spend 108 arms re-measuring one configuration, so that
+#: corner carries a single model.
+for _wl, _w in F8_W.items():
+    _models = {"midw": "idw"} if _w == 0.0 else F8_M
+    for _ml, _m in _models.items():
+        for _rl, _r in F8_R.items():
+            for _sl, _s in F8_S.items():
+                for _ol, _o in F8_O.items():
+                    for _el, _e in F8_E.items():
+                        OBLESA_KNOBS[
+                            f"f8_{_wl}_{_ml}_{_rl}_{_sl}_{_ol}_{_el}"] = {
+                            "selection": "best", "force_weight": _w,
+                            "att_model": _m, "rounds": _r,
+                            "diversity_weight": _s, "opp": _o,
+                            "opp_ess": _e, "_n_ess_mult": 1.0}
 
-#: Stage D: the model decision, at one fixed configuration per cell. Filled in
-#: from the Stage A/B winner rather than guessed; these are the four models
-#: crossed with the v7 default shape so the arm exists before the winner is
-#: known.
-for _m in ("idw", "auto", "detrended", "projection"):
-    OBLESA_KNOBS[f"v8d_{_m}"] = {
-        "selection": "best", "force_weight": 0.5, "rounds": 3,
-        "diversity_weight": 0.25, "opp": "quasi", "opp_ess": False,
-        "_n_ess_mult": 1.0, "att_model": _m}
+F8_ARMS = [a for a in OBLESA_KNOBS if a.startswith("f8_")]
 
-#: The arms Stage A ranks, and the baselines Stage B reports against.
-V8_ARMS = [a for a in OBLESA_KNOBS if a.startswith("v8_")]
-V8_STAGE_D = [a for a in OBLESA_KNOBS if a.startswith("v8d_")]
 #: `random4x`/`obl2x` are the budget-matched controls the whole claim rests
-#: on: is any of this beating "sample more and keep the best"?
-V8_BASELINES = ["random", "lhs", "qobl", "obl2x", "random4x"]
+#: on: is any of this beating "sample more and keep the best"? `qobl` and
+#: `obl` separate quasi- from exact opposition without any empty-space stage
+#: at all, which is the comparison the GWO-family question turns on.
+V8_BASELINES = ["random", "lhs", "sobol", "obl", "qobl", "obl2x", "random4x"]
 
 
 #: **Population rules, the axis every earlier sweep pinned.** `n_pop=30` was

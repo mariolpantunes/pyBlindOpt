@@ -265,7 +265,8 @@ class TestSweepBudgetAccounting(unittest.TestCase):
         bounds = np.array([[-5.0, 5.0]] * 6)
 
         for arm in ("random", "lhs", "qobl", "obl2x", "random4x",
-                    "v8_w050_r3_s25_oq", "v8_w200_r1_s00_os", "v8d_auto"):
+                    "f8_w050_midw_r3_s25_oq_e0", "f8_w200_mdet_r1_s00_os_e1",
+                    "f8_w000_midw_r2_s50_oq_e0"):
             for n_pop in (10, 30):
                 with self.subTest(arm=arm, n_pop=n_pop):
                     seen = []
@@ -290,7 +291,7 @@ class TestSweepBudgetAccounting(unittest.TestCase):
         # `random`/`lhs`/`sobol` are excluded deliberately: they evaluate
         # nothing at all, so they have no groups to check.
         for arm in ("qobl", "obl2x", "random4x",
-                    "v8_w050_r3_s25_oq", "v8_w200_r2_s50_os"):
+                    "f8_w050_midw_r3_s25_oq_e0", "f8_w200_mprj_r2_s50_os_e1"):
             with self.subTest(arm=arm):
                 seen = []
 
@@ -315,9 +316,9 @@ class TestSweepBudgetAccounting(unittest.TestCase):
                 n_pop = self.B.population_for(args, d)[0]
                 with self.subTest(rule=rule, d=d):
                     self.assertGreaterEqual(n_pop, 1)
-                    n_iter = self.B.iters_for(args, "v8_w050_r3_s25_oq",
+                    n_iter = self.B.iters_for(args, "f8_w050_midw_r3_s25_oq_e0",
                                               d, n_pop)
-                    spent = (self.B.init_cost("v8_w050_r3_s25_oq", n_pop)
+                    spent = (self.B.init_cost("f8_w050_midw_r3_s25_oq_e0", n_pop)
                              + n_iter * n_pop)
                     self.assertLessEqual(spent, 500 * d)
                     # and it should not be leaving a whole generation unspent
@@ -328,7 +329,7 @@ class TestSweepBudgetAccounting(unittest.TestCase):
         args = types.SimpleNamespace(budget_per_dim=1, iters=200,
                                      n_pop=[30], n_pop_rule=None)
         with self.assertRaises(ValueError) as cm:
-            self.B.iters_for(args, "v8_w050_r3_s25_oq", 8, 30)
+            self.B.iters_for(args, "f8_w050_midw_r3_s25_oq_e0", 8, 30)
         self.assertIn("budget", str(cm.exception))
 
     def test_population_rules_grow_with_dimension_except_the_control(self):
