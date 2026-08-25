@@ -892,8 +892,19 @@ V8_R = {"r1": 1, "r2": 2, "r3": 3}
 V8_S = {"s00": 0.0, "s25": 0.25, "s50": 0.5}
 #: Opposition is an axis for the first time. Quasi-opposition draws each
 #: opposite point between the box *centre* and the exact reflection, biasing
-#: the population inward, and it is the one factor separating every arm that
-#: harms the GWO family from every arm that does not.
+#: the population inward -- and it is the one factor separating every v7 arm
+#: that harms the GWO family (`qobl`, every `ob_*`) from every arm that does
+#: not (`obl2x`, `random4x`, `lhs`), across 1400 instances per cell.
+#:
+#: That is a between-arm pattern, and those arms differ in more than their
+#: opposition rule. A direct paired manipulation -- the same configuration
+#: under each mode, 200 instances at d=32 -- found no difference on any of
+#: four optimizers, with every interval spanning zero: GWO -0.025
+#: [-0.086, +0.038], EGWO -0.003, CS +0.015, DE +0.022. The signs split the
+#: way the story predicts, the magnitudes are around 0.02, and the intervals
+#: are three times that wide, so the preview is simply underpowered rather
+#: than contradictory. It is an axis here because this sweep can resolve
+#: 0.02 and that one could not.
 V8_O = {"oq": "quasi", "os": "standard"}
 
 for _wl, _w in V8_W.items():
