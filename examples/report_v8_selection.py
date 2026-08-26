@@ -97,8 +97,25 @@ ARM_RE = re.compile(r"^f8_(w\d{3})_(m\w{3})_(r\d)_(s\d{2})_(o[qs])_(e[01])$")
 
 #: The controls the whole claim rests on. Shown beside every selected arm,
 #: because beating `obl` is arithmetic -- OBLESA's pool is a superset of it --
-#: while beating `random4x` and `obl2x` at matched budget is not.
-CONTROLS = ["random4x", "obl2x", "qobl", "obl", "lhs", "sobol"]
+#: while beating a same-sized pool of unguided draws is not.
+CONTROLS = ["random3x", "obl15x", "random4x", "obl2x", "random5x", "obl25x",
+            "random6x", "obl3x", "random8x", "obl4x",
+            "qobl", "obl", "lhs", "sobol"]
+
+#: Pool multiple -> the two controls that spend it. `oblesa_pool_size` is
+#: `2N + rounds * n_ess`, and `opp_ess` doubles the per-round block, so an arm
+#: at `rounds=1` draws 3N and one at `rounds=3, opp_ess=True` draws 8N.
+#: Comparing either against the 4N control -- the only one Stage A shipped --
+#: charges the first for a block it never drew and hands the second one free.
+POOL_CONTROLS = {3: ("random3x", "obl15x"), 4: ("random4x", "obl2x"),
+                 5: ("random5x", "obl25x"), 6: ("random6x", "obl3x"),
+                 8: ("random8x", "obl4x")}
+
+
+def pool_multiple(tok):
+    """How many `n_pop` blocks an arm's knobs make it evaluate."""
+    per_round = 2 if tok["e"] == "e1" else 1
+    return 2 + int(KNOBS["r"][1][tok["r"]]) * per_round
 
 
 def parse_arm(arm):
@@ -459,6 +476,7 @@ def report(data, boot):
                 rank = rows.index((m, arm, n, ar)) + 1
                 print(f"{rank:<4}{arm:<34}{m:>10.3f}{ar:>9.1f}{n:>9}")
         print()
+        matched(data, arms, opt)
         verdict(data, arms, opt)
         cost(data, arms, opt)
         robustness(data, arms, opt)
@@ -627,6 +645,63 @@ def verdict(data, arms, opt):
         if (arm, full[0], opt) in data:
             print(f"{arm:<40}{med(arm):>10.3f}{med(arm, 'ar'):>9.1f}"
                   + f"{med(arm, 'secs'):>10.3f}")
+    print()
+
+
+def _pooled_median(data, arm, opt, dims, col):
+    """Median over every landscape of `arm`, or None if a dimension is absent.
+
+    Absent rather than sparse: an arm measured on four dimensions out of five
+    is missing the hardest one, and pooling it against a complete arm reads as
+    a win that is entirely the missing cell.
+    """
+    if any((arm, d, opt) not in data for d in dims):
+        return None
+    v = np.concatenate([data[(arm, d, opt)][COL[col]] for d in dims])
+    v = v[np.isfinite(v)]
+    return float(np.median(v)) if v.size else None
+
+
+def matched(data, arms, opt):
+    """Best arm at each pool size, against the controls that spend the same.
+
+    This is the comparison the whole sweep exists to make. `obl` and `qobl`
+    are not it -- OBLESA's pool is a strict superset of theirs, so beating
+    them is arithmetic. Beating `random_kx` at the *same* `k` is not: it draws
+    the same number of candidates and keeps the best, with no empty-space
+    stage and no opposition, so a margin over it is what the placement bought.
+    """
+    dims = [d for d in DIMS if (BASE, d, opt) in data]
+    print(f"MATCHED-POOL COMPARISON -- {opt}   (dims {dims})")
+    print(f"{'pool':<6}{'best arm':<30}{'dlog10':>9}{'AR%':>7}   "
+          f"{'control':<11}{'dlog10':>9}{'AR%':>7}{'margin':>9}")
+    print("-" * 90)
+    for mult, controls in sorted(POOL_CONTROLS.items()):
+        ranked = []
+        for arm, tok in arms.items():
+            if pool_multiple(tok) != mult:
+                continue
+            dl = _pooled_median(data, arm, opt, dims, "dl")
+            if dl is not None:
+                ranked.append((dl, arm))
+        if not ranked:
+            continue
+        ranked.sort()
+        best_dl, best = ranked[0]
+        best_ar = _pooled_median(data, best, opt, dims, "ar")
+
+        # The stronger of the two controls, so the margin is never flattered
+        # by picking whichever happened to do worse.
+        scored = [(c, _pooled_median(data, c, opt, dims, "dl")) for c in controls]
+        scored = [(c, v) for c, v in scored if v is not None]
+        if not scored:
+            print(f"{mult}N{'':<4}{best:<30}{best_dl:>9.3f}{best_ar:>7.1f}   "
+                  f"{'(not run)':<11}{'--':>9}{'--':>7}{'--':>9}")
+            continue
+        cname, cdl = min(scored, key=lambda p: p[1])
+        car = _pooled_median(data, cname, opt, dims, "ar")
+        print(f"{mult}N{'':<4}{best:<30}{best_dl:>9.3f}{best_ar:>7.1f}   "
+              f"{cname:<11}{cdl:>9.3f}{car:>7.1f}{best_dl - cdl:>9.3f}")
     print()
 
 

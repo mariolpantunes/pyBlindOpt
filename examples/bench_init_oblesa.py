@@ -440,20 +440,22 @@ def baseline_for(arm):
 SHIFT = [True]        # cleared by --no-shift; module-level so one_run sees it
 SHIFT_FRAC = [0.8]
 
-def _uniform_null(samples, bounds, *, n, seed=None, **ignored):
-    """The no-search null: `n` uniform points, same pool shape, nothing sought.
-
-    This is the control the whole design rests on. OBLESA against OBL confounds
-    two things -- a larger candidate pool, and a pool with points chosen by
-    searching empty space -- and only an arm that spends the same candidates
-    without searching separates them.
-
-    Four lines here rather than a call into ESS: the null must not move when
-    ESS changes, or it stops being a fixed reference.
-    """
-    del samples, ignored
-    rng = seed if isinstance(seed, np.random.Generator) else np.random.default_rng(seed)
-    return rng.uniform(bounds[:, 0], bounds[:, 1], size=(int(n), bounds.shape[0]))
+#: The no-search null: `n` uniform points, same pool shape, nothing sought.
+#:
+#: This is the control the whole design rests on. OBLESA against OBL confounds
+#: two things -- a larger candidate pool, and a pool with points chosen by
+#: searching empty space -- and only an arm that spends the same candidates
+#: without searching separates them.
+#:
+#: It used to be four lines here rather than a call out, on the grounds that
+#: the null must not move when ESS changes or it stops being a fixed
+#: reference. That argument held while the only place to call was ESS. It now
+#: lives in `pyBlindOpt.init`, versioned with `oblesa` itself and covered by
+#: its tests, so a copy here would drift from the thing it is meant to
+#: control rather than be protected from it. Verified identical to the copy
+#: it replaces, including that a passed Generator advances rather than being
+#: reseeded.
+_uniform_null = init.uniform_engine
 
 
 
@@ -951,6 +953,28 @@ for _bl, _base in F9_BASE.items():
                 "_n_ess_mult": 1.0, **_base}
 
 F9_ARMS = [a for a in OBLESA_KNOBS if a.startswith("f9_")]
+
+#: **The null engine at matched pool size.** `random_kx` matches the number of
+#: candidates but replaces the entire pipeline, so a difference against it
+#: could come from anywhere in it -- the opposition block, the rounds
+#: structure, the selection rule. These arms keep all of that and swap only
+#: where the probe block lands, which is the one substitution that isolates
+#: the placement. Both opposition modes, because the sweep found `opp` is the
+#: only knob whose winner moves with the optimizer.
+#:
+#: `force_weight` is absent on purpose: `uniform_engine` declares no
+#: capabilities, so the dispatch hands it nothing and the draws stay unguided
+#: by fitness. A null that read `scores` would be a cheap surrogate search.
+F10_OPP = {"os": "standard", "oq": "quasi"}
+
+for _rl, _r in F8_R.items():
+    for _ol, _o in F10_OPP.items():
+        OBLESA_KNOBS[f"f10_null_{_rl}_{_ol}"] = {
+            "selection": "best", "rounds": _r, "diversity_weight": 0.0,
+            "opp": _o, "opp_ess": False, "_n_ess_mult": 1.0,
+            "engine": init.uniform_engine}
+
+F10_ARMS = [a for a in OBLESA_KNOBS if a.startswith("f10_")]
 
 #: `random4x`/`obl2x` are the budget-matched controls the whole claim rests
 #: on: is any of this beating "sample more and keep the best"? `qobl` and
