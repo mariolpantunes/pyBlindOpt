@@ -804,15 +804,15 @@ def initial_population(arm, objective, bounds, n_pop, rng, stats=None, info=None
         return utils.HLCSampler(rng).sample(n_pop, bounds)
     if arm == "sobol":
         return utils.SobolSampler(rng).sample(n_pop, bounds)
-    if arm in ("random3x", "random4x"):
-        mult = 3 if arm == "random3x" else 4
-        return _best_of(utils.RandomSampler(rng).sample(mult * n_pop, bounds),
-                        objective, n_pop)
-    if arm in ("obl15x", "obl2x"):
-        # 1.5N or 2N random points plus their opposites: 3N or 4N candidates,
-        # matching OBLESA's pool size without any empty-space stage.
-        half = (3 * n_pop) // 2 if arm == "obl15x" else 2 * n_pop
-        base = utils.RandomSampler(rng).sample(half, bounds)
+    if arm in RANDOM_KX:
+        return _best_of(
+            utils.RandomSampler(rng).sample(RANDOM_KX[arm] * n_pop, bounds),
+            objective, n_pop)
+    if arm in OBL_KX:
+        # Half the pool drawn at random, half its opposites, so the total
+        # matches an OBLESA pool of the same size with no empty-space stage.
+        num, den = OBL_KX[arm]
+        base = utils.RandomSampler(rng).sample((num * n_pop) // den, bounds)
         opp = utils.check_bounds(lo + hi - base, bounds)
         return _best_of(np.vstack([base, opp]), objective, n_pop)
     if arm == "obl":
@@ -832,12 +832,18 @@ def initial_population(arm, objective, bounds, n_pop, rng, stats=None, info=None
         # `_n_ess_mult` is an arm-table convention, not an `oblesa` argument.
         mult = kw.pop("_n_ess_mult", 1.0)
         kw["n_ess"] = max(1, round(mult * n_pop))
-        # `att_model` is an `oblesa` argument now, so the arm table can name
-        # it directly instead of binding a partial over a private engine and
-        # re-attaching the `accepts` attribute that `partial` drops.
-        model = kw.pop("_att_model", None)
-        if model is not None:
-            kw["att_model"] = model
+        # The attraction model was an `oblesa` argument while the factorial
+        # was deciding it; the answer was `idw` and the parameter is gone, so
+        # the table's entry is now only a name in the arm string. Refuse any
+        # other value rather than dropping it: an arm called `_mdet_` that
+        # quietly ran `idw` would land in the same directory as the real
+        # `_mdet_` rows and the two would be indistinguishable.
+        model = kw.pop("_att_model", "idw")
+        if model != "idw":
+            raise ValueError(
+                f"arm {arm!r} names att_model={model!r}, which oblesa no "
+                "longer accepts; those rows are historical, re-run them "
+                "against the commit that measured them")
         if stats is not None and arm in ENGINE_LABEL:
             stats["engine"] = ENGINE_LABEL[arm]
         if info is not None:
@@ -893,19 +899,20 @@ def objective_for(fname, d, seed):
 #: weight moves with the model, whether opposition interacts with the probe
 #: block, whether any of it depends on the optimizer.
 F8_W = {"w000": 0.0, "w050": 0.5, "w100": 1.0, "w200": 2.0}
-F8_M = {"midw": "idw", "maut": "auto", "mdet": "detrended", "mprj": "projection"}
+#: One entry, and the token stays in the arm name on purpose. The axis is
+#: decided -- `idw` won at every dimension and is the only estimator bounded
+#: by construction -- but 1650 task files on disk are named with this token,
+#: and dropping it would orphan every one of them from `--list-arms` and from
+#: the report's arm parser. Cheaper to keep a one-entry table than to rename
+#: a finished sweep.
+F8_M = {"midw": "idw"}
 F8_R = {"r1": 1, "r2": 2, "r3": 3}
 F8_S = {"s00": 0.0, "s25": 0.25, "s50": 0.5}
 F8_O = {"oq": "quasi", "os": "standard"}
 F8_E = {"e0": False, "e1": True}
 
-#: `force_weight=0` turns the attraction field off, so the model is unused and
-#: all four produce bit-identical populations -- verified, not assumed. Crossing
-#: them there would spend 108 arms re-measuring one configuration, so that
-#: corner carries a single model.
 for _wl, _w in F8_W.items():
-    _models = {"midw": "idw"} if _w == 0.0 else F8_M
-    for _ml, _m in _models.items():
+    for _ml in F8_M:
         for _rl, _r in F8_R.items():
             for _sl, _s in F8_S.items():
                 for _ol, _o in F8_O.items():
@@ -913,17 +920,65 @@ for _wl, _w in F8_W.items():
                         OBLESA_KNOBS[
                             f"f8_{_wl}_{_ml}_{_rl}_{_sl}_{_ol}_{_el}"] = {
                             "selection": "best", "force_weight": _w,
-                            "att_model": _m, "rounds": _r,
-                            "diversity_weight": _s, "opp": _o,
-                            "opp_ess": _e, "_n_ess_mult": 1.0}
+                            "rounds": _r, "diversity_weight": _s,
+                            "opp": _o, "opp_ess": _e, "_n_ess_mult": 1.0}
 
 F8_ARMS = [a for a in OBLESA_KNOBS if a.startswith("f8_")]
+
+#: **The estimator knobs, at the two operating points the factorial settled.**
+#: With the attraction model pinned to inverse-distance weighting, `k_att` and
+#: `att_power` are the whole of it -- and neither has ever been measured,
+#: because until now they were unreachable from `oblesa`.
+#:
+#: Two bases rather than one: every optimizer but `cs` wants `force_weight=1`
+#: with standard opposition, and `cs` wants `2.0` with quasi. Sweeping the
+#: estimator at a point no optimizer occupies would measure a configuration
+#: nobody runs. `rounds=1` throughout, because that is the default and the
+#: corner where an under-resourced estimate has the least to work with.
+F9_BASE = {
+    "b1": {"force_weight": 1.0, "opp": "standard"},
+    "b2": {"force_weight": 2.0, "opp": "quasi"},
+}
+F9_K = {"k02": 2, "k04": 4, "k08": 8, "k16": 16, "k32": 32}
+F9_P = {"p1": 1.0, "p2": 2.0, "p3": 3.0}
+
+for _bl, _base in F9_BASE.items():
+    for _kl, _k in F9_K.items():
+        for _pl, _p in F9_P.items():
+            OBLESA_KNOBS[f"f9_{_bl}_{_kl}_{_pl}"] = {
+                "selection": "best", "rounds": 1, "diversity_weight": 0.0,
+                "opp_ess": False, "k_att": _k, "att_power": _p,
+                "_n_ess_mult": 1.0, **_base}
+
+F9_ARMS = [a for a in OBLESA_KNOBS if a.startswith("f9_")]
 
 #: `random4x`/`obl2x` are the budget-matched controls the whole claim rests
 #: on: is any of this beating "sample more and keep the best"? `qobl` and
 #: `obl` separate quasi- from exact opposition without any empty-space stage
 #: at all, which is the comparison the GWO-family question turns on.
+#: Cost controls, by the pool size they match. `oblesa_pool_size` is
+#: `2N + rounds * n_ess`, and `opp_ess` doubles the per-round block, so the
+#: 468-arm factorial spends 3N, 4N, 5N, 6N or 8N depending on `rounds` and
+#: `opp_ess` -- five distinct budgets, against which only 4N had a control.
+#: Comparing a `rounds=1` arm (3N) to `random4x` charged it for a block it
+#: never drew; comparing a `rounds=3` arm (5N) to the same control handed it
+#: one for free. Neither is a fair test of whether the empty-space stage is
+#: doing anything, which is the only thing these arms exist to decide.
+RANDOM_KX = {"random3x": 3, "random4x": 4, "random5x": 5,
+             "random6x": 6, "random8x": 8}
+#: `(numerator, denominator)` of the random half; the opposites double it.
+#: `obl15x` keeps its original `(3 * n_pop) // 2` so the name still means what
+#: it meant, and `obl2x` is unchanged at exactly 2N + 2N.
+OBL_KX = {"obl15x": (3, 2), "obl2x": (2, 1), "obl25x": (5, 2),
+          "obl3x": (3, 1), "obl4x": (4, 1)}
+
 V8_BASELINES = ["random", "lhs", "sobol", "obl", "qobl", "obl2x", "random4x"]
+
+#: The controls sweep v8 was missing. Submitted separately once the pool-size
+#: mismatch was found, rather than folded into `V8_BASELINES`, so the arms
+#: already on disk keep their identity and resume for free.
+V8_COST_CONTROLS = ["random3x", "obl15x", "random5x", "obl25x",
+                    "random6x", "obl3x", "random8x", "obl4x"]
 
 
 #: **Population rules, the axis every earlier sweep pinned.** `n_pop=30` was
@@ -998,10 +1053,11 @@ def init_cost(arm, n_pop):
         return 0
     if base in ("obl", "qobl"):
         return 2 * n_pop
-    if base in ("random3x", "obl15x"):
-        return 3 * n_pop
-    if base in ("random4x", "obl2x"):
-        return 4 * n_pop
+    if base in RANDOM_KX:
+        return RANDOM_KX[base] * n_pop
+    if base in OBL_KX:
+        num, den = OBL_KX[base]
+        return 2 * ((num * n_pop) // den)
     if base in OBLESA_KNOBS:
         kw = dict(OBLESA_KNOBS[base])
         mult = kw.pop("_n_ess_mult", 1.0)

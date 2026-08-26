@@ -271,7 +271,8 @@ def _ess_engine(
     scores: np.ndarray | None = None,
     attraction_weight: float = 0.5,
     placement_weight: float | None = None,
-    att_model: str = "auto",
+    k_att: int = 8,
+    att_power: float = 2.0,
     k_cand: int = 64,
     **ignored,
 ) -> np.ndarray:
@@ -311,42 +312,10 @@ def _ess_engine(
         attraction_weight (float): Pull strength in ESS's units. The default
             is ESS's own measured optimum; it is **not** `force_weight`, see
             above.
-        att_model (str): **Which model, and why it decides high-`d` behaviour.**
-            OBLESA hands ESS the sampler and (q)OBL blocks as the measured
-            anchors, so the source count is `2 * n_pop` *at every dimension* --
-            60 at the default `n_pop=30`. `'fourier'` and `'detrended'` carry
-            `2d + 1` coefficients, so from `d = 32` (65 coefficients against
-            60 points) they are underdetermined: the fit reproduces its own
-            sources and generalises to nothing. `'idw'` has no coefficients and
-            `'projection'` correlates rather than solves, so both stay defined
-            at any count.
-
-            Measured, as the share of the selected population won by the
-            relaxed block at `force_weight=2` (8 functions x 8 seeds; the block
-            is a third of the pool, so 33% is parity):
-
-            ===========  =====  =====  =====  =====
-            att_model    d=8    d=16   d=32   d=64
-            ===========  =====  =====  =====  =====
-            detrended    70.4   41.9   18.0   13.8
-            projection   71.4   56.8   41.1   27.9
-            idw          74.9   73.1   72.1   71.0
-            auto         70.9   72.2   70.0   64.1
-            ===========  =====  =====  =====  =====
-
-            `'auto'` -- the default, and ESS's own -- cross-validates on
-            sources already paid for and so tracks whichever wins. **Naming any
-            other model here overrides that**, which is how a sweep can end up
-            measuring an underdetermined fit at every dimension without
-            anything reporting a problem.
-
-            How ESS estimates the attractiveness of a position it
-            has no measurement for -- 'fourier' fits one function of position
-            and evaluates it, 'idw' weights the nearest measured points,
-            'detrended' does both. The default 'auto' cross-validates them on
-            the pool that was already evaluated, so it costs no objective
-            calls; which one wins depends on whether the objective is
-            separable, and that is not readable from the dimension.
+        k_att (int): Neighbours the attractiveness estimate averages over,
+            and `att_power` its inverse-distance exponent. Together they are
+            the whole of the estimator: `att_model` is pinned to `'idw'`
+            below, so these are the only knobs it has.
         placement_weight (float | None): Attraction weight for ESS's placement
             step alone. None pairs it with `attraction_weight`, which is the
             sensible default; they are separable so the guided placement and
@@ -366,7 +335,15 @@ def _ess_engine(
             "attractiveness": -np.asarray(scores, dtype=float),
             "attraction_weight": attraction_weight,
             "placement_weight": placement_weight,
-            "att_model": att_model,
+            # Pinned, not defaulted. ESS's own default is `'auto'`, which
+            # cross-validates and can land on a fit carrying `2d`
+            # coefficients -- and OBLESA supplies `2 * n_pop` anchors, a count
+            # set by the population rather than by the dimension. Dropping
+            # this line does not remove a choice, it silently makes the other
+            # one. See `oblesa`'s docstring for the measured difference.
+            "att_model": "idw",
+            "k_att": k_att,
+            "att_power": att_power,
             "attraction_metric": "cauchy",
             "attraction_kwargs": {"power": 1.0},
         }
@@ -374,7 +351,49 @@ def _ess_engine(
 
 
 _ess_engine.accepts = frozenset(  # type: ignore[reportFunctionMemberAccess]
-    {"scores", "k_cand", "attraction_weight", "att_model"})
+    {"scores", "k_cand", "attraction_weight", "k_att", "att_power"})
+
+
+def uniform_engine(
+    samples: np.ndarray,
+    bounds: np.ndarray,
+    *,
+    n: int,
+    seed=None,
+    **ignored,
+) -> np.ndarray:
+    """OBLESA's pipeline with the empty-space stage replaced by uniform draws.
+
+    A diagnostic, not an alternative. Swapping it in holds the pool's *shape*
+    fixed -- same rounds, same opposition, same anchor set, same selection --
+    and varies only where the probe block lands, which is the one substitution
+    that separates what the pipeline contributes from what the placement does.
+    `random4x` and its relatives match the pool's *size* and cannot do this:
+    they replace the whole pipeline, so a difference against them could come
+    from anywhere in it.
+
+    It declares no capabilities, so the dispatch in `oblesa` hands it nothing
+    and the draws stay unguided by fitness. That is deliberate: a null that
+    quietly read `scores` would be a cheap surrogate search rather than a null.
+
+    Args:
+        samples (np.ndarray): The anchors, ignored -- that is the point.
+        bounds (np.ndarray): Search space bounds, shape (D, 2).
+        n (int): How many points to draw.
+        seed: Random seed or Generator.
+        **ignored: Accepted and dropped, for signature compatibility.
+
+    Returns:
+        np.ndarray: `n` uniform points, shape (n, D).
+    """
+    del samples, ignored
+    rng = np.random.default_rng(seed)
+    lo, hi = bounds[:, 0], bounds[:, 1]
+    return rng.uniform(lo, hi, size=(n, bounds.shape[0]))
+
+
+#: Empty, so `oblesa` forwards it nothing at all. See `uniform_engine`.
+uniform_engine.accepts = frozenset()  # type: ignore[reportFunctionMemberAccess]
 
 
 def oblesa_pool_size(
@@ -430,7 +449,8 @@ def oblesa(
     n_ess: int | None = None,
     rounds: int = 3,
     k_cand: int = 64,
-    att_model: str = "idw",
+    k_att: int = 8,
+    att_power: float = 2.0,
     engine: collections.abc.Callable | None = None,
     diversity_weight: float = 0.25,
 ) -> np.ndarray:
@@ -493,8 +513,8 @@ def oblesa(
             `ess.esa` until now.
 
             Against `ess.esa` it helps, and it helps more as dimension rises.
-            On `cs`, acceleration rate at `force_weight=2` with `att_model`
-            `idw`, 5 landscapes x 8 seeds:
+            On `cs`, acceleration rate at `force_weight=2`, 5 landscapes
+            x 8 seeds:
 
             | d              |   8 |  16 |  32 |  64 | 100 |
             |----------------|-----|-----|-----|-----|-----|
@@ -561,31 +581,38 @@ def oblesa(
             more expensive. ESS relaxes the block afterwards, so the
             placement only has to be a reasonable starting point: raising this
             to 2048 costs 4.5-7.1x and returns the same population.
-        att_model (str): Which model ESS uses to estimate the attractiveness
-            of a position it has no measurement for -- 'idw', 'auto',
-            'detrended', 'projection', 'fourier'. Forwarded to the engine when
-            it declares `att_model` in its `accepts`; ignored by engines that
-            do not.
+        k_att (int): Neighbours the attractiveness of an unmeasured position
+            is averaged over, and `att_power` the inverse-distance exponent
+            weighting them. Forwarded to the engine when it declares them in
+            its `accepts`; ignored by engines that do not.
 
-            **Provisional, and expected to be removed.** This is not a knob
-            anyone should need: the evidence so far says one model wins
-            everywhere, and the intent is to hardcode it and delete the
-            parameter. It is exposed now only so a sweep can settle the
-            question end to end rather than on the surrogate-accuracy proxy
-            that currently favours it.
+            **These are the estimator, now that there is only one.** The model
+            was a parameter until a 468-arm factorial settled it, and the
+            answer was not close enough to keep the choice open. Fitted models
+            carry `2d` coefficients while OBLESA supplies `2 * n_pop` anchors
+            -- a count set by the population, not by the dimension -- so
+            identifiability needs `n_pop > d`, a population growing linearly
+            in dimension where every anchor is a paid objective call.
 
-            'idw' is the default on that evidence. It beat 'auto' at every
-            dimension in this module's own measurements (74.9 / 73.1 / 72.1 /
-            71.0 against 70.9 / 72.2 / 70.0 / 64.1) while 'auto' additionally
-            pays for cross-validation to get there, and it beat every
-            alternative on top-decile precision at d >= 32 -- including a
-            clamped harmonic field over a kNN graph, which lost by 0.085
-            (95% CI [0.058, 0.112]) at d=100. It is also the cheapest: at
-            d=100 it is roughly 3x faster than the 2d+1 fitted models and 10x
-            faster than graph propagation.
+            Measured as the share of the selected population won by the
+            relaxed block at `force_weight=2`, where 33% is parity:
 
-            Remove this parameter once a sweep confirms the ranking on final
-            solution quality; until then, leaving it alone is correct.
+            ============  =====  =====  =====  =====
+            estimator     d=8    d=16   d=32   d=64
+            ============  =====  =====  =====  =====
+            detrended     70.4   41.9   18.0   13.8
+            projection    71.4   56.8   41.1   27.9
+            inverse dist  74.9   73.1   72.1   71.0
+            auto          70.9   72.2   70.0   64.1
+            ============  =====  =====  =====  =====
+
+            Inverse-distance weighting is also the only one bounded by
+            construction -- a convex combination of measured values cannot
+            leave their range -- and the sweep found that is what protects the
+            spread repulsion produced: at `d=100` the closest pair in the
+            selected population sits at 3.116 under it against 2.797 under a
+            detrended fit, a 10.2% collapse that grows with dimension.
+
         engine (Callable | None): The empty-space backend, called as
             `engine(samples, bounds, n=..., seed=..., ...)`. None selects
             EmptySpaceSearch, which places each probe on a blend of novelty
@@ -691,8 +718,10 @@ def oblesa(
         eng_kw["attraction_weight"] = force_weight
     elif "lam" in accepts:
         eng_kw["lam"] = force_weight
-    if "att_model" in accepts:
-        eng_kw["att_model"] = att_model
+    if "k_att" in accepts:
+        eng_kw["k_att"] = k_att
+    if "att_power" in accepts:
+        eng_kw["att_power"] = att_power
 
     # The pool *is* the anchor set: every round probes against everything
     # placed so far and hands back points that join it. At `rounds=1` this

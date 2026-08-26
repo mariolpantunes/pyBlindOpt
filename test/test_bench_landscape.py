@@ -256,7 +256,7 @@ class TestSweepBudgetAccounting(unittest.TestCase):
     def setUp(self):
         sys.path.insert(0, os.path.join(ROOT, "examples"))
         sys.path.insert(0, os.path.join(ROOT, "src"))
-        import bench_init_oblesa
+        import bench_init_oblesa  # type: ignore[reportMissingImports]
         self.B = bench_init_oblesa
 
     def test_predicted_init_cost_is_what_an_arm_actually_spends(self):
@@ -265,7 +265,7 @@ class TestSweepBudgetAccounting(unittest.TestCase):
         bounds = np.array([[-5.0, 5.0]] * 6)
 
         for arm in ("random", "lhs", "qobl", "obl2x", "random4x",
-                    "f8_w050_midw_r3_s25_oq_e0", "f8_w200_mdet_r1_s00_os_e1",
+                    "f8_w050_midw_r3_s25_oq_e0", "f8_w200_midw_r1_s00_os_e1",
                     "f8_w000_midw_r2_s50_oq_e0"):
             for n_pop in (10, 30):
                 with self.subTest(arm=arm, n_pop=n_pop):
@@ -291,7 +291,7 @@ class TestSweepBudgetAccounting(unittest.TestCase):
         # `random`/`lhs`/`sobol` are excluded deliberately: they evaluate
         # nothing at all, so they have no groups to check.
         for arm in ("qobl", "obl2x", "random4x",
-                    "f8_w050_midw_r3_s25_oq_e0", "f8_w200_mprj_r2_s50_os_e1"):
+                    "f8_w050_midw_r3_s25_oq_e0", "f8_w200_midw_r2_s50_os_e1"):
             with self.subTest(arm=arm):
                 seen = []
 
