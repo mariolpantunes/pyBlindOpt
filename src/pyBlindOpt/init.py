@@ -429,7 +429,7 @@ def oblesa_pool_size(
     n_pop: int,
     *,
     n_ess: int | None = None,
-    rounds: int = 3,
+    rounds: int = 1,
     opp: str = "quasi",
     opp_ess: bool = False,
 ) -> int:
@@ -476,7 +476,7 @@ def oblesa(
     seed: int | np.random.Generator | None = None,
     n_jobs: int = 1,
     n_ess: int | None = None,
-    rounds: int = 3,
+    rounds: int = 1,
     k_cand: int = 64,
     k_att: int = 8,
     att_power: float = 2.0,
@@ -580,11 +580,18 @@ def oblesa(
             probing against everything the previous rounds placed **and
             measured**. `rounds=1` is the single-pass pipeline.
 
-            The default is 3 because that is what two sweeps measured as the
-            best setting at every dimension on every optimizer that responds
-            to initialization at all -- it was the largest single effect
-            found. It costs `rounds * n_ess` evaluations, so a caller on a
-            tight budget lowers it deliberately rather than inheriting it.
+            **The default is 1, which is OBLESA as published.** Additional
+            rounds exist so a caller can take better advantage of the
+            attraction model, and that is a decision for them: each one costs
+            a further `n_ess` objective evaluations, and a default that spends
+            three times the budget is not a default, it is a policy imposed on
+            everyone who did not read this paragraph.
+
+            Two sweeps do measure 3 as the strongest setting at every
+            dimension on every optimizer that responds to initialization at
+            all -- it was the largest single effect found -- so a caller with
+            budget to spend should raise it. That is a recommendation, and it
+            reads better as one than as a number nobody chose.
 
             This is not the same purchase as a larger `n_ess`, though it costs
             the same evaluations: `n_ess=2*n_pop, rounds=1` places 2N probes

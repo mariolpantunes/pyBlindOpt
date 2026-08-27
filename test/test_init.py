@@ -730,8 +730,9 @@ class TestOblesaSelectionPlumbing(unittest.TestCase):
         default, 4N with `opp_ess=True`, and N with no opposition at all.
         """
         cases = {
-            (): 50,                                   # default: 2N + 3 rounds
-            (("rounds", 1),): 30,                     # single pass: the 3N
+            (): 30,                                   # default: 2N + 1 round
+            (("rounds", 1),): 30,                     # the default, spelled
+            (("rounds", 3),): 50,                     # three rounds: 2N + 3N
             (("rounds", 1), ("opp_ess", True)): 40,   # probes opposed too: 4N
             (("n_ess", 0),): 20,                      # OBL: 2N, rounds are free
             (("rounds", 1), ("n_ess", 20)): 40,       # oversized probe block
