@@ -1012,6 +1012,39 @@ for _bl, _base in F9_BASE.items():
 
 F11_ARMS = [a for a in OBLESA_KNOBS if a.startswith("f11_")]
 
+#: **Tuning the radius, on the only scale that has any range left.** The
+#: 2x2 above runs radius mode at its default neighbour target of 2, which is
+#: the smallest radius that costs nothing -- chosen for k-NN's sake, never
+#: measured for radius mode's.
+#:
+#: The knob is the *count*, not the radius. Past low dimension the radius
+#: itself has no room: at d=100, N=300 the whole span from 1 to 64
+#: neighbours is a 13% change in radius, and at d=1000 a 3.5% one. The
+#: neighbourhood behind it still changes 64-fold, so the leverage is real
+#: and simply cannot be reached by choosing a radius by hand. That is what
+#: `radius_target` is for and what these arms sweep.
+#:
+#: It is also the arm the case for radius mode rests on. Its advantage is
+#: that it is near-parametric: k-NN needs a `k` chosen per problem, where
+#: radius mode derives its own from the density and only asks how *many*
+#: neighbours are wanted -- a question whose answer does not move with the
+#: dimension. That is worth having only if it also performs, which is what
+#: this measures.
+#:
+#: `rr` throughout: both halves on radius is the configuration whose selling
+#: point is the absence of a `k`, and a mixed arm would keep one.
+F12_TARGET = {"t01": 1, "t02": 2, "t04": 4, "t08": 8, "t16": 16, "t32": 32}
+
+for _bl, _base in F9_BASE.items():
+    for _tl, _t in F12_TARGET.items():
+        OBLESA_KNOBS[f"f12_{_bl}_{_tl}"] = {
+            "selection": "best", "rounds": 1, "diversity_weight": 0.0,
+            "opp_ess": False, "_n_ess_mult": 1.0,
+            "search_mode": "radius", "att_search_mode": "radius",
+            "radius_target": _t, **_base}
+
+F12_ARMS = [a for a in OBLESA_KNOBS if a.startswith("f12_")]
+
 #: `random4x`/`obl2x` are the budget-matched controls the whole claim rests
 #: on: is any of this beating "sample more and keep the best"? `qobl` and
 #: `obl` separate quasi- from exact opposition without any empty-space stage
