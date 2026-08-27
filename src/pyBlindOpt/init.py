@@ -275,7 +275,7 @@ def _ess_engine(
     att_power: float = 2.0,
     search_mode: str = "k_nn",
     radius: float = 0.0,
-    radius_target: int = 2,
+    radius_target: int | None = None,
     att_search_mode: str = "k_nn",
     att_radius: float = 0.0,
     k_cand: int = 64,
@@ -335,8 +335,9 @@ def _ess_engine(
             `ess.radius_for_target(dim, n_points)` to specify one by
             neighbour count instead -- the useful band is narrow and moves
             with dimension.
-        radius_target (int): Neighbours the auto-derived radius should
-            contain, when `radius` is 0. The tuning knob of radius mode.
+        radius_target (int | None): Neighbours the auto-derived radius
+            should contain when `radius` is 0; ``None`` takes ESS's per-mode
+            default. The tuning knob of radius mode.
         placement_weight (float | None): Attraction weight for ESS's placement
             step alone. None pairs it with `attraction_weight`, which is the
             sensible default; they are separable so the guided placement and
@@ -429,7 +430,7 @@ def oblesa_pool_size(
     n_pop: int,
     *,
     n_ess: int | None = None,
-    rounds: int = 3,
+    rounds: int = 1,
     opp: str = "quasi",
     opp_ess: bool = False,
 ) -> int:
@@ -476,13 +477,13 @@ def oblesa(
     seed: int | np.random.Generator | None = None,
     n_jobs: int = 1,
     n_ess: int | None = None,
-    rounds: int = 3,
+    rounds: int = 1,
     k_cand: int = 64,
     k_att: int = 8,
     att_power: float = 2.0,
     search_mode: str = "k_nn",
     radius: float = 0.0,
-    radius_target: int = 2,
+    radius_target: int | None = None,
     att_search_mode: str = "k_nn",
     att_radius: float = 0.0,
     engine: collections.abc.Callable | None = None,
@@ -580,11 +581,18 @@ def oblesa(
             probing against everything the previous rounds placed **and
             measured**. `rounds=1` is the single-pass pipeline.
 
-            The default is 3 because that is what two sweeps measured as the
-            best setting at every dimension on every optimizer that responds
-            to initialization at all -- it was the largest single effect
-            found. It costs `rounds * n_ess` evaluations, so a caller on a
-            tight budget lowers it deliberately rather than inheriting it.
+            **The default is 1, which is OBLESA as published.** Additional
+            rounds exist so a caller can take better advantage of the
+            attraction model, and that is a decision for them: each one costs
+            a further `n_ess` objective evaluations, and a default that spends
+            three times the budget is not a default, it is a policy imposed on
+            everyone who did not read this paragraph.
+
+            Two sweeps do measure 3 as the strongest setting at every
+            dimension on every optimizer that responds to initialization at
+            all -- it was the largest single effect found -- so a caller with
+            budget to spend should raise it. That is a recommendation, and it
+            reads better as one than as a number nobody chose.
 
             This is not the same purchase as a larger `n_ess`, though it costs
             the same evaluations: `n_ess=2*n_pop, rounds=1` places 2N probes
@@ -649,8 +657,9 @@ def oblesa(
             range from 1 to 64 neighbours spans 0.474 to 0.491.
             `ess.radius_for_target(dim, n)` turns a neighbour count into a
             value for this argument, which is the usable way in.
-        radius_target (int): Neighbours the auto-derived radius should
-            contain. This is how radius mode is meant to be tuned, and it is
+        radius_target (int | None): Neighbours the auto-derived radius
+            should contain; ``None`` takes ESS's per-mode default. This is
+            how radius mode is meant to be tuned, and it is
             the whole of its appeal: `k_nn` needs a `k` chosen per problem,
             where radius mode derives its own from the point density and
             only asks how *many* neighbours are wanted -- a question with a
