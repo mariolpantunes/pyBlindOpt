@@ -236,6 +236,81 @@ class TestInit(unittest.TestCase):
 
         np.testing.assert_array_equal(a, b)
 
+    # --- search mode ---
+    def test_oblesa_forwards_the_search_knobs(self):
+        """All four must reach an engine that declares them."""
+        bounds = np.asarray([[-5, 5], [-5, 5]])
+        seen = {}
+
+        def engine(samples, bounds, *, n, seed=None, **kw):
+            seen.update(kw)
+            return np.zeros((n, bounds.shape[0]))
+
+        engine.accepts = frozenset(  # type: ignore[reportFunctionMemberAccess]
+            {"search_mode", "radius", "att_search_mode", "att_radius"})
+        init.oblesa(functions.sphere, bounds, n_pop=5, seed=1, engine=engine,
+                    search_mode="radius", radius=0.4,
+                    att_search_mode="radius", att_radius=0.3, rounds=1)
+
+        self.assertEqual(seen, {"search_mode": "radius", "radius": 0.4,
+                                "att_search_mode": "radius",
+                                "att_radius": 0.3})
+
+    def test_an_engine_that_declares_nothing_receives_nothing(self):
+        """The capability protocol, on the arm that most needs it: an engine
+        with no notion of a search mode must not be handed one."""
+        bounds = np.asarray([[-5, 5], [-5, 5]])
+        seen = {}
+
+        def engine(samples, bounds, *, n, seed=None, **kw):
+            seen.update(kw)
+            return np.zeros((n, bounds.shape[0]))
+
+        engine.accepts = frozenset()  # type: ignore[reportFunctionMemberAccess]
+        init.oblesa(functions.sphere, bounds, n_pop=5, seed=1, engine=engine,
+                    search_mode="radius", att_search_mode="radius", rounds=1)
+
+        self.assertEqual(seen, {})
+
+    def test_each_search_mode_changes_the_population(self):
+        """The 2x2 the sweep measures, asserted to be four arms rather than
+        one: repulsion and attraction must move the result independently, or
+        there is nothing to compare."""
+        bounds = np.asarray([[-5.0, 5.0]] * 6)
+
+        def run(**kw):
+            return init.oblesa(functions.sphere, bounds, n_pop=12, seed=3,
+                               force_weight=2.0, rounds=1, **kw)
+
+        base = run()
+        for kw in ({"search_mode": "radius"},
+                   {"att_search_mode": "radius"},
+                   {"search_mode": "radius", "att_search_mode": "radius"}):
+            with self.subTest(**kw):
+                self.assertFalse(np.array_equal(base, run(**kw)),
+                                 f"{kw} did not reach ESS")
+
+    def test_zero_radius_is_the_default_radius(self):
+        """Zero means 'derive it', so passing it explicitly must be inert --
+        that is what lets the auto case survive a config file or a CLI flag
+        that cannot carry None."""
+        bounds = np.asarray([[-5.0, 5.0]] * 6)
+        implicit = init.oblesa(functions.sphere, bounds, n_pop=12, seed=3,
+                               force_weight=2.0, rounds=1,
+                               search_mode="radius")
+        explicit = init.oblesa(functions.sphere, bounds, n_pop=12, seed=3,
+                               force_weight=2.0, rounds=1,
+                               search_mode="radius", radius=0.0)
+        np.testing.assert_array_equal(implicit, explicit)
+
+    def test_an_out_of_range_radius_is_refused(self):
+        """The (0, 1] contract is checked where the geometry is known, and
+        the error has to survive the trip back out through the engine."""
+        bounds = np.asarray([[-5.0, 5.0]] * 4)
+        with self.assertRaises(ValueError):
+            init.oblesa(functions.sphere, bounds, n_pop=8, seed=1, rounds=1,
+                        search_mode="radius", radius=1.7)
+
     # --- null engine ---
     def test_uniform_engine_shape_bounds_and_determinism(self):
         bounds = np.asarray([[-3.0, 5.0], [-5.0, 3.0], [0.0, 1.0]])

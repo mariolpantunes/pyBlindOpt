@@ -273,6 +273,10 @@ def _ess_engine(
     placement_weight: float | None = None,
     k_att: int = 8,
     att_power: float = 2.0,
+    search_mode: str = "k_nn",
+    radius: float = 0.0,
+    att_search_mode: str = "k_nn",
+    att_radius: float = 0.0,
     k_cand: int = 64,
     **ignored,
 ) -> np.ndarray:
@@ -316,6 +320,20 @@ def _ess_engine(
             and `att_power` its inverse-distance exponent. Together they are
             the whole of the estimator: `att_model` is pinned to `'idw'`
             below, so these are the only knobs it has.
+        search_mode (str): ``'k_nn'`` or ``'radius'`` for the repulsion, and
+            `att_search_mode` the same for the attractiveness estimate. They
+            are separate because they are separate uses of the index.
+        radius (float): Normalized interaction radius in ``(0, 1]`` for
+            ``search_mode='radius'``, and `att_radius` the same for the
+            attraction. ``0`` means derive it.
+
+            The scale is a fraction of the torus diameter, and that is the
+            only scale OBLESA can speak in: it hands ESS a set of points and
+            deliberately knows nothing about the geometry they are placed
+            under, so an absolute cutoff is not a number it could form. Pass
+            `ess.radius_for_target(dim, n_points)` to specify one by
+            neighbour count instead -- the useful band is narrow and moves
+            with dimension.
         placement_weight (float | None): Attraction weight for ESS's placement
             step alone. None pairs it with `attraction_weight`, which is the
             sensible default; they are separable so the guided placement and
@@ -346,12 +364,18 @@ def _ess_engine(
             "att_power": att_power,
             "attraction_metric": "cauchy",
             "attraction_kwargs": {"power": 1.0},
+            # Only meaningful alongside an attractiveness field, so they sit
+            # inside the same guard that builds one.
+            "att_search_mode": att_search_mode,
+            "att_radius": att_radius,
         }
-    return ess.esa(samples, bounds, n=n, seed=seed, init_pool=k_cand, **kw)
+    return ess.esa(samples, bounds, n=n, seed=seed, init_pool=k_cand,
+                   search_mode=search_mode, radius=radius, **kw)
 
 
 _ess_engine.accepts = frozenset(  # type: ignore[reportFunctionMemberAccess]
-    {"scores", "k_cand", "attraction_weight", "k_att", "att_power"})
+    {"scores", "k_cand", "attraction_weight", "k_att", "att_power",
+     "search_mode", "radius", "att_search_mode", "att_radius"})
 
 
 def uniform_engine(
@@ -451,6 +475,10 @@ def oblesa(
     k_cand: int = 64,
     k_att: int = 8,
     att_power: float = 2.0,
+    search_mode: str = "k_nn",
+    radius: float = 0.0,
+    att_search_mode: str = "k_nn",
+    att_radius: float = 0.0,
     engine: collections.abc.Callable | None = None,
     diversity_weight: float = 0.25,
 ) -> np.ndarray:
@@ -585,6 +613,27 @@ def oblesa(
             is averaged over, and `att_power` the inverse-distance exponent
             weighting them. Forwarded to the engine when it declares them in
             its `accepts`; ignored by engines that do not.
+        search_mode (str): How the ESS relaxation finds neighbours --
+            ``'k_nn'`` fixes the neighbour *count*, ``'radius'`` fixes the
+            *volume*. `att_search_mode` is the same choice for the
+            attractiveness estimate, and is separate on purpose: they are two
+            different uses of the index and nothing requires a run to make
+            the same choice twice.
+        radius (float): Normalized interaction radius in ``(0, 1]`` when
+            `search_mode` is ``'radius'``, and `att_radius` the same for
+            `att_search_mode`. ``0`` derives one.
+
+            Normalized because it is the only scale OBLESA can speak in.
+            OBLESA is a pipeline over points ESS produced; it does not know
+            the geometry they were placed under -- ESS relaxes on a toroidal
+            unit torus, but that is ESS's business and OBLESA holds the
+            result, not the mechanism. A fraction of the diameter crosses
+            that boundary; an absolute L1 cutoff is not a number this
+            function could form. The cost is that the useful band is narrow
+            and moves with dimension, so `ess.radius_for_target(dim, n)`
+            exists to turn a neighbour count into a value for this argument.
+
+            Forwarded only to engines that declare these in their `accepts`.
 
             **These are the estimator, now that there is only one.** The model
             was a parameter until a 468-arm factorial settled it, and the
@@ -718,10 +767,15 @@ def oblesa(
         eng_kw["attraction_weight"] = force_weight
     elif "lam" in accepts:
         eng_kw["lam"] = force_weight
-    if "k_att" in accepts:
-        eng_kw["k_att"] = k_att
-    if "att_power" in accepts:
-        eng_kw["att_power"] = att_power
+    # The rest pass through under their own names, so they are a table
+    # rather than a line each -- the two above are here as `if`s because
+    # they are the ones that get *renamed* on the way.
+    for name, value in (("k_att", k_att), ("att_power", att_power),
+                        ("search_mode", search_mode), ("radius", radius),
+                        ("att_search_mode", att_search_mode),
+                        ("att_radius", att_radius)):
+        if name in accepts:
+            eng_kw[name] = value
 
     # The pool *is* the anchor set: every round probes against everything
     # placed so far and hands back points that join it. At `rounds=1` this
