@@ -137,7 +137,17 @@ def reached(curve, vtr):
 
 
 def _slot(fn, seed):
-    return _FN_IX[fn] * SEEDS + seed
+    """Row index of one landscape in a `(functions x seeds)` cache array.
+
+    The seed is reduced into its block. Stage A runs seeds 0-49 and Stage B
+    runs 50-99 on the arms Stage A selected, so a raw `seed` overflows the
+    array for the second one -- `rot_styblinski` at seed 99 asks for row 749
+    of 700, and the seeds that do fit collide with another function's. Both
+    stages are `SEEDS` consecutive seeds starting at a multiple of `SEEDS`,
+    which is what `SEED_START` guarantees, so the modulus is exact rather
+    than a wrap that happens to work.
+    """
+    return _FN_IX[fn] * SEEDS + seed % SEEDS
 
 
 def read_rows(path):
