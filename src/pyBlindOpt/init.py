@@ -623,15 +623,26 @@ def oblesa(
             `search_mode` is ``'radius'``, and `att_radius` the same for
             `att_search_mode`. ``0`` derives one.
 
-            Normalized because it is the only scale OBLESA can speak in.
-            OBLESA is a pipeline over points ESS produced; it does not know
-            the geometry they were placed under -- ESS relaxes on a toroidal
-            unit torus, but that is ESS's business and OBLESA holds the
-            result, not the mechanism. A fraction of the diameter crosses
-            that boundary; an absolute L1 cutoff is not a number this
-            function could form. The cost is that the useful band is narrow
-            and moves with dimension, so `ess.radius_for_target(dim, n)`
-            exists to turn a neighbour count into a value for this argument.
+            Normalized rather than given in the units `bounds` is in,
+            because for this metric there is no such number. ESS min-maxes
+            each axis onto [0, 1] *independently* and its distance is an L1
+            sum over all of them, so the radius is a sum of `dim`
+            dimensionless per-axis fractions -- a length in the caller's
+            units only if every axis shares a unit and a width, which
+            `bounds` need not. It is also the only scale that crosses the
+            boundary cleanly: OBLESA holds points ESS produced and not the
+            geometry it produced them under.
+
+            Per axis it reads directly: ``radius / 2`` is the mean fraction
+            of each axis's own range the ball reaches. On bounds of
+            [-5, 5], ``radius=0.2`` reaches 1.0 in the caller's units on a
+            typical axis.
+
+            Do not set it by hand in high dimension. The value holding a
+            fixed neighbour count converges on 1/2, so at dim=1000 the whole
+            range from 1 to 64 neighbours spans 0.474 to 0.491.
+            `ess.radius_for_target(dim, n)` turns a neighbour count into a
+            value for this argument, which is the usable way in.
 
             Forwarded only to engines that declare these in their `accepts`.
 
