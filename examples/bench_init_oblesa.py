@@ -976,6 +976,42 @@ for _rl, _r in F8_R.items():
 
 F10_ARMS = [a for a in OBLESA_KNOBS if a.startswith("f10_")]
 
+#: **The search mode, as a 2x2.** Everything measured so far ran ESS in
+#: k-NN mode, which fixes the neighbour *count*. Radius mode fixes the
+#: *volume* instead, and the two differ in exactly the place high dimension
+#: hurts: a point in a void reaches far out for its `k` and is dragged by
+#: distant, weakly-related neighbours, where a radius simply finds fewer.
+#: Whether that helps is the question; it is not obvious in either
+#: direction, because "finds fewer" is also "has less to work with".
+#:
+#: Attraction and repulsion get their own axis because they are separate
+#: uses of the index and nothing requires a run to make the same choice
+#: twice. Collapsing them to one switch would confound "radius suits the
+#: force field" with "radius suits the estimator", which are different
+#: claims about different parts of the pipeline.
+#:
+#: The two base points are `F9_BASE`, unchanged and for the same reason: a
+#: mode swept where no optimizer sits would measure a configuration nobody
+#: runs. `rounds=1` throughout -- the default, and the corner with the least
+#: to work with.
+#:
+#: Radius is left on auto. It is derived to hold `NEIGHBOUR_TARGET`
+#: neighbours, which is what makes this a comparison of *what is held fixed*
+#: rather than of two differently-sized neighbourhoods. Sweeping the radius
+#: itself is a second factorial and only worth running once this one says
+#: the mode matters at all.
+F11_MODE = {"kk": ("k_nn", "k_nn"), "kr": ("k_nn", "radius"),
+            "rk": ("radius", "k_nn"), "rr": ("radius", "radius")}
+
+for _bl, _base in F9_BASE.items():
+    for _ml, (_rep, _att) in F11_MODE.items():
+        OBLESA_KNOBS[f"f11_{_bl}_{_ml}"] = {
+            "selection": "best", "rounds": 1, "diversity_weight": 0.0,
+            "opp_ess": False, "_n_ess_mult": 1.0,
+            "search_mode": _rep, "att_search_mode": _att, **_base}
+
+F11_ARMS = [a for a in OBLESA_KNOBS if a.startswith("f11_")]
+
 #: `random4x`/`obl2x` are the budget-matched controls the whole claim rests
 #: on: is any of this beating "sample more and keep the best"? `qobl` and
 #: `obl` separate quasi- from exact opposition without any empty-space stage
