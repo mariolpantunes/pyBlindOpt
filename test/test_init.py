@@ -7,6 +7,7 @@ __status__ = "Development"
 
 import unittest
 import unittest.mock
+from typing import Any
 
 import numpy as np
 
@@ -165,13 +166,204 @@ class TestInit(unittest.TestCase):
             {"k_cand", "lam", "scores"})
         pop = init.oblesa(
             functions.sphere, bounds, n_pop=5, seed=1, engine=engine,
-            k_cand=77, force_weight=3.5,
+            k_cand=77, force_weight=3.5, rounds=1,
         )
 
         self.assertEqual(pop.shape, (5, 2))
         self.assertEqual(seen["k_cand"], 77)
         self.assertEqual(seen["lam"], 3.5)
         self.assertEqual(len(seen["scores"]), 10)
+
+    def test_oblesa_forwards_idw_knobs(self):
+        """`k_att` and `att_power` must reach an engine that declares them."""
+        bounds = np.asarray([[-5, 5], [-5, 5]])
+        seen = {}
+
+        def engine(samples, bounds, *, n, seed=None, **kw):
+            seen.update(kw)
+            return np.zeros((n, bounds.shape[0]))
+
+        engine.accepts = frozenset(  # type: ignore[reportFunctionMemberAccess]
+            {"k_att", "att_power"})
+        init.oblesa(functions.sphere, bounds, n_pop=5, seed=1, engine=engine,
+                    k_att=17, att_power=3.5, rounds=1)
+
+        self.assertEqual(seen, {"k_att": 17, "att_power": 3.5})
+
+    def test_idw_knobs_change_the_population(self):
+        """A knob that never changes an output is a knob nobody can use.
+
+        The estimator is the whole of the attraction model now that the model
+        itself is pinned, so if neither of these moves the result they are
+        being swallowed somewhere between here and `ess.esa`.
+        """
+        bounds = np.asarray([[-5.0, 5.0]] * 4)
+        base = init.oblesa(functions.sphere, bounds, n_pop=12, seed=3,
+                           force_weight=2.0, rounds=1)
+        wide = init.oblesa(functions.sphere, bounds, n_pop=12, seed=3,
+                           force_weight=2.0, rounds=1, k_att=2)
+        steep = init.oblesa(functions.sphere, bounds, n_pop=12, seed=3,
+                            force_weight=2.0, rounds=1, att_power=6.0)
+
+        self.assertFalse(np.array_equal(base, wide),
+                         "k_att did not reach the estimator")
+        self.assertFalse(np.array_equal(base, steep),
+                         "att_power did not reach the estimator")
+
+    def test_idw_knob_defaults_are_ess_defaults(self):
+        """Passing the defaults explicitly must change nothing at all."""
+        bounds = np.asarray([[-5.0, 5.0]] * 4)
+        implicit = init.oblesa(functions.sphere, bounds, n_pop=12, seed=3,
+                               force_weight=2.0, rounds=1)
+        explicit = init.oblesa(functions.sphere, bounds, n_pop=12, seed=3,
+                               force_weight=2.0, rounds=1,
+                               k_att=8, att_power=2.0)
+
+        np.testing.assert_array_equal(implicit, explicit)
+
+    def test_idw_knobs_are_inert_without_attraction(self):
+        """With the field off there is nothing to estimate, so nothing moves.
+
+        `force_weight=0` is pure novelty: the attractiveness estimate is never
+        consulted, so both knobs must be dead there. If one of them still
+        bites, it is reaching something other than the attraction field.
+        """
+        bounds = np.asarray([[-5.0, 5.0]] * 4)
+        a = init.oblesa(functions.sphere, bounds, n_pop=12, seed=5,
+                        force_weight=0.0, rounds=1)
+        b = init.oblesa(functions.sphere, bounds, n_pop=12, seed=5,
+                        force_weight=0.0, rounds=1, k_att=2, att_power=6.0)
+
+        np.testing.assert_array_equal(a, b)
+
+    # --- search mode ---
+    def test_oblesa_forwards_the_search_knobs(self):
+        """All four must reach an engine that declares them."""
+        bounds = np.asarray([[-5, 5], [-5, 5]])
+        seen = {}
+
+        def engine(samples, bounds, *, n, seed=None, **kw):
+            seen.update(kw)
+            return np.zeros((n, bounds.shape[0]))
+
+        engine.accepts = frozenset(  # type: ignore[reportFunctionMemberAccess]
+            {"search_mode", "radius", "att_search_mode", "att_radius"})
+        init.oblesa(functions.sphere, bounds, n_pop=5, seed=1, engine=engine,
+                    search_mode="radius", radius=0.4,
+                    att_search_mode="radius", att_radius=0.3, rounds=1)
+
+        self.assertEqual(seen, {"search_mode": "radius", "radius": 0.4,
+                                "att_search_mode": "radius",
+                                "att_radius": 0.3})
+
+    def test_an_engine_that_declares_nothing_receives_nothing(self):
+        """The capability protocol, on the arm that most needs it: an engine
+        with no notion of a search mode must not be handed one."""
+        bounds = np.asarray([[-5, 5], [-5, 5]])
+        seen = {}
+
+        def engine(samples, bounds, *, n, seed=None, **kw):
+            seen.update(kw)
+            return np.zeros((n, bounds.shape[0]))
+
+        engine.accepts = frozenset()  # type: ignore[reportFunctionMemberAccess]
+        init.oblesa(functions.sphere, bounds, n_pop=5, seed=1, engine=engine,
+                    search_mode="radius", att_search_mode="radius", rounds=1)
+
+        self.assertEqual(seen, {})
+
+    def test_each_search_mode_changes_the_population(self):
+        """The 2x2 the sweep measures, asserted to be four arms rather than
+        one: repulsion and attraction must move the result independently, or
+        there is nothing to compare."""
+        bounds = np.asarray([[-5.0, 5.0]] * 6)
+
+        def run(**kw):
+            return init.oblesa(functions.sphere, bounds, n_pop=12, seed=3,
+                               force_weight=2.0, rounds=1, **kw)
+
+        base = run()
+        for kw in ({"search_mode": "radius"},
+                   {"att_search_mode": "radius"},
+                   {"search_mode": "radius", "att_search_mode": "radius"}):
+            with self.subTest(**kw):
+                self.assertFalse(np.array_equal(base, run(**kw)),
+                                 f"{kw} did not reach ESS")
+
+    def test_zero_radius_is_the_default_radius(self):
+        """Zero means 'derive it', so passing it explicitly must be inert --
+        that is what lets the auto case survive a config file or a CLI flag
+        that cannot carry None."""
+        bounds = np.asarray([[-5.0, 5.0]] * 6)
+        implicit = init.oblesa(functions.sphere, bounds, n_pop=12, seed=3,
+                               force_weight=2.0, rounds=1,
+                               search_mode="radius")
+        explicit = init.oblesa(functions.sphere, bounds, n_pop=12, seed=3,
+                               force_weight=2.0, rounds=1,
+                               search_mode="radius", radius=0.0)
+        np.testing.assert_array_equal(implicit, explicit)
+
+    def test_an_out_of_range_radius_is_refused(self):
+        """The (0, 1] contract is checked where the geometry is known, and
+        the error has to survive the trip back out through the engine."""
+        bounds = np.asarray([[-5.0, 5.0]] * 4)
+        with self.assertRaises(ValueError):
+            init.oblesa(functions.sphere, bounds, n_pop=8, seed=1, rounds=1,
+                        search_mode="radius", radius=1.7)
+
+    # --- null engine ---
+    def test_uniform_engine_shape_bounds_and_determinism(self):
+        bounds = np.asarray([[-3.0, 5.0], [-5.0, 3.0], [0.0, 1.0]])
+        a = init.uniform_engine(np.zeros((4, 3)), bounds, n=25, seed=9)
+        b = init.uniform_engine(np.zeros((4, 3)), bounds, n=25, seed=9)
+
+        self.assertEqual(a.shape, (25, 3))
+        self.assertTrue(utils.assert_bounds(a, bounds))
+        np.testing.assert_array_equal(a, b)
+
+    def test_uniform_engine_declares_nothing(self):
+        """The null must stay unguided, so it may not be handed `scores`."""
+        self.assertEqual(
+            init.uniform_engine.accepts,  # type: ignore[reportFunctionMemberAccess]
+            frozenset())
+
+    def test_uniform_engine_drives_oblesa_at_identical_cost(self):
+        """Same pool, same price -- that is what makes it a null.
+
+        A null that spends less than the engine it replaces measures the
+        budget rather than the placement, which is the one thing this
+        substitution exists to avoid.
+        """
+        bounds = np.asarray([[-5.0, 5.0]] * 3)
+        # Points, not calls: the objective is handed one `n_pop` group at a
+        # time so a live-training objective sees whole batches, so counting
+        # invocations would count groups.
+        batches = []
+
+        def counting(x):
+            x = np.atleast_2d(x)
+            batches.append(x.shape[0])
+            return np.asarray([functions.sphere(row) for row in x])
+
+        pop = init.oblesa(counting, bounds, n_pop=8, seed=2, rounds=2,
+                          engine=init.uniform_engine)
+
+        self.assertEqual(pop.shape, (8, 3))
+        self.assertTrue(utils.assert_bounds(pop, bounds))
+        self.assertEqual(sorted(set(batches)), [8],
+                         f"batches were {batches}, expected every group == 8")
+        self.assertEqual(sum(batches), init.oblesa_pool_size(8, rounds=2))
+
+    def test_uniform_engine_differs_from_ess(self):
+        """The substitution has to actually substitute something."""
+        bounds = np.asarray([[-5.0, 5.0]] * 3)
+        real = init.oblesa(functions.sphere, bounds, n_pop=8, seed=2,
+                           rounds=1, force_weight=2.0)
+        null = init.oblesa(functions.sphere, bounds, n_pop=8, seed=2,
+                           rounds=1, force_weight=2.0,
+                           engine=init.uniform_engine)
+
+        self.assertFalse(np.array_equal(real, null))
 
     def test_oblesa_engine_without_accepts_gets_nothing_extra(self):
         """
@@ -189,7 +381,7 @@ class TestInit(unittest.TestCase):
             return np.zeros((n, bounds.shape[0]))
 
         init.oblesa(functions.sphere, bounds, n_pop=5, seed=1, engine=engine,
-                    k_cand=77, force_weight=3.5)
+                    k_cand=77, force_weight=3.5, rounds=1)
 
         self.assertEqual(seen, [{}])
 
@@ -322,6 +514,7 @@ class TestInit(unittest.TestCase):
             opp="standard",
             selection="best",
             seed=42,
+            rounds=1,
         )
 
         fitness = functions.sphere(result)
@@ -344,6 +537,7 @@ class TestInit(unittest.TestCase):
             opp="quasi",
             selection="best",
             seed=42,
+            rounds=1,
         )
 
         fitness = functions.sphere(result)
@@ -536,18 +730,49 @@ class TestOblesaSelectionPlumbing(unittest.TestCase):
         default, 4N with `opp_ess=True`, and N with no opposition at all.
         """
         cases = {
-            (): 30,                                   # default: the paper's 3N
-            (("opp_ess", True),): 40,                 # probes opposed too: 4N
-            (("n_ess", 0),): 20,                      # OBL: 2N
-            (("n_ess", 20),): 40,                     # oversized probe block
+            (): 50,                                   # default: 2N + 3 rounds
+            (("rounds", 1),): 30,                     # single pass: the 3N
+            (("rounds", 1), ("opp_ess", True)): 40,   # probes opposed too: 4N
+            (("n_ess", 0),): 20,                      # OBL: 2N, rounds are free
+            (("rounds", 1), ("n_ess", 20)): 40,       # oversized probe block
             (("opp", "none"), ("n_ess", 0)): 10,      # bare sample
-            (("opp", "none"),): 20,                   # sample + probes
+            (("opp", "none"), ("rounds", 1)): 20,     # sample + probes
         }
         for kw, expected in cases.items():
-            info = {}
-            init.oblesa(functions.sphere, self.bounds, n_pop=10, seed=1,
-                        info=info, **dict(kw))
-            self.assertEqual(info["pool_size"], expected, f"knobs={dict(kw)}")
+            d = dict(kw)
+            self.assertEqual(
+                init.oblesa_pool_size(
+                    10, **{k: v for k, v in d.items()
+                           if k in ("n_ess", "rounds", "opp", "opp_ess")}),
+                expected, f"knobs={d}")
+            # The prediction is only worth having if it matches a real run.
+            # Every point in the pool is evaluated exactly once, so the
+            # objective's own call count is the pool size.
+            seen = []
+
+            def counted(x, _seen=seen):
+                x = np.asarray(x)
+                _seen.append(x.shape[0] if x.ndim == 2 else 1)
+                return functions.sphere(x)
+
+            init.oblesa(counted, self.bounds, n_pop=10, seed=1, **d)
+            self.assertEqual(sum(seen), expected, f"knobs={d}")
+
+    def test_pool_size_defaults_track_oblesa(self):
+        """The predictor is only useful if calling both bare describes one run.
+
+        Two functions carrying the same defaults will drift the moment one is
+        tuned -- `rounds` already did, within a single commit.
+        """
+        import inspect
+        a = inspect.signature(init.oblesa).parameters
+        b = inspect.signature(init.oblesa_pool_size).parameters
+        shared = set(a) & set(b) - {"n_pop"}
+        self.assertTrue(shared, "expected shared knobs to compare")
+        for name in sorted(shared):
+            with self.subTest(param=name):
+                self.assertEqual(a[name].default, b[name].default,
+                                 f"{name} default differs between the two")
 
     def test_engine_is_pluggable(self):
         """A custom engine must be used verbatim, with no ESS involvement."""
@@ -559,7 +784,8 @@ class TestOblesaSelectionPlumbing(unittest.TestCase):
             return marker[:n]
 
         pop = init.oblesa(
-            functions.sphere, self.bounds, n_pop=10, seed=1, engine=engine)
+            functions.sphere, self.bounds, n_pop=10, seed=1, engine=engine,
+            rounds=1)
 
         self.assertEqual(calls, [((20, 4), 10)])
         # The marker points all score identically, so whichever ten the
@@ -636,6 +862,28 @@ class TestEvaluationGroupContract(unittest.TestCase):
                 fn(rec, self._bounds(), n_pop=25, seed=0)
                 self.assertEqual(sorted(set(rec.batches)), [25])
 
+    def test_a_ragged_probe_block_is_refused_not_silently_shortened(self):
+        """The case the original test missed, and the reason it survived.
+
+        Every case above happens to divide evenly. When `n_ess` is not a whole
+        number of populations the final slice is short -- `n_pop=30, n_ess=45`
+        used to evaluate in groups of [30, 15] -- which is exactly the batch
+        break this class exists to prevent. `opp_ess` doubles the block, so it
+        masked the fault for some `n_ess` and exposed it for others; both are
+        pinned here so the flag cannot hide it again.
+        """
+        for n_ess, opp_ess in ((45, False), (15, False), (15, True), (45, True)):
+            block = n_ess * (2 if opp_ess else 1)
+            with self.subTest(n_ess=n_ess, opp_ess=opp_ess):
+                if block % 30:
+                    with self.assertRaises(ValueError) as cm:
+                        self._batches_for(n_ess=n_ess, opp_ess=opp_ess)
+                    self.assertIn("n_pop", str(cm.exception))
+                else:
+                    self.assertEqual(
+                        sorted(set(self._batches_for(
+                            n_ess=n_ess, opp_ess=opp_ess))), [30])
+
     def test_grouping_does_not_change_the_result(self):
         """A contract repair, not a numerical one: same rows, same scores."""
         def sphere(x):
@@ -649,8 +897,6 @@ class TestEvaluationGroupContract(unittest.TestCase):
         self.assertEqual(np.asarray(a).shape, (30, 6))
 
 
-if __name__ == "__main__":
-    unittest.main()
 
 
 class TestOblesaRounds(unittest.TestCase):
@@ -676,19 +922,16 @@ class TestOblesaRounds(unittest.TestCase):
     def test_each_round_adds_its_own_block_to_the_pool(self):
         for rounds in (1, 2, 4):
             for opp_ess in (False, True):
-                info = {}
-                init.oblesa(self.obj, self.bounds, n_pop=8, seed=4,
-                            rounds=rounds, opp_ess=opp_ess, info=info)
                 per_round = 8 * (2 if opp_ess else 1)
-                self.assertEqual(info["pool_size"], 2 * 8 + rounds * per_round,
-                                 f"rounds={rounds} opp_ess={opp_ess}")
+                self.assertEqual(
+                    init.oblesa_pool_size(8, rounds=rounds, opp_ess=opp_ess),
+                    2 * 8 + rounds * per_round,
+                    f"rounds={rounds} opp_ess={opp_ess}")
 
     def test_rounds_do_nothing_without_an_empty_space_stage(self):
         """`n_ess=0` removes the stage, so repeating it must stay free."""
-        info = {}
-        init.oblesa(self.obj, self.bounds, n_pop=8, seed=4, n_ess=0, rounds=5,
-                    info=info)
-        self.assertEqual(info["pool_size"], 16)
+        self.assertEqual(
+            init.oblesa_pool_size(8, n_ess=0, rounds=5), 16)
 
     def test_a_later_round_sees_the_earlier_one_as_anchors(self):
         """The point of a round: the previous block is *measured* input.
@@ -738,3 +981,53 @@ class TestOblesaRounds(unittest.TestCase):
         np.testing.assert_array_equal(
             init.oblesa(self.obj, self.bounds, **kw),
             init.oblesa(self.obj, self.bounds, **kw))
+
+
+class TestOblesaArgumentValidation(unittest.TestCase):
+    """Out-of-range arguments are refused with a message, not absorbed.
+
+    Each of these used to be accepted and produce a plausible-looking
+    population: a mixing fraction outside [0, 1], an attraction strength that
+    pulls toward the worst regions rather than the best, a negative block
+    size. A wrong knob that returns an answer is worse than one that raises,
+    because a sweep will happily run a whole arm on it.
+    """
+
+    def setUp(self):
+        self.bounds = np.array([[-5.0, 5.0]] * 6)
+
+    def obj(self, x):
+        x = np.asarray(x)
+        return (np.sum(x * x, axis=-1) if x.ndim == 2
+                else float(np.sum(x * x)))
+
+    def test_rejects_out_of_range_arguments(self):
+        cases: tuple[tuple[str, dict[str, Any]], ...] = (
+            ("diversity_weight below 0", {"diversity_weight": -1.0}),
+            ("diversity_weight above 1", {"diversity_weight": 5.0}),
+            ("negative force_weight", {"force_weight": -3.0}),
+            ("negative n_ess", {"n_ess": -5}),
+            ("k_cand below 1", {"k_cand": 0}),
+        )
+        for label, kw in cases:
+            with self.subTest(case=label), self.assertRaises(ValueError):
+                init.oblesa(self.obj, self.bounds, n_pop=10, seed=0,
+                            n_jobs=1, **kw)
+
+    def test_accepts_the_endpoints_of_the_valid_ranges(self):
+        """The guards bound the range without excluding its edges."""
+        cases: tuple[tuple[str, dict[str, Any]], ...] = (
+            ("diversity_weight=0", {"diversity_weight": 0.0}),
+            ("diversity_weight=1", {"diversity_weight": 1.0}),
+            ("force_weight=0", {"force_weight": 0.0}),
+            ("n_ess=0 disables the stage", {"n_ess": 0}),
+        )
+        for label, kw in cases:
+            with self.subTest(case=label):
+                out = init.oblesa(self.obj, self.bounds, n_pop=10, seed=0,
+                                  n_jobs=1, **kw)
+                self.assertEqual(np.asarray(out).shape, (10, 6))
+
+
+if __name__ == "__main__":
+    unittest.main()

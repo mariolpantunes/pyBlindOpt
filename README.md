@@ -302,7 +302,6 @@ population = pyBlindOpt.init.oblesa(
     objective, bounds,
     n_pop=30,
     opp="quasi",             # stochastic opposition, between centre and reflection
-    force="guided",          # empty-space probes attracted toward good regions
     force_weight=0.5,        # attraction strength, in the backend's units
     selection="best",        # greedy over fitness blended with crowding
     diversity_weight=0.25,

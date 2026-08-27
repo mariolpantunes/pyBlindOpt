@@ -99,9 +99,6 @@ class TestLandscapeIsReproducible(unittest.TestCase):
             "two attraction models share a suffix, so their arms collide")
 
 
-if __name__ == "__main__":
-    unittest.main()
-
 
 class TestLandscapeCoverage(unittest.TestCase):
     """The benchmark set has to *vary* the properties it claims to test.
@@ -243,3 +240,107 @@ class TestLandscapeCoverage(unittest.TestCase):
                     np.testing.assert_allclose(
                         out, rows, rtol=1e-9, atol=1e-9,
                         err_msg=f"{name} d={d} n={n}: batched != row-wise")
+
+
+class TestSweepBudgetAccounting(unittest.TestCase):
+    """Sweep v8 splits a fixed evaluation budget; the split has to be right.
+
+    Once `n_pop` varies with dimension, "200 iterations" stops being a budget:
+    it is 6k evaluations at n_pop=30 and 40k at n_pop=200, so a population
+    rule that raises `n_pop` would be handed proportionally more objective
+    calls and win on that alone. Iterations are derived from a fixed budget
+    instead, with initialization charged against it -- which only works if the
+    predicted initialization cost is the real one.
+    """
+
+    def setUp(self):
+        sys.path.insert(0, os.path.join(ROOT, "examples"))
+        sys.path.insert(0, os.path.join(ROOT, "src"))
+        import bench_init_oblesa  # type: ignore[reportMissingImports]
+        self.B = bench_init_oblesa
+
+    def test_predicted_init_cost_is_what_an_arm_actually_spends(self):
+        """A prediction nobody checks is how the pool-size default drifted."""
+        import numpy as np
+        bounds = np.array([[-5.0, 5.0]] * 6)
+
+        for arm in ("random", "lhs", "qobl", "obl2x", "random4x",
+                    "f8_w050_midw_r3_s25_oq_e0", "f8_w200_midw_r1_s00_os_e1",
+                    "f8_w000_midw_r2_s50_oq_e0"):
+            for n_pop in (10, 30):
+                with self.subTest(arm=arm, n_pop=n_pop):
+                    seen = []
+
+                    def counted(x, _seen=seen):
+                        x = np.asarray(x)
+                        _seen.append(x.shape[0] if x.ndim == 2 else 1)
+                        return np.sum(x * x, axis=-1)
+
+                    self.B.initial_population(
+                        arm, counted, bounds, n_pop,
+                        np.random.default_rng(0))
+                    self.assertEqual(
+                        sum(seen), self.B.init_cost(arm, n_pop),
+                        f"{arm} at n_pop={n_pop} spent {sum(seen)}, "
+                        f"init_cost predicted {self.B.init_cost(arm, n_pop)}")
+
+    def test_every_arm_evaluates_in_whole_populations(self):
+        """`n_pop` is the objective's contract, for every arm in the sweep."""
+        import numpy as np
+        bounds = np.array([[-5.0, 5.0]] * 6)
+        # `random`/`lhs`/`sobol` are excluded deliberately: they evaluate
+        # nothing at all, so they have no groups to check.
+        for arm in ("qobl", "obl2x", "random4x",
+                    "f8_w050_midw_r3_s25_oq_e0", "f8_w200_midw_r2_s50_os_e1"):
+            with self.subTest(arm=arm):
+                seen = []
+
+                def counted(x, _seen=seen):
+                    x = np.asarray(x)
+                    _seen.append(x.shape[0] if x.ndim == 2 else 1)
+                    return np.sum(x * x, axis=-1)
+
+                self.B.initial_population(arm, counted, bounds, 15,
+                                          np.random.default_rng(0))
+                self.assertEqual(sorted(set(seen)), [15],
+                                 f"{arm} evaluated in groups {sorted(set(seen))}")
+
+    def test_the_budget_covers_initialization_at_every_rule_and_dimension(self):
+        """A rule that cannot be afforded must fail loudly, not silently run."""
+        import types
+        args = types.SimpleNamespace(budget_per_dim=500, iters=200,
+                                     n_pop=[30], n_pop_rule=None)
+        for rule in sorted(self.B.N_POP_RULES):
+            args.n_pop_rule = rule
+            for d in (8, 16, 32, 64, 100):
+                n_pop = self.B.population_for(args, d)[0]
+                with self.subTest(rule=rule, d=d):
+                    self.assertGreaterEqual(n_pop, 1)
+                    n_iter = self.B.iters_for(args, "f8_w050_midw_r3_s25_oq_e0",
+                                              d, n_pop)
+                    spent = (self.B.init_cost("f8_w050_midw_r3_s25_oq_e0", n_pop)
+                             + n_iter * n_pop)
+                    self.assertLessEqual(spent, 500 * d)
+                    # and it should not be leaving a whole generation unspent
+                    self.assertGreater(spent + n_pop, 500 * d)
+
+    def test_an_unaffordable_budget_raises(self):
+        import types
+        args = types.SimpleNamespace(budget_per_dim=1, iters=200,
+                                     n_pop=[30], n_pop_rule=None)
+        with self.assertRaises(ValueError) as cm:
+            self.B.iters_for(args, "f8_w050_midw_r3_s25_oq_e0", 8, 30)
+        self.assertIn("budget", str(cm.exception))
+
+    def test_population_rules_grow_with_dimension_except_the_control(self):
+        for rule, grows in (("fixed30", False), ("log", True),
+                            ("root", True), ("linear", True)):
+            with self.subTest(rule=rule):
+                f = self.B.N_POP_RULES[rule]
+                sizes = [f(d) for d in (8, 16, 32, 64, 100)]
+                self.assertEqual(sizes, sorted(sizes))
+                self.assertEqual(sizes[-1] > sizes[0], grows)
+
+
+if __name__ == "__main__":
+    unittest.main()

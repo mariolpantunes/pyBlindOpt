@@ -61,8 +61,8 @@ population, and each is scored only against its own random baseline.
 from __future__ import annotations
 
 import argparse
-import functools
 import json
+import math
 import os
 import time
 import zlib
@@ -440,20 +440,22 @@ def baseline_for(arm):
 SHIFT = [True]        # cleared by --no-shift; module-level so one_run sees it
 SHIFT_FRAC = [0.8]
 
-def _uniform_null(samples, bounds, *, n, seed=None, **ignored):
-    """The no-search null: `n` uniform points, same pool shape, nothing sought.
-
-    This is the control the whole design rests on. OBLESA against OBL confounds
-    two things -- a larger candidate pool, and a pool with points chosen by
-    searching empty space -- and only an arm that spends the same candidates
-    without searching separates them.
-
-    Four lines here rather than a call into ESS: the null must not move when
-    ESS changes, or it stops being a fixed reference.
-    """
-    del samples, ignored
-    rng = seed if isinstance(seed, np.random.Generator) else np.random.default_rng(seed)
-    return rng.uniform(bounds[:, 0], bounds[:, 1], size=(int(n), bounds.shape[0]))
+#: The no-search null: `n` uniform points, same pool shape, nothing sought.
+#:
+#: This is the control the whole design rests on. OBLESA against OBL confounds
+#: two things -- a larger candidate pool, and a pool with points chosen by
+#: searching empty space -- and only an arm that spends the same candidates
+#: without searching separates them.
+#:
+#: It used to be four lines here rather than a call out, on the grounds that
+#: the null must not move when ESS changes or it stops being a fixed
+#: reference. That argument held while the only place to call was ESS. It now
+#: lives in `pyBlindOpt.init`, versioned with `oblesa` itself and covered by
+#: its tests, so a copy here would drift from the thing it is meant to
+#: control rather than be protected from it. Verified identical to the copy
+#: it replaces, including that a passed Generator advances rather than being
+#: reseeded.
+_uniform_null = init.uniform_engine
 
 
 
@@ -477,11 +479,11 @@ def _uniform_null(samples, bounds, *, n, seed=None, **ignored):
 #: into this one.
 _ENGINE_LEVELS = {
     "null": {"engine": _uniform_null},
-    "a000": {"force": "guided", "force_weight": 0.00},     # ESS, novelty only
-    "a025": {"force": "guided", "force_weight": 0.25},
-    "a050": {"force": "guided", "force_weight": 0.50},     # ESS's own default
-    "a100": {"force": "guided", "force_weight": 1.00},
-    "a200": {"force": "guided", "force_weight": 2.00},     # just under refusal
+    "a000": {"force_weight": 0.00},     # ESS, novelty only
+    "a025": {"force_weight": 0.25},
+    "a050": {"force_weight": 0.50},     # ESS's own default
+    "a100": {"force_weight": 1.00},
+    "a200": {"force_weight": 2.00},     # just under refusal
 }
 
 #: How ESS estimates attractiveness where it has no measurement. Crossed with
@@ -594,7 +596,7 @@ _MODEL_SUFFIX = {"fourier": "f", "idw": "i", "detrended": "d",
 
 OBLESA_KNOBS = {}
 for _elab, _eng in _ENGINE_LEVELS.items():
-    _guided = _eng.get("force") == "guided" and _eng.get("force_weight", 0) > 0
+    _guided = _eng.get("force_weight", 0) > 0
     _variants = ([(_elab + _MODEL_SUFFIX[m], m) for m in _ATT_MODELS]
                  if _guided else [(_elab, None)])
     for _label, _model in _variants:
@@ -624,8 +626,8 @@ for _elab, _eng in _ENGINE_LEVELS.items():
 #: 2bc9590. Crossing it against `_n_ess_mult` separates "more candidates" from
 #: "opposed candidates", which a single 4N arm cannot.
 _FOCUS_BASE = {
-    "a050x": {"force": "guided", "force_weight": 0.50, "_att_model": "auto"},
-    "a200i": {"force": "guided", "force_weight": 2.00, "_att_model": "idw"},
+    "a050x": {"force_weight": 0.50, "_att_model": "auto"},
+    "a200i": {"force_weight": 2.00, "_att_model": "idw"},
 }
 for _flab, _fkw in _FOCUS_BASE.items():
     for _mult, _mlab in ((1.0, ""), (2.0, "n2")):
@@ -770,8 +772,18 @@ def population_dispersion(pop, bounds):
 
 
 def _best_of(pool, objective, n_pop):
-    """Greedy best `n_pop` of an evaluated pool — OBL's own selection rule."""
-    scores = utils.compute_objective(pool, objective, 1)
+    """Greedy best `n_pop` of an evaluated pool -- OBL's own selection rule.
+
+    Evaluated one `n_pop` group at a time, matching `init.oblesa`. These are
+    the cost controls the whole comparison rests on, so they have to be
+    comparable in *shape* as well as in total evaluations: they used to hand
+    the objective their entire 4N pool in a single call, which is a different
+    contract from the one every OBLESA arm honours and would break a caller
+    whose objective is sized for a generation.
+    """
+    scores = np.concatenate([
+        utils.compute_objective(pool[i:i + n_pop], objective, 1)
+        for i in range(0, pool.shape[0], n_pop)])
     return pool[np.argpartition(scores, n_pop)[:n_pop]]
 
 
@@ -794,15 +806,15 @@ def initial_population(arm, objective, bounds, n_pop, rng, stats=None, info=None
         return utils.HLCSampler(rng).sample(n_pop, bounds)
     if arm == "sobol":
         return utils.SobolSampler(rng).sample(n_pop, bounds)
-    if arm in ("random3x", "random4x"):
-        mult = 3 if arm == "random3x" else 4
-        return _best_of(utils.RandomSampler(rng).sample(mult * n_pop, bounds),
-                        objective, n_pop)
-    if arm in ("obl15x", "obl2x"):
-        # 1.5N or 2N random points plus their opposites: 3N or 4N candidates,
-        # matching OBLESA's pool size without any empty-space stage.
-        half = (3 * n_pop) // 2 if arm == "obl15x" else 2 * n_pop
-        base = utils.RandomSampler(rng).sample(half, bounds)
+    if arm in RANDOM_KX:
+        return _best_of(
+            utils.RandomSampler(rng).sample(RANDOM_KX[arm] * n_pop, bounds),
+            objective, n_pop)
+    if arm in OBL_KX:
+        # Half the pool drawn at random, half its opposites, so the total
+        # matches an OBLESA pool of the same size with no empty-space stage.
+        num, den = OBL_KX[arm]
+        base = utils.RandomSampler(rng).sample((num * n_pop) // den, bounds)
         opp = utils.check_bounds(lo + hi - base, bounds)
         return _best_of(np.vstack([base, opp]), objective, n_pop)
     if arm == "obl":
@@ -822,19 +834,27 @@ def initial_population(arm, objective, bounds, n_pop, rng, stats=None, info=None
         # `_n_ess_mult` is an arm-table convention, not an `oblesa` argument.
         mult = kw.pop("_n_ess_mult", 1.0)
         kw["n_ess"] = max(1, round(mult * n_pop))
-        # `oblesa` forwards `force_weight`; `att_model` is ESS's own knob,
-        # below the engine contract, so bind it through `engine=`.
-        model = kw.pop("_att_model", None)
-        if model is not None:
-            kw["engine"] = functools.partial(
-                init._ess_engine, att_model=model)
-            kw["engine"].accepts = (  # type: ignore[reportAttributeAccessIssue]
-                init._ess_engine.accepts)  # type: ignore[reportFunctionMemberAccess]
-            kw.pop("force", None)
+        # The attraction model was an `oblesa` argument while the factorial
+        # was deciding it; the answer was `idw` and the parameter is gone, so
+        # the table's entry is now only a name in the arm string. Refuse any
+        # other value rather than dropping it: an arm called `_mdet_` that
+        # quietly ran `idw` would land in the same directory as the real
+        # `_mdet_` rows and the two would be indistinguishable.
+        model = kw.pop("_att_model", "idw")
+        if model != "idw":
+            raise ValueError(
+                f"arm {arm!r} names att_model={model!r}, which oblesa no "
+                "longer accepts; those rows are historical, re-run them "
+                "against the commit that measured them")
         if stats is not None and arm in ENGINE_LABEL:
             stats["engine"] = ENGINE_LABEL[arm]
         if info is not None:
-            kw["info"] = info
+            info["pool_size"] = init.oblesa_pool_size(
+                n_pop,
+                n_ess=kw.get("n_ess"),
+                rounds=kw.get("rounds", 1),
+                opp=kw.get("opp", "quasi"),
+                opp_ess=kw.get("opp_ess", False))
         return init.oblesa(objective, bounds, n_pop=n_pop, seed=rng, **kw)
     raise ValueError(f"unknown arm {arm!r}")
 
@@ -860,6 +880,287 @@ def objective_for(fname, d, seed):
     """
     return (shifted(fname, d, seed, SHIFT_FRAC[0]) if SHIFT[0]
             else unshifted(fname, d))
+
+
+#: **Sweep v8's configuration space.** A flat product over the four knobs
+#: that survived v7 as genuinely open questions, named so the arm string can
+#: be parsed back into its settings: `f8_w050_midw_r3_s25_oq_e0` is `force_weight=0.5, att_model='idw',
+#: rounds=3, diversity_weight=0.25, opp='quasi', opp_ess=False`.
+#:
+#: The v7 arms above are kept unchanged so the two sweeps stay comparable;
+#: this is a separate table rather than an extension of that naming, which had
+#: run out of room.
+#:
+#: `att_model` is deliberately *not* an axis here. It is a decision to be
+#: retired, not a factor to cross with everything else: Stage D varies it
+#: alone at each cell's tuned operating point, and if one model wins or ties
+#: everywhere the parameter is deleted.
+#: **The full factorial.** Six knobs crossed, because the per-optimizer
+#: pattern is the thing being looked for and a fractional design cannot show
+#: an interaction it did not vary. Concretely: whether the best attraction
+#: weight moves with the model, whether opposition interacts with the probe
+#: block, whether any of it depends on the optimizer.
+F8_W = {"w000": 0.0, "w050": 0.5, "w100": 1.0, "w200": 2.0}
+#: One entry, and the token stays in the arm name on purpose. The axis is
+#: decided -- `idw` won at every dimension and is the only estimator bounded
+#: by construction -- but 1650 task files on disk are named with this token,
+#: and dropping it would orphan every one of them from `--list-arms` and from
+#: the report's arm parser. Cheaper to keep a one-entry table than to rename
+#: a finished sweep.
+F8_M = {"midw": "idw"}
+F8_R = {"r1": 1, "r2": 2, "r3": 3}
+F8_S = {"s00": 0.0, "s25": 0.25, "s50": 0.5}
+F8_O = {"oq": "quasi", "os": "standard"}
+F8_E = {"e0": False, "e1": True}
+
+for _wl, _w in F8_W.items():
+    for _ml in F8_M:
+        for _rl, _r in F8_R.items():
+            for _sl, _s in F8_S.items():
+                for _ol, _o in F8_O.items():
+                    for _el, _e in F8_E.items():
+                        OBLESA_KNOBS[
+                            f"f8_{_wl}_{_ml}_{_rl}_{_sl}_{_ol}_{_el}"] = {
+                            "selection": "best", "force_weight": _w,
+                            "rounds": _r, "diversity_weight": _s,
+                            "opp": _o, "opp_ess": _e, "_n_ess_mult": 1.0}
+
+F8_ARMS = [a for a in OBLESA_KNOBS if a.startswith("f8_")]
+
+#: **The estimator knobs, at the two operating points the factorial settled.**
+#: With the attraction model pinned to inverse-distance weighting, `k_att` and
+#: `att_power` are the whole of it -- and neither has ever been measured,
+#: because until now they were unreachable from `oblesa`.
+#:
+#: Two bases rather than one: every optimizer but `cs` wants `force_weight=1`
+#: with standard opposition, and `cs` wants `2.0` with quasi. Sweeping the
+#: estimator at a point no optimizer occupies would measure a configuration
+#: nobody runs. `rounds=1` throughout, because that is the default and the
+#: corner where an under-resourced estimate has the least to work with.
+F9_BASE = {
+    "b1": {"force_weight": 1.0, "opp": "standard"},
+    "b2": {"force_weight": 2.0, "opp": "quasi"},
+}
+F9_K = {"k02": 2, "k04": 4, "k08": 8, "k16": 16, "k32": 32}
+F9_P = {"p1": 1.0, "p2": 2.0, "p3": 3.0}
+
+for _bl, _base in F9_BASE.items():
+    for _kl, _k in F9_K.items():
+        for _pl, _p in F9_P.items():
+            OBLESA_KNOBS[f"f9_{_bl}_{_kl}_{_pl}"] = {
+                "selection": "best", "rounds": 1, "diversity_weight": 0.0,
+                "opp_ess": False, "k_att": _k, "att_power": _p,
+                "_n_ess_mult": 1.0, **_base}
+
+F9_ARMS = [a for a in OBLESA_KNOBS if a.startswith("f9_")]
+
+#: **The null engine at matched pool size.** `random_kx` matches the number of
+#: candidates but replaces the entire pipeline, so a difference against it
+#: could come from anywhere in it -- the opposition block, the rounds
+#: structure, the selection rule. These arms keep all of that and swap only
+#: where the probe block lands, which is the one substitution that isolates
+#: the placement. Both opposition modes, because the sweep found `opp` is the
+#: only knob whose winner moves with the optimizer.
+#:
+#: `force_weight` is absent on purpose: `uniform_engine` declares no
+#: capabilities, so the dispatch hands it nothing and the draws stay unguided
+#: by fitness. A null that read `scores` would be a cheap surrogate search.
+F10_OPP = {"os": "standard", "oq": "quasi"}
+
+for _rl, _r in F8_R.items():
+    for _ol, _o in F10_OPP.items():
+        OBLESA_KNOBS[f"f10_null_{_rl}_{_ol}"] = {
+            "selection": "best", "rounds": _r, "diversity_weight": 0.0,
+            "opp": _o, "opp_ess": False, "_n_ess_mult": 1.0,
+            "engine": init.uniform_engine}
+
+F10_ARMS = [a for a in OBLESA_KNOBS if a.startswith("f10_")]
+
+#: **The search mode, as a 2x2.** Everything measured so far ran ESS in
+#: k-NN mode, which fixes the neighbour *count*. Radius mode fixes the
+#: *volume* instead, and the two differ in exactly the place high dimension
+#: hurts: a point in a void reaches far out for its `k` and is dragged by
+#: distant, weakly-related neighbours, where a radius simply finds fewer.
+#: Whether that helps is the question; it is not obvious in either
+#: direction, because "finds fewer" is also "has less to work with".
+#:
+#: Attraction and repulsion get their own axis because they are separate
+#: uses of the index and nothing requires a run to make the same choice
+#: twice. Collapsing them to one switch would confound "radius suits the
+#: force field" with "radius suits the estimator", which are different
+#: claims about different parts of the pipeline.
+#:
+#: The two base points are `F9_BASE`, unchanged and for the same reason: a
+#: mode swept where no optimizer sits would measure a configuration nobody
+#: runs. `rounds=1` throughout -- the default, and the corner with the least
+#: to work with.
+#:
+#: Radius is left on auto. It is derived to hold `NEIGHBOUR_TARGET`
+#: neighbours, which is what makes this a comparison of *what is held fixed*
+#: rather than of two differently-sized neighbourhoods. Sweeping the radius
+#: itself is a second factorial and only worth running once this one says
+#: the mode matters at all.
+F11_MODE = {"kk": ("k_nn", "k_nn"), "kr": ("k_nn", "radius"),
+            "rk": ("radius", "k_nn"), "rr": ("radius", "radius")}
+
+for _bl, _base in F9_BASE.items():
+    for _ml, (_rep, _att) in F11_MODE.items():
+        OBLESA_KNOBS[f"f11_{_bl}_{_ml}"] = {
+            "selection": "best", "rounds": 1, "diversity_weight": 0.0,
+            "opp_ess": False, "_n_ess_mult": 1.0,
+            "search_mode": _rep, "att_search_mode": _att, **_base}
+
+F11_ARMS = [a for a in OBLESA_KNOBS if a.startswith("f11_")]
+
+#: **Tuning the radius, on the only scale that has any range left.** The
+#: 2x2 above runs radius mode at its default neighbour target of 2, which is
+#: the smallest radius that costs nothing -- chosen for k-NN's sake, never
+#: measured for radius mode's.
+#:
+#: The knob is the *count*, not the radius. Past low dimension the radius
+#: itself has no room: at d=100, N=300 the whole span from 1 to 64
+#: neighbours is a 13% change in radius, and at d=1000 a 3.5% one. The
+#: neighbourhood behind it still changes 64-fold, so the leverage is real
+#: and simply cannot be reached by choosing a radius by hand. That is what
+#: `radius_target` is for and what these arms sweep.
+#:
+#: It is also the arm the case for radius mode rests on. Its advantage is
+#: that it is near-parametric: k-NN needs a `k` chosen per problem, where
+#: radius mode derives its own from the density and only asks how *many*
+#: neighbours are wanted -- a question whose answer does not move with the
+#: dimension. That is worth having only if it also performs, which is what
+#: this measures.
+#:
+#: `rr` throughout: both halves on radius is the configuration whose selling
+#: point is the absence of a `k`, and a mixed arm would keep one.
+F12_TARGET = {"t01": 1, "t02": 2, "t04": 4, "t08": 8, "t16": 16, "t32": 32}
+
+for _bl, _base in F9_BASE.items():
+    for _tl, _t in F12_TARGET.items():
+        OBLESA_KNOBS[f"f12_{_bl}_{_tl}"] = {
+            "selection": "best", "rounds": 1, "diversity_weight": 0.0,
+            "opp_ess": False, "_n_ess_mult": 1.0,
+            "search_mode": "radius", "att_search_mode": "radius",
+            "radius_target": _t, **_base}
+
+F12_ARMS = [a for a in OBLESA_KNOBS if a.startswith("f12_")]
+
+#: `random4x`/`obl2x` are the budget-matched controls the whole claim rests
+#: on: is any of this beating "sample more and keep the best"? `qobl` and
+#: `obl` separate quasi- from exact opposition without any empty-space stage
+#: at all, which is the comparison the GWO-family question turns on.
+#: Cost controls, by the pool size they match. `oblesa_pool_size` is
+#: `2N + rounds * n_ess`, and `opp_ess` doubles the per-round block, so the
+#: 468-arm factorial spends 3N, 4N, 5N, 6N or 8N depending on `rounds` and
+#: `opp_ess` -- five distinct budgets, against which only 4N had a control.
+#: Comparing a `rounds=1` arm (3N) to `random4x` charged it for a block it
+#: never drew; comparing a `rounds=3` arm (5N) to the same control handed it
+#: one for free. Neither is a fair test of whether the empty-space stage is
+#: doing anything, which is the only thing these arms exist to decide.
+RANDOM_KX = {"random3x": 3, "random4x": 4, "random5x": 5,
+             "random6x": 6, "random8x": 8}
+#: `(numerator, denominator)` of the random half; the opposites double it.
+#: `obl15x` keeps its original `(3 * n_pop) // 2` so the name still means what
+#: it meant, and `obl2x` is unchanged at exactly 2N + 2N.
+OBL_KX = {"obl15x": (3, 2), "obl2x": (2, 1), "obl25x": (5, 2),
+          "obl3x": (3, 1), "obl4x": (4, 1)}
+
+V8_BASELINES = ["random", "lhs", "sobol", "obl", "qobl", "obl2x", "random4x"]
+
+#: The controls sweep v8 was missing. Submitted separately once the pool-size
+#: mismatch was found, rather than folded into `V8_BASELINES`, so the arms
+#: already on disk keep their identity and resume for free.
+V8_COST_CONTROLS = ["random3x", "obl15x", "random5x", "obl25x",
+                    "random6x", "obl3x", "random8x", "obl4x"]
+
+
+#: **Population rules, the axis every earlier sweep pinned.** `n_pop=30` was
+#: held from d=8 to d=100, so anchors-per-dimension fell by more than an order
+#: of magnitude across the range and the decaying returns with dimension were
+#: partly a measurement of that rather than of the initializer. Measured
+#: offline, anchor count is the single largest lever available: raising it
+#: from 60 to 480 buys +0.167 top-decile surrogate precision at d=32 against
+#: +0.013 for the best attraction-model change.
+#:
+#: The four rules span the literature. `log` is CMA-ES's default shape, and it
+#: is here as the null -- if it wins, OBLESA's gains were never about
+#: population size.
+N_POP_RULES = {
+    "fixed30": lambda d: 30,
+    "log": lambda d: math.ceil(8 + 6 * math.log(d)),
+    "root": lambda d: math.ceil(10 * math.sqrt(d)),
+    "linear": lambda d: 2 * d,
+}
+
+
+def population_for(args, d):
+    """The population sizes to run at dimension `d`.
+
+    A rule replaces the explicit `--n-pop` list rather than multiplying it:
+    the point of the rule is that one number per dimension is *derived*, so
+    crossing it with a hand-written list would defeat the comparison.
+    """
+    if getattr(args, "n_pop_rule", None):
+        return [N_POP_RULES[args.n_pop_rule](d)]
+    return list(args.n_pop)
+
+
+def iters_for(args, arm, d, n_pop):
+    """Iterations from an evaluation budget, not a fixed count.
+
+    Once `n_pop` varies with dimension, "200 iterations" stops being a budget
+    -- it is 6k evaluations at n_pop=30 and 40k at n_pop=200, so a rule that
+    raises the population would be handed proportionally more objective calls
+    and win on that alone. Fix total evaluations instead and derive the
+    iteration count, charging initialization against the same budget.
+
+    `BUDGET_PER_DIM * d` follows the BBOB convention of scaling budget with
+    dimension. Returns `--iters` unchanged when no budget is set, so every
+    existing invocation reproduces bit for bit.
+    """
+    if not getattr(args, "budget_per_dim", 0):
+        return args.iters
+    budget = args.budget_per_dim * d
+    n_iter = (budget - init_cost(arm, n_pop)) // n_pop
+    if n_iter < 1:
+        raise ValueError(
+            f"budget {budget} at d={d} does not cover initialization for "
+            f"{arm!r} at n_pop={n_pop} ({init_cost(arm, n_pop)} evaluations); "
+            f"raise --budget-per-dim or lower n_pop")
+    return int(n_iter)
+
+
+def init_cost(arm, n_pop):
+    """Evaluations an arm spends before the optimizer starts.
+
+    Known from the knobs, so the budget can be split before anything runs --
+    see `init.oblesa_pool_size`. The samplers are one population; the cost
+    controls are their stated multiple; OBLESA reads off its own stage knobs.
+    """
+    base, _ = split_arm(arm)
+    if base in ("random", "sobol", "lhs"):
+        # Pure samplers: they draw a population and evaluate none of it. The
+        # optimizer pays for the first generation either way, so charging
+        # them `n_pop` here would double-count it and hand every other arm a
+        # free population's worth of budget.
+        return 0
+    if base in ("obl", "qobl"):
+        return 2 * n_pop
+    if base in RANDOM_KX:
+        return RANDOM_KX[base] * n_pop
+    if base in OBL_KX:
+        num, den = OBL_KX[base]
+        return 2 * ((num * n_pop) // den)
+    if base in OBLESA_KNOBS:
+        kw = dict(OBLESA_KNOBS[base])
+        mult = kw.pop("_n_ess_mult", 1.0)
+        return init.oblesa_pool_size(
+            n_pop,
+            n_ess=max(1, round(mult * n_pop)),
+            rounds=kw.get("rounds", 1),
+            opp=kw.get("opp", "quasi"),
+            opp_ess=kw.get("opp_ess", False))
+    raise ValueError(f"unknown arm {arm!r}")
 
 
 def one_cell(init_arm, fname, d, seed, n_pop, n_iter, optimizers):
@@ -915,7 +1216,6 @@ def one_cell(init_arm, fname, d, seed, n_pop, n_iter, optimizers):
         # that is discarded did its job, so a survival count is not evidence
         # either way and must not be read as one. Kept in the JSON only so a
         # later question can be asked of an existing run.
-        "ess_share": ess_info.get("ess_share"),
         "pool_size": ess_info.get("pool_size"),
         # ESS layer, scored in bounded space (see `centered_discrepancy`).
         **{f"pop_{k}": v for k, v in
@@ -1025,11 +1325,27 @@ def wilcoxon_signed_rank(a, b):
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--seeds", type=int, default=10)
+    ap.add_argument("--seed-start", type=int, default=0,
+                    help="first seed, so tuning and evaluation can run on "
+                         "disjoint instances: --seed-start 0 --seeds 50 "
+                         "selects a config, --seed-start 50 --seeds 50 "
+                         "reports it on seeds it was never chosen on")
     # Population size is an axis, not a constant. Kazimipour et al. found
     # initialization matters more at small populations; and ESS only reaches
     # torann's LSH path above the brute-force crossover (512 points), so at
     # n_pop=30 the index under test is never exercised at all.
     ap.add_argument("--n-pop", type=int, nargs="+", default=[30])
+    ap.add_argument("--n-pop-rule", choices=sorted(N_POP_RULES),
+                    default=None,
+                    help="derive n_pop from the dimension instead of taking "
+                         "--n-pop; replaces that list rather than crossing "
+                         "with it")
+    ap.add_argument("--budget-per-dim", type=int, default=0,
+                    help="total objective evaluations per run, as this many "
+                         "times the dimension (BBOB convention). Iterations "
+                         "are derived from it and initialization is charged "
+                         "against it, which is what makes population rules "
+                         "comparable. 0 keeps the fixed --iters.")
     ap.add_argument("--iters", type=int, default=200,
                     help="iterations per run, identical for every arm; "
                          "initialization is measured but not charged")
@@ -1090,15 +1406,17 @@ def main():
         return
 
     rows = []
-    for n_pop in args.n_pop:
-        for fname in args.functions:
-            for d in args.dims:
+    for fname in args.functions:
+        for d in args.dims:
+            for n_pop in population_for(args, d):
                 for arm in args.arms:
                     t0 = time.perf_counter()
+                    n_iter = iters_for(args, arm, d, n_pop)
                     cell = []
-                    for seed in range(args.seeds):
+                    for seed in range(args.seed_start,
+                                      args.seed_start + args.seeds):
                         cell.extend(one_cell(arm, fname, d, seed, n_pop,
-                                             args.iters, args.optimizers))
+                                             n_iter, args.optimizers))
                     rows.extend(cell)
                     # One median per optimizer, not one across them: the five
                     # reach wildly different values on the same population,
@@ -1162,7 +1480,7 @@ def run_one_arm(args):
     tasks = sweep_tasks(args)
     init_arm, d = tasks[args.arm_index]
     optimizers = list(args.optimizers)
-    expected = (len(args.n_pop) * len(args.functions)
+    expected = (len(population_for(args, d)) * len(args.functions)
                 * args.seeds * len(optimizers))
     os.makedirs(args.out_dir, exist_ok=True)
     path = os.path.join(args.out_dir, f"{init_arm}_d{d}.jsonl")
@@ -1192,16 +1510,19 @@ def run_one_arm(args):
     }
     tmp = path + ".tmp"
     with open(tmp, "w") as fh:
-        for n_pop in args.n_pop:
+        for n_pop in population_for(args, d):
+            n_iter = iters_for(args, init_arm, d, n_pop)
             for fname in args.functions:
                 t0 = time.perf_counter()
-                for seed in range(args.seeds):
+                for seed in range(args.seed_start,
+                                  args.seed_start + args.seeds):
                     for row in one_cell(init_arm, fname, d, seed, n_pop,
-                                        args.iters, optimizers):
+                                        n_iter, optimizers):
                         row["arm_knobs"] = knobs
                         fh.write(json.dumps(row) + "\n")
                 fh.flush()
                 print(f"  {label:<24} {fname:<12} n_pop={n_pop:<4} "
+                      f"n_iter={n_iter:<5} "
                       f"{time.perf_counter() - t0:6.1f}s", flush=True)
     os.replace(tmp, path)
     print(f"[done] {label}: {expected} rows in "

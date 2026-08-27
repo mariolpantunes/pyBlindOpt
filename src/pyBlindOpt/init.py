@@ -47,6 +47,11 @@ def _parse_population_arg(
 
     Converts user input (None, Array, or Sampler) into a concrete population array.
     """
+    if not isinstance(population, np.ndarray) and n_pop < 1:
+        # Only a drawn population is sized by `n_pop`; a supplied array
+        # overrides it below, so it is not this function's business then.
+        raise ValueError(f"n_pop must be >= 1, got {n_pop}")
+
     if isinstance(population, utils.Sampler):
         pop = get_initial_population(n_pop, bounds, population)
     elif isinstance(population, np.ndarray):
@@ -266,7 +271,13 @@ def _ess_engine(
     scores: np.ndarray | None = None,
     attraction_weight: float = 0.5,
     placement_weight: float | None = None,
-    att_model: str = "auto",
+    k_att: int = 8,
+    att_power: float = 2.0,
+    search_mode: str = "k_nn",
+    radius: float = 0.0,
+    radius_target: int = 2,
+    att_search_mode: str = "k_nn",
+    att_radius: float = 0.0,
     k_cand: int = 64,
     **ignored,
 ) -> np.ndarray:
@@ -306,42 +317,26 @@ def _ess_engine(
         attraction_weight (float): Pull strength in ESS's units. The default
             is ESS's own measured optimum; it is **not** `force_weight`, see
             above.
-        att_model (str): **Which model, and why it decides high-`d` behaviour.**
-            OBLESA hands ESS the sampler and (q)OBL blocks as the measured
-            anchors, so the source count is `2 * n_pop` *at every dimension* --
-            60 at the default `n_pop=30`. `'fourier'` and `'detrended'` carry
-            `2d + 1` coefficients, so from `d = 32` (65 coefficients against
-            60 points) they are underdetermined: the fit reproduces its own
-            sources and generalises to nothing. `'idw'` has no coefficients and
-            `'projection'` correlates rather than solves, so both stay defined
-            at any count.
+        k_att (int): Neighbours the attractiveness estimate averages over,
+            and `att_power` its inverse-distance exponent. Together they are
+            the whole of the estimator: `att_model` is pinned to `'idw'`
+            below, so these are the only knobs it has.
+        search_mode (str): ``'k_nn'`` or ``'radius'`` for the repulsion, and
+            `att_search_mode` the same for the attractiveness estimate. They
+            are separate because they are separate uses of the index.
+        radius (float): Normalized interaction radius in ``(0, 1]`` for
+            ``search_mode='radius'``, and `att_radius` the same for the
+            attraction. ``0`` means derive it.
 
-            Measured, as the share of the selected population won by the
-            relaxed block at `force_weight=2` (8 functions x 8 seeds; the block
-            is a third of the pool, so 33% is parity):
-
-            ===========  =====  =====  =====  =====
-            att_model    d=8    d=16   d=32   d=64
-            ===========  =====  =====  =====  =====
-            detrended    70.4   41.9   18.0   13.8
-            projection   71.4   56.8   41.1   27.9
-            idw          74.9   73.1   72.1   71.0
-            auto         70.9   72.2   70.0   64.1
-            ===========  =====  =====  =====  =====
-
-            `'auto'` -- the default, and ESS's own -- cross-validates on
-            sources already paid for and so tracks whichever wins. **Naming any
-            other model here overrides that**, which is how a sweep can end up
-            measuring an underdetermined fit at every dimension without
-            anything reporting a problem.
-
-            How ESS estimates the attractiveness of a position it
-            has no measurement for -- 'fourier' fits one function of position
-            and evaluates it, 'idw' weights the nearest measured points,
-            'detrended' does both. The default 'auto' cross-validates them on
-            the pool that was already evaluated, so it costs no objective
-            calls; which one wins depends on whether the objective is
-            separable, and that is not readable from the dimension.
+            The scale is a fraction of the torus diameter, and that is the
+            only scale OBLESA can speak in: it hands ESS a set of points and
+            deliberately knows nothing about the geometry they are placed
+            under, so an absolute cutoff is not a number it could form. Pass
+            `ess.radius_for_target(dim, n_points)` to specify one by
+            neighbour count instead -- the useful band is narrow and moves
+            with dimension.
+        radius_target (int): Neighbours the auto-derived radius should
+            contain, when `radius` is 0. The tuning knob of radius mode.
         placement_weight (float | None): Attraction weight for ESS's placement
             step alone. None pairs it with `attraction_weight`, which is the
             sensible default; they are separable so the guided placement and
@@ -361,23 +356,111 @@ def _ess_engine(
             "attractiveness": -np.asarray(scores, dtype=float),
             "attraction_weight": attraction_weight,
             "placement_weight": placement_weight,
-            "att_model": att_model,
+            # Pinned, not defaulted. ESS's own default is `'auto'`, which
+            # cross-validates and can land on a fit carrying `2d`
+            # coefficients -- and OBLESA supplies `2 * n_pop` anchors, a count
+            # set by the population rather than by the dimension. Dropping
+            # this line does not remove a choice, it silently makes the other
+            # one. See `oblesa`'s docstring for the measured difference.
+            "att_model": "idw",
+            "k_att": k_att,
+            "att_power": att_power,
             "attraction_metric": "cauchy",
             "attraction_kwargs": {"power": 1.0},
+            # Only meaningful alongside an attractiveness field, so they sit
+            # inside the same guard that builds one.
+            "att_search_mode": att_search_mode,
+            "att_radius": att_radius,
         }
-    return ess.esa(samples, bounds, n=n, seed=seed, init_pool=k_cand, **kw)
+    return ess.esa(samples, bounds, n=n, seed=seed, init_pool=k_cand,
+                   search_mode=search_mode, radius=radius,
+                   radius_target=radius_target, **kw)
 
 
 _ess_engine.accepts = frozenset(  # type: ignore[reportFunctionMemberAccess]
-    {"scores", "k_cand", "attraction_weight"})
+    {"scores", "k_cand", "attraction_weight", "k_att", "att_power",
+     "search_mode", "radius", "radius_target",
+     "att_search_mode", "att_radius"})
 
 
-# One engine: OBLESA's empty-space stage is ESS. Controls an experiment needs
-# belong to that experiment and arrive through `engine=`.
-_FORCES = {
-    "guided": _ess_engine,
-    "ess": _ess_engine,
-}
+def uniform_engine(
+    samples: np.ndarray,
+    bounds: np.ndarray,
+    *,
+    n: int,
+    seed=None,
+    **ignored,
+) -> np.ndarray:
+    """OBLESA's pipeline with the empty-space stage replaced by uniform draws.
+
+    A diagnostic, not an alternative. Swapping it in holds the pool's *shape*
+    fixed -- same rounds, same opposition, same anchor set, same selection --
+    and varies only where the probe block lands, which is the one substitution
+    that separates what the pipeline contributes from what the placement does.
+    `random4x` and its relatives match the pool's *size* and cannot do this:
+    they replace the whole pipeline, so a difference against them could come
+    from anywhere in it.
+
+    It declares no capabilities, so the dispatch in `oblesa` hands it nothing
+    and the draws stay unguided by fitness. That is deliberate: a null that
+    quietly read `scores` would be a cheap surrogate search rather than a null.
+
+    Args:
+        samples (np.ndarray): The anchors, ignored -- that is the point.
+        bounds (np.ndarray): Search space bounds, shape (D, 2).
+        n (int): How many points to draw.
+        seed: Random seed or Generator.
+        **ignored: Accepted and dropped, for signature compatibility.
+
+    Returns:
+        np.ndarray: `n` uniform points, shape (n, D).
+    """
+    del samples, ignored
+    rng = np.random.default_rng(seed)
+    lo, hi = bounds[:, 0], bounds[:, 1]
+    return rng.uniform(lo, hi, size=(n, bounds.shape[0]))
+
+
+#: Empty, so `oblesa` forwards it nothing at all. See `uniform_engine`.
+uniform_engine.accepts = frozenset()  # type: ignore[reportFunctionMemberAccess]
+
+
+def oblesa_pool_size(
+    n_pop: int,
+    *,
+    n_ess: int | None = None,
+    rounds: int = 3,
+    opp: str = "quasi",
+    opp_ess: bool = False,
+) -> int:
+    """
+    How many points `oblesa` will evaluate, from the knobs alone.
+
+    The pool size is fully determined before anything runs, so it is a
+    function of the arguments rather than something a caller has to discover
+    by executing a search and reading a value back out. Budget accounting
+    needs it up front -- an experiment sizing a run against a fixed evaluation
+    budget cannot afford to spend the budget to learn what it cost.
+
+    Args:
+        n_pop (int): Population size, and the size of every objective call.
+        n_ess (int | None): Empty-space block per round. Defaults to `n_pop`;
+            zero disables the stage.
+        rounds (int): How many times the empty-space stage runs. The defaults
+            here mirror `oblesa`'s, so calling both bare describes one run.
+        opp (str): 'none', 'standard' or 'quasi'.
+        opp_ess (bool): Whether each probe block is opposed as well.
+
+    Returns:
+        int: Total points evaluated, which is also the pool `selection` picks
+        `n_pop` rows from.
+    """
+    block = n_pop if opp == "none" else 2 * n_pop
+    n_ess = n_pop if n_ess is None else int(n_ess)
+    if n_ess <= 0:
+        return block
+    per_round = n_ess * (2 if (opp_ess and opp != "none") else 1)
+    return block + rounds * per_round
 
 
 def oblesa(
@@ -385,20 +468,25 @@ def oblesa(
     bounds: np.ndarray,
     *,
     population: np.ndarray | utils.Sampler | None = None,
-    n_pop: int = 10,
+    n_pop: int = 30,
     selection: str = "best",
     opp: str = "quasi",
     opp_ess: bool = False,
-    force: str = "guided",
     force_weight: float = 0.5,
     seed: int | np.random.Generator | None = None,
     n_jobs: int = 1,
     n_ess: int | None = None,
-    rounds: int = 1,
+    rounds: int = 3,
     k_cand: int = 64,
+    k_att: int = 8,
+    att_power: float = 2.0,
+    search_mode: str = "k_nn",
+    radius: float = 0.0,
+    radius_target: int = 2,
+    att_search_mode: str = "k_nn",
+    att_radius: float = 0.0,
     engine: collections.abc.Callable | None = None,
     diversity_weight: float = 0.25,
-    info: dict | None = None,
 ) -> np.ndarray:
     """
     OBLESA (Opposition-Based Learning with Empty Space Search) Initialization.
@@ -413,7 +501,7 @@ def oblesa(
         P_obl  <- oppose(P_0)         `opp`     n_pop points
         A      <- P_0 u P_obl                            (the anchors)
         repeat `rounds` times:
-            P_ess  <- probe empty space in A   `force`   n_ess points
+            P_ess  <- probe empty space in A   `engine`  n_ess points
             P_eop  <- oppose(P_ess)            `opp_ess` n_ess points
             A      <- A u P_ess u P_eop                  (now measured)
         return select(A)                       `selection`
@@ -435,7 +523,8 @@ def oblesa(
         bounds (np.ndarray): Search space boundaries of shape (D, 2).
         population (ndarray | Sampler | None): Initial population or Sampler.
             If None, RandomSampler is used.
-        n_pop (int): Number of individuals to select for the final population.
+        n_pop (int): Number of individuals to select for the final population,
+            and the size of every objective call this function makes.
         selection (str): Selection strategy: 'best' (greedy), 'prob' (roulette
             over the blended score -- *not* uniform sampling) or 'maximin'
             (sequential maximin over the fittest candidates). See
@@ -458,8 +547,8 @@ def oblesa(
             `ess.esa` until now.
 
             Against `ess.esa` it helps, and it helps more as dimension rises.
-            On `cs`, acceleration rate at `force_weight=2` with `att_model`
-            `idw`, 5 landscapes x 8 seeds:
+            On `cs`, acceleration rate at `force_weight=2`, 5 landscapes
+            x 8 seeds:
 
             | d              |   8 |  16 |  32 |  64 | 100 |
             |----------------|-----|-----|-----|-----|-----|
@@ -471,19 +560,6 @@ def oblesa(
             does nothing on `de` or `egwo`. Left False because flipping a
             default changes every downstream comparison, not because the
             evidence favours False.
-        force (str): Which force field the probes feel. 'guided' (and its
-            explicit spelling 'ess') is the EmptySpaceSearch relaxation: it
-            places each probe on a blend of novelty and the attractiveness the
-            position is *expected* to have, then relaxes the block under
-            repulsion and attraction together.
-
-            That is the only backend, and the knob is kept for the name rather
-            than for a choice. Anything else -- a null that spends the same
-            candidates without searching, some other placement rule -- is a
-            control for an experiment, so it belongs to the harness running it
-            and arrives through `engine`.
-
-            Ignored when `engine` is given.
         force_weight (float): Attraction strength, as ESS's
             `attraction_weight`. Bounded by a collapse condition: ESS refuses
             anything at or above 2.5. Zero reduces the placement to pure
@@ -493,9 +569,22 @@ def oblesa(
         n_jobs (int): Number of parallel jobs for objective evaluation.
         n_ess (int | None): Size of the empty-space block. Defaults to `n_pop`.
             Zero disables the stage, reducing this to OBL under `selection`.
+
+            Must be a whole number of populations -- `n_ess`, or `2 * n_ess`
+            when `opp_ess` is set, has to divide by `n_pop`. Every objective
+            call this function makes is exactly `n_pop` rows, and a block that
+            does not divide evenly leaves a short final call, which breaks
+            callers whose objective is sized for a fixed batch. Rejected up
+            front rather than left to surface as an odd-shaped call.
         rounds (int): How many times the empty-space stage runs, each round
             probing against everything the previous rounds placed **and
-            measured**. Defaults to 1, which is the single-pass pipeline.
+            measured**. `rounds=1` is the single-pass pipeline.
+
+            The default is 3 because that is what two sweeps measured as the
+            best setting at every dimension on every optimizer that responds
+            to initialization at all -- it was the largest single effect
+            found. It costs `rounds * n_ess` evaluations, so a caller on a
+            tight budget lowers it deliberately rather than inheriting it.
 
             This is not the same purchase as a larger `n_ess`, though it costs
             the same evaluations: `n_ess=2*n_pop, rounds=1` places 2N probes
@@ -526,22 +615,105 @@ def oblesa(
             more expensive. ESS relaxes the block afterwards, so the
             placement only has to be a reasonable starting point: raising this
             to 2048 costs 4.5-7.1x and returns the same population.
-        engine (Callable | None): Empty-space backend override, called as
-            `engine(samples, bounds, n=..., seed=..., ...)`. When None it is
-            chosen by `force`. Pass `ess.esa` for the published implementation;
-            engines declare which extra keywords they accept via an `accepts`
-            attribute, and anything without one receives only the four
+        k_att (int): Neighbours the attractiveness of an unmeasured position
+            is averaged over, and `att_power` the inverse-distance exponent
+            weighting them. Forwarded to the engine when it declares them in
+            its `accepts`; ignored by engines that do not.
+        search_mode (str): How the ESS relaxation finds neighbours --
+            ``'k_nn'`` fixes the neighbour *count*, ``'radius'`` fixes the
+            *volume*. `att_search_mode` is the same choice for the
+            attractiveness estimate, and is separate on purpose: they are two
+            different uses of the index and nothing requires a run to make
+            the same choice twice.
+        radius (float): Normalized interaction radius in ``(0, 1]`` when
+            `search_mode` is ``'radius'``, and `att_radius` the same for
+            `att_search_mode`. ``0`` derives one.
+
+            Normalized rather than given in the units `bounds` is in,
+            because for this metric there is no such number. ESS min-maxes
+            each axis onto [0, 1] *independently* and its distance is an L1
+            sum over all of them, so the radius is a sum of `dim`
+            dimensionless per-axis fractions -- a length in the caller's
+            units only if every axis shares a unit and a width, which
+            `bounds` need not. It is also the only scale that crosses the
+            boundary cleanly: OBLESA holds points ESS produced and not the
+            geometry it produced them under.
+
+            Per axis it reads directly: ``radius / 2`` is the mean fraction
+            of each axis's own range the ball reaches. On bounds of
+            [-5, 5], ``radius=0.2`` reaches 1.0 in the caller's units on a
+            typical axis.
+
+            Do not set it by hand in high dimension. The value holding a
+            fixed neighbour count converges on 1/2, so at dim=1000 the whole
+            range from 1 to 64 neighbours spans 0.474 to 0.491.
+            `ess.radius_for_target(dim, n)` turns a neighbour count into a
+            value for this argument, which is the usable way in.
+        radius_target (int): Neighbours the auto-derived radius should
+            contain. This is how radius mode is meant to be tuned, and it is
+            the whole of its appeal: `k_nn` needs a `k` chosen per problem,
+            where radius mode derives its own from the point density and
+            only asks how *many* neighbours are wanted -- a question with a
+            sensible answer that does not move with the dimension. It is
+            near-parametric rather than parameter-free, but the parameter is
+            one a user can actually reason about.
+
+            Forwarded only to engines that declare these in their `accepts`.
+
+            **These are the estimator, now that there is only one.** The model
+            was a parameter until a 468-arm factorial settled it, and the
+            answer was not close enough to keep the choice open. Fitted models
+            carry `2d` coefficients while OBLESA supplies `2 * n_pop` anchors
+            -- a count set by the population, not by the dimension -- so
+            identifiability needs `n_pop > d`, a population growing linearly
+            in dimension where every anchor is a paid objective call.
+
+            Measured as the share of the selected population won by the
+            relaxed block at `force_weight=2`, where 33% is parity:
+
+            ============  =====  =====  =====  =====
+            estimator     d=8    d=16   d=32   d=64
+            ============  =====  =====  =====  =====
+            detrended     70.4   41.9   18.0   13.8
+            projection    71.4   56.8   41.1   27.9
+            inverse dist  74.9   73.1   72.1   71.0
+            auto          70.9   72.2   70.0   64.1
+            ============  =====  =====  =====  =====
+
+            Inverse-distance weighting is also the only one bounded by
+            construction -- a convex combination of measured values cannot
+            leave their range -- and the sweep found that is what protects the
+            spread repulsion produced: at `d=100` the closest pair in the
+            selected population sits at 3.116 under it against 2.797 under a
+            detrended fit, a 10.2% collapse that grows with dimension.
+
+        engine (Callable | None): The empty-space backend, called as
+            `engine(samples, bounds, n=..., seed=..., ...)`. None selects
+            EmptySpaceSearch, which places each probe on a blend of novelty
+            and the attractiveness the position is *expected* to have, then
+            relaxes the block under repulsion and attraction together.
+
+            This is the only extension point, and the single one deliberately.
+            Anything else -- a null that spends the same candidates without
+            searching, some other placement rule -- is a control for an
+            experiment, so it belongs to the harness running it rather than to
+            a mode string here.
+
+            Engines declare which extra keywords they accept via an `accepts`
+            attribute; one without it receives only the four
             positional-equivalent arguments.
         diversity_weight (float): Trade-off between fitness (0.0) and spatial
             diversity (1.0) using crowding distance. The default is an interior
             optimum, not a corner: 26.7 at 0.0, 29.4 at 0.25, 24.0 at 0.5. It
             exists only under `selection='best'` -- the other rules already
             spend their own randomness on spread.
-        info (dict | None): If given, filled in place with `pool_size`.
-
     Returns:
         np.ndarray: Optimized population of shape (n_pop, D), ordered by
         ascending score.
+
+    See Also:
+        oblesa_pool_size: how many points this will evaluate, from the knobs
+        alone, without running anything.
     """
     rng = (
         np.random.default_rng(seed)
@@ -553,17 +725,47 @@ def oblesa(
         raise ValueError(f"opp must be 'none', 'standard' or 'quasi', got {opp!r}")
     if rounds < 1:
         raise ValueError(f"rounds must be >= 1, got {rounds}")
-    if engine is None and force not in _FORCES:
-        raise ValueError(f"force must be one of {sorted(_FORCES)}, got {force!r}")
-    probe = _FORCES[force] if engine is None else engine
+    if not 0.0 <= diversity_weight <= 1.0:
+        raise ValueError(
+            "diversity_weight is a mixing fraction and must lie in [0, 1], "
+            f"got {diversity_weight}"
+        )
+    if force_weight < 0.0:
+        raise ValueError(
+            "force_weight is an attraction strength and must be >= 0; a "
+            f"negative value would pull probes toward the worst regions, got "
+            f"{force_weight}"
+        )
+    if k_cand < 1:
+        raise ValueError(f"k_cand must be >= 1, got {k_cand}")
+    probe = _ess_engine if engine is None else engine
 
     ran_pop, n_pop = _parse_population_arg(population, n_pop, bounds, rng)
+    if n_pop < 1:
+        raise ValueError(f"n_pop must be >= 1, got {n_pop}")
 
     if opp == "none":
         combined_samples = ran_pop
     else:
         combined_samples = np.vstack((ran_pop, _oppose(ran_pop, bounds, opp, rng)))
     n_ess = n_pop if n_ess is None else int(n_ess)
+    if n_ess < 0:
+        raise ValueError(f"n_ess must be >= 0, got {n_ess}")
+
+    # The batch invariant, enforced rather than hoped for. Every objective
+    # call below is a slice of `n_pop` rows, so a probe block that is not a
+    # whole number of populations leaves a short final call -- which breaks
+    # callers whose objective is sized for a fixed batch. `opp_ess` doubles
+    # the block, so it can mask the problem for some `n_ess` and expose it
+    # for others; that is worse than failing, so both are checked together.
+    probe_block = n_ess * (2 if (opp_ess and opp != "none") else 1)
+    if probe_block % n_pop:
+        raise ValueError(
+            f"the empty-space block must be a whole number of populations so "
+            f"every objective call is exactly n_pop rows: n_ess={n_ess}"
+            + (" doubled by opp_ess" if probe_block != n_ess else "")
+            + f" gives {probe_block}, which is not a multiple of n_pop={n_pop}"
+        )
 
     # One call per `n_pop` rows, never a bigger block. Every optimizer here
     # evaluates a generation of exactly `n_pop`, and an objective may be
@@ -590,6 +792,16 @@ def oblesa(
         eng_kw["attraction_weight"] = force_weight
     elif "lam" in accepts:
         eng_kw["lam"] = force_weight
+    # The rest pass through under their own names, so they are a table
+    # rather than a line each -- the two above are here as `if`s because
+    # they are the ones that get *renamed* on the way.
+    for name, value in (("k_att", k_att), ("att_power", att_power),
+                        ("search_mode", search_mode), ("radius", radius),
+                        ("radius_target", radius_target),
+                        ("att_search_mode", att_search_mode),
+                        ("att_radius", att_radius)):
+        if name in accepts:
+            eng_kw[name] = value
 
     # The pool *is* the anchor set: every round probes against everything
     # placed so far and hands back points that join it. At `rounds=1` this
@@ -624,8 +836,5 @@ def oblesa(
         diversity_weight=diversity_weight,
         rng=rng,
     )
-
-    if info is not None:
-        info["pool_size"] = int(population.shape[0])
 
     return population[idx]
