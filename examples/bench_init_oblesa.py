@@ -1033,7 +1033,15 @@ F11_ARMS = [a for a in OBLESA_KNOBS if a.startswith("f11_")]
 #:
 #: `rr` throughout: both halves on radius is the configuration whose selling
 #: point is the absence of a `k`, and a mixed arm would keep one.
-F12_TARGET = {"t01": 1, "t02": 2, "t04": 4, "t08": 8, "t16": 16, "t32": 32}
+#: The grid ran 1..32 and **32 was still the best value at every dimension
+#: from 20 up**, which means the optimum was off the end of the grid exactly
+#: where the effect is largest. A heuristic fitted to that would be fitted to
+#: censored data. These extend it until the neighbourhood stops being local:
+#: at d=100 a target of 128 is 43% of the 3N pool, and below d=10 even 64
+#: exceeds the pool and saturates against `l1_radius_for_count`'s clamp, so
+#: the high end is only meaningful in the dimensions stage h covers.
+F12_TARGET = {"t01": 1, "t02": 2, "t04": 4, "t08": 8, "t16": 16, "t32": 32,
+              "t48": 48, "t64": 64, "t96": 96, "t128": 128}
 
 for _bl, _base in F9_BASE.items():
     for _tl, _t in F12_TARGET.items():
@@ -1057,13 +1065,43 @@ F12_ARMS = [a for a in OBLESA_KNOBS if a.startswith("f12_")]
 #: never drew; comparing a `rounds=3` arm (5N) to the same control handed it
 #: one for free. Neither is a fair test of whether the empty-space stage is
 #: doing anything, which is the only thing these arms exist to decide.
+#: `random7x` covers `rounds=5`, which spends 2N + 5N. Without it that arm
+#: would be the only one in the factorial scored against a pool it never
+#: drew, which is the exact defect these controls were added to fix.
 RANDOM_KX = {"random3x": 3, "random4x": 4, "random5x": 5,
-             "random6x": 6, "random8x": 8}
+             "random6x": 6, "random7x": 7, "random8x": 8}
 #: `(numerator, denominator)` of the random half; the opposites double it.
 #: `obl15x` keeps its original `(3 * n_pop) // 2` so the name still means what
 #: it meant, and `obl2x` is unchanged at exactly 2N + 2N.
 OBL_KX = {"obl15x": (3, 2), "obl2x": (2, 1), "obl25x": (5, 2),
-          "obl3x": (3, 1), "obl4x": (4, 1)}
+          "obl3x": (3, 1), "obl35x": (7, 2), "obl4x": (4, 1)}
+
+#: **Does a round buy anything, and is it the attraction that buys it?**
+#:
+#: `rounds` was the largest single effect two sweeps found, and the stated
+#: reason is that each round's probes enter the next field fit *as measured
+#: points* -- so the attractiveness estimate has more real data to work from.
+#: That is a claim about the attraction, and it has never been separated from
+#: "more probes is better". If it is right, rounds must help *more* when the
+#: attraction is on than when it is off. `force_weight=0` is the ablation
+#: where the estimate is never consulted, so the difference between the two
+#: columns is the part rounds buy through attraction rather than through
+#: sheer count.
+#:
+#: Every arm here holds `n_ess` fixed, so a round is a round and not a bigger
+#: block; the pool grows with `rounds`, which is what `V8_COST_CONTROLS`
+#: exists to match.
+F13_ROUNDS = {"r1": 1, "r2": 2, "r3": 3, "r5": 5}
+F13_WEIGHT = {"w000": 0.0, "w100": 1.0, "w200": 2.0}
+
+for _rl, _r in F13_ROUNDS.items():
+    for _wl, _w in F13_WEIGHT.items():
+        OBLESA_KNOBS[f"f13_{_rl}_{_wl}"] = {
+            "selection": "best", "rounds": _r, "diversity_weight": 0.0,
+            "opp": "standard", "opp_ess": False, "_n_ess_mult": 1.0,
+            "force_weight": _w}
+
+F13_ARMS = [a for a in OBLESA_KNOBS if a.startswith("f13_")]
 
 V8_BASELINES = ["random", "lhs", "sobol", "obl", "qobl", "obl2x", "random4x"]
 
@@ -1071,7 +1109,8 @@ V8_BASELINES = ["random", "lhs", "sobol", "obl", "qobl", "obl2x", "random4x"]
 #: mismatch was found, rather than folded into `V8_BASELINES`, so the arms
 #: already on disk keep their identity and resume for free.
 V8_COST_CONTROLS = ["random3x", "obl15x", "random5x", "obl25x",
-                    "random6x", "obl3x", "random8x", "obl4x"]
+                    "random6x", "obl3x", "random7x", "obl35x",
+                    "random8x", "obl4x"]
 
 
 #: **Population rules, the axis every earlier sweep pinned.** `n_pop=30` was
