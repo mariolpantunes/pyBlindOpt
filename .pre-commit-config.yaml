@@ -38,6 +38,36 @@ repos:
 
   - repo: local
     hooks:
+      # Resolve the venv the way the runner does, before anything reads it.
+      #
+      # The hooks below run `venv/bin/python`, and CI installs `.[dev]` into
+      # a clean machine -- so this venv is only a useful gate while it holds
+      # what PyPI holds. It drifts the moment a sibling is installed
+      # editable, and an editable install *satisfies* the requirement, so
+      # `pip install` alone will never undo one. The venv then reports the
+      # right version while loading unreleased source, and a local check
+      # passes against code the runner cannot see.
+      #
+      # That is not hypothetical. `radius_target: int | None` type-checked
+      # clean here and failed CI, because this venv had ESS installed from a
+      # branch that had the `| None` and PyPI did not. Removing editable
+      # installs first is the part `pip install` cannot do for itself.
+      #
+      # ~2s when nothing has moved. Cross-repo work still belongs in the
+      # system environment; this venv exists to be what the runner is.
+      - id: venv-matches-ci
+        name: venv matches CI
+        entry: >-
+          bash -c '
+          [ -d venv ] || python -m venv venv;
+          eds=$(venv/bin/pip list --editable --format=freeze 2>/dev/null
+          | sed "s/[=@ ].*//" | grep -vix pyblindopt || true);
+          [ -n "$eds" ] && venv/bin/pip uninstall -y -q $eds;
+          venv/bin/pip install -q --upgrade ".[dev]"'
+        language: system
+        files: '(\.py$|^pyproject\.toml$|^setup\.cfg$|^requirements\.txt$)'
+        pass_filenames: false
+
       - id: ruff
         name: ruff (src, test, examples)
         entry: ruff check src test examples
