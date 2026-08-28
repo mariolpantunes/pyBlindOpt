@@ -275,7 +275,7 @@ def _ess_engine(
     att_power: float = 2.0,
     search_mode: str = "k_nn",
     radius: float = 0.0,
-    radius_target: int = 2,
+    radius_target: int | None = None,
     att_search_mode: str = "k_nn",
     att_radius: float = 0.0,
     k_cand: int = 64,
@@ -335,8 +335,9 @@ def _ess_engine(
             `ess.radius_for_target(dim, n_points)` to specify one by
             neighbour count instead -- the useful band is narrow and moves
             with dimension.
-        radius_target (int): Neighbours the auto-derived radius should
-            contain, when `radius` is 0. The tuning knob of radius mode.
+        radius_target (int | None): Neighbours the auto-derived radius
+            should contain when `radius` is 0; ``None`` takes ESS's per-mode
+            default. The tuning knob of radius mode.
         placement_weight (float | None): Attraction weight for ESS's placement
             step alone. None pairs it with `attraction_weight`, which is the
             sensible default; they are separable so the guided placement and
@@ -482,7 +483,7 @@ def oblesa(
     att_power: float = 2.0,
     search_mode: str = "k_nn",
     radius: float = 0.0,
-    radius_target: int = 2,
+    radius_target: int | None = None,
     att_search_mode: str = "k_nn",
     att_radius: float = 0.0,
     engine: collections.abc.Callable | None = None,
@@ -656,8 +657,12 @@ def oblesa(
             range from 1 to 64 neighbours spans 0.474 to 0.491.
             `ess.radius_for_target(dim, n)` turns a neighbour count into a
             value for this argument, which is the usable way in.
-        radius_target (int): Neighbours the auto-derived radius should
-            contain. This is how radius mode is meant to be tuned, and it is
+        radius_target (int | None): Neighbours the auto-derived radius
+            should contain. ``None`` takes ESS's per-mode default -- 2 for
+            k-NN, where the radius only scales the force law, and 5 for
+            radius mode, where it is the search cutoff and 2 leaves roughly
+            one point in eight without a neighbour. This is how radius mode
+            is meant to be tuned, and it is
             the whole of its appeal: `k_nn` needs a `k` chosen per problem,
             where radius mode derives its own from the point density and
             only asks how *many* neighbours are wanted -- a question with a
