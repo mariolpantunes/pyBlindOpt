@@ -619,9 +619,17 @@ def _de(mutation: de.Mutation,
 #: * `hc` and `sa` are the bottom, and the five had no bottom. All of them
 #:   recombine, and recombination *is* the recovery mechanism, so the ladder
 #:   was measuring its own top half.
-#: * `rs` ignores the initial population almost entirely, which makes it the
-#:   null: an initializer effect measured under `rs` is the measurement's own
-#:   noise floor, and every other margin should be read against it.
+#: * `rs` is the search ablation. It evaluates the supplied population, keeps
+#:   its best, and from then on draws a fresh uniform batch every generation
+#:   and never looks at the previous one -- so the initializer reaches the
+#:   result through exactly one channel, the quality of the best point it
+#:   handed over, with no search dynamics on top. That is not a noise floor:
+#:   a better initializer genuinely helps `rs`, and it is the only arm where
+#:   the *whole* margin is attributable to selection rather than to how the
+#:   search used what it was given. It also decays with budget by
+#:   construction, since 500*d uniform draws eventually beat any starting
+#:   best, which makes it the reference for how much of an initializer's
+#:   advantage is simply a head start.
 #: * The swarm rungs (`pso`, `gwo`, `hho`, `hba`, `abc`, `fa`) drift toward
 #:   incumbents without ever synthesising a new coordinate combination, which
 #:   is the middle of the mechanism and was represented by `cs` and `egwo`
