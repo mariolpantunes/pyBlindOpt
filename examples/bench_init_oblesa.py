@@ -61,21 +61,31 @@ population, and each is scored only against its own random baseline.
 from __future__ import annotations
 
 import argparse
+import collections.abc
 import json
 import math
 import os
 import time
+import types
+import typing
 import zlib
 
 import numpy as np
 
+import pyBlindOpt.abc_opt as abc_opt
 import pyBlindOpt.cs as cs
 import pyBlindOpt.de as de
 import pyBlindOpt.egwo as egwo
+import pyBlindOpt.fa as fa
 import pyBlindOpt.functions as functions
 import pyBlindOpt.ga as ga
+import pyBlindOpt.gwo as gwo
+import pyBlindOpt.hba as hba
 import pyBlindOpt.hc as hc
+import pyBlindOpt.hho as hho
 import pyBlindOpt.init as init
+import pyBlindOpt.pso as pso
+import pyBlindOpt.rs as rs
 import pyBlindOpt.sa as sa
 import pyBlindOpt.utils as utils
 
@@ -547,7 +557,50 @@ _SELECTION_LEVELS = {
     "s50": ("best", 0.50),
 }
 
-#: The optimizer itself, as `(entry point, fixed keywords)`.
+class Optimizer(typing.NamedTuple):
+    """One search, with the fixed keywords that pin its variant.
+
+    Callable, so a caller runs it without unpacking anything and without
+    knowing that some entries carry keywords and others do not::
+
+        OPTIMIZERS["jade"](objective, bounds, population=pop, n_pop=30)
+
+    `recovery` is the ladder this whole sweep is read along -- how much of a
+    bad start the search can undo on its own:
+
+    * ``"local"`` -- moves one point by a perturbation and keeps or rejects
+      it. Nothing here can reach a region the initial population missed, so
+      these should show the largest initializer effect.
+    * ``"swarm"`` -- points are pulled toward incumbents. A region can be
+      reached by drift but never synthesised, so partial recovery.
+    * ``"recombining"`` -- offspring are built from two or more parents, so
+      a coordinate combination absent from the pool can be created outright.
+      These should show the smallest effect.
+
+    It is a field rather than a comment because the ordering is the
+    hypothesis: if initialization matters more the dumber the search, the
+    measured effect has to sort by this, and an analysis needs to group by it
+    without hard-coding a list it will forget to update.
+    """
+
+    run: collections.abc.Callable[..., tuple]
+    kwargs: collections.abc.Mapping[str, typing.Any] = types.MappingProxyType({})
+    recovery: str = "recombining"
+
+    def __call__(self, objective, bounds, **overrides):
+        return self.run(objective, bounds, **{**self.kwargs, **overrides})
+
+
+def _de(variant: str, policy: str = "fixed", **kw) -> Optimizer:
+    """A DE arm. Every one differs only in `variant` and `policy`, so the
+    entry point and the recovery class are written once rather than six
+    times."""
+    return Optimizer(de.differential_evolution,
+                     types.MappingProxyType({"variant": variant,
+                                             "policy": policy, **kw}))
+
+
+#: The recovery ladder, widest end to widest end.
 #:
 #: **Every OBLESA measurement before the 86-arm sweep used `best/1/bin`** --
 #: the only DE arm that fails outright on multimodal landscapes, and the one
@@ -557,39 +610,52 @@ _SELECTION_LEVELS = {
 #: `jade`, so a single optimizer cannot separate "this initializer is good"
 #: from "this optimizer cannot recover from a bad start".
 #:
-#: The five here span that recovery ability rather than sampling one point of
-#: it. `de` and `ga` carry no adaptation at all; `cs` and `egwo` adapt their
-#: step but not their parameters; `jade` adapts `F` and `CR` per individual
-#: from its own success history and is the strongest recoverer in the repo.
-#: If initialization matters more the dumber the search, the effect must
-#: order along that axis -- and if it does not, that is the finding.
+#: Five searches sampled that axis; eighteen span it. The additions are not
+#: variety for its own sake -- each fills a rung the five left empty:
+#:
+#: * `hc` and `sa` are the bottom, and the five had no bottom. All of them
+#:   recombine, and recombination *is* the recovery mechanism, so the ladder
+#:   was measuring its own top half.
+#: * `rs` ignores the initial population almost entirely, which makes it the
+#:   null: an initializer effect measured under `rs` is the measurement's own
+#:   noise floor, and every other margin should be read against it.
+#: * The swarm rungs (`pso`, `gwo`, `hho`, `hba`, `abc`, `fa`) drift toward
+#:   incumbents without ever synthesising a new coordinate combination, which
+#:   is the middle of the mechanism and was represented by `cs` and `egwo`
+#:   alone.
+#: * The DE variants separate *which* mutation from *how* it is controlled.
+#:   `rand/1` and `best/1` bracket the diversity-greed axis at fixed
+#:   parameters; `current-to-best/1` is the rotationally invariant standard;
+#:   `jade` and `shade` adapt `F` and `cr` from their own success history,
+#:   and `sade` adapts which strategy to use instead. That is four distinct
+#:   kinds of adaptation over one mutation library, which is the comparison
+#:   the DE literature actually turns on.
 #:
 #: Every arm is compared only against the *same optimizer's* random baseline
-#: (AR, Eq. 3, is a within-optimizer ratio), so the five needing different
-#: numbers of evaluations per iteration costs nothing here.
-OPTIMIZERS = {
-    "de": (de.differential_evolution,
-           {"variant": "best/1/bin", "policy": "fixed"}),
-    "jade": (de.differential_evolution,
-             {"variant": "current-to-pbest/1/bin", "policy": "jade"}),
-    "ga": (ga.genetic_algorithm, {}),
-    "cs": (cs.cuckoo_search, {}),
-    "egwo": (egwo.enhanced_grey_wolf_optimization, {}),
-    # The bottom of the recovery ladder, added because the ladder was
-    # missing its low end. `sa` and `hc` never recombine: a point moves by a
-    # local perturbation and is kept or rejected, so nothing in either search
-    # can synthesise a region the initial population did not already reach.
-    # The five above all recombine, and recombination is exactly the
-    # mechanism that lets a search repair a bad start -- which makes them the
-    # wrong instruments for measuring how much a start is worth.
-    #
-    # If initialization matters more the dumber the search, these two must
-    # show the largest margins in the sweep, and `jade` the smallest. That
-    # ordering is a prediction the ladder now spans widely enough to test;
-    # both run as their parallel variants at `n_pop`, so they consume the
-    # same budget per iteration as everything else.
-    "sa": (sa.simulated_annealing, {}),
-    "hc": (hc.hill_climbing, {}),
+#: (AR, Eq. 3, is a within-optimizer ratio), so arms needing different
+#: numbers of evaluations per iteration cost nothing here.
+OPTIMIZERS: dict[str, Optimizer] = {
+    # -- local: one point, one perturbation, keep or reject ---------------
+    "hc": Optimizer(hc.hill_climbing, recovery="local"),
+    "sa": Optimizer(sa.simulated_annealing, recovery="local"),
+    "rs": Optimizer(rs.random_search, recovery="local"),
+    # -- swarm: drift toward incumbents, no recombination -----------------
+    "pso": Optimizer(pso.particle_swarm_optimization, recovery="swarm"),
+    "cs": Optimizer(cs.cuckoo_search, recovery="swarm"),
+    "gwo": Optimizer(gwo.grey_wolf_optimization, recovery="swarm"),
+    "egwo": Optimizer(egwo.enhanced_grey_wolf_optimization, recovery="swarm"),
+    "hho": Optimizer(hho.harris_hawks_optimization, recovery="swarm"),
+    "hba": Optimizer(hba.honey_badger_algorithm, recovery="swarm"),
+    "abc": Optimizer(abc_opt.artificial_bee_colony, recovery="swarm"),
+    "fa": Optimizer(fa.firefly_algorithm, recovery="swarm"),
+    # -- recombining: offspring built from several parents ----------------
+    "ga": Optimizer(ga.genetic_algorithm),
+    "de": _de("best/1/bin"),
+    "de_rand1": _de("rand/1/bin"),
+    "de_ctb": _de("current-to-best/1/bin"),
+    "jade": _de("current-to-pbest/1/bin", "jade"),
+    "shade": _de("current-to-pbest/1/bin", "shade"),
+    "sade": _de("rand/1/bin", "sade"),
 }
 
 #: Knobs held fixed so the budget goes to what is genuinely unknown.
@@ -1325,7 +1391,7 @@ def one_cell(init_arm, fname, d, seed, n_pop, n_iter, optimizers):
     }
 
     for opt_key in optimizers:
-        optimize, opt_kw = OPTIMIZERS[opt_key]
+        optimize = OPTIMIZERS[opt_key]
         trace = _Trace()
         # A fresh counter per optimizer: `total_evals` is that optimizer's
         # own budget, and a shared one would accumulate across the five.
@@ -1336,9 +1402,12 @@ def one_cell(init_arm, fname, d, seed, n_pop, n_iter, optimizers):
         # should not depend on a property of thirteen other modules holding.
         _, score = optimize(
             counted, bounds, population=pop.copy(), n_pop=n_pop, n_iter=n_iter,
-            seed=np.random.default_rng(2**31 - seed), callback=trace, **opt_kw)
+            seed=np.random.default_rng(2**31 - seed), callback=trace)
         yield {
             "arm": f"{init_arm}@{opt_key}", "optimizer": opt_key,
+            # The ladder rung, carried on the row so an analysis can group by
+            # recovery without re-deriving the classification from a list.
+            "recovery": optimize.recovery,
             "score": float(score), "total_evals": int(counted.n),
             "curve": trace.best, **shared,
         }
