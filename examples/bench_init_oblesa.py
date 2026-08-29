@@ -591,13 +591,16 @@ class Optimizer(typing.NamedTuple):
         return self.run(objective, bounds, **{**self.kwargs, **overrides})
 
 
-def _de(variant: str, policy: str = "fixed", **kw) -> Optimizer:
-    """A DE arm. Every one differs only in `variant` and `policy`, so the
-    entry point and the recovery class are written once rather than six
-    times."""
+def _de(mutation: de.Mutation,
+        adaptation: de.Adaptation = de.Adaptation.FIXED, **kw) -> Optimizer:
+    """A DE arm. Every one differs only in its mutation and its adaptation,
+    so the entry point and the recovery class are written once rather than
+    six times -- and both axes are named rather than spelled, so an arm that
+    asks for a strategy DE does not have fails here instead of in the sweep.
+    """
     return Optimizer(de.differential_evolution,
-                     types.MappingProxyType({"variant": variant,
-                                             "policy": policy, **kw}))
+                     types.MappingProxyType({"variant": de.Variant(mutation),
+                                             "policy": adaptation, **kw}))
 
 
 #: The recovery ladder, widest end to widest end.
@@ -650,12 +653,12 @@ OPTIMIZERS: dict[str, Optimizer] = {
     "fa": Optimizer(fa.firefly_algorithm, recovery="swarm"),
     # -- recombining: offspring built from several parents ----------------
     "ga": Optimizer(ga.genetic_algorithm),
-    "de": _de("best/1/bin"),
-    "de_rand1": _de("rand/1/bin"),
-    "de_ctb": _de("current-to-best/1/bin"),
-    "jade": _de("current-to-pbest/1/bin", "jade"),
-    "shade": _de("current-to-pbest/1/bin", "shade"),
-    "sade": _de("rand/1/bin", "sade"),
+    "de": _de(de.Mutation.BEST_1),
+    "de_rand1": _de(de.Mutation.RAND_1),
+    "de_ctb": _de(de.Mutation.CURRENT_TO_BEST_1),
+    "jade": _de(de.Mutation.CURRENT_TO_PBEST_1, de.Adaptation.JADE),
+    "shade": _de(de.Mutation.CURRENT_TO_PBEST_1, de.Adaptation.SHADE),
+    "sade": _de(de.Mutation.RAND_1, de.Adaptation.SADE),
 }
 
 #: Knobs held fixed so the budget goes to what is genuinely unknown.

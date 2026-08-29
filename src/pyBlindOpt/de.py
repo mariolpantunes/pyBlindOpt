@@ -21,6 +21,7 @@ Mixes the target vector $x_i$ and mutant $v_i$ with probability $CR$.
 
 
 import collections.abc
+import enum
 import logging
 import typing
 
@@ -30,6 +31,109 @@ import pyBlindOpt.utils as utils
 from pyBlindOpt.optimizer import Optimizer
 
 logger = logging.getLogger(__name__)
+
+
+# ==============================================================================
+# 0. What a caller selects
+# ==============================================================================
+#
+# DE is not one algorithm, it is a mutation, a crossover and a control rule
+# chosen independently, and every published variant is a point in that
+# product. Naming the three axes as types rather than as free strings is what
+# makes the choice discoverable: `Mutation.` in an editor lists what exists,
+# a typo raises at construction with the alternatives in the message instead
+# of at the first generation, and a type checker can see the argument.
+#
+# All three are `StrEnum`, so a member *is* its classic string -- they hash
+# and compare equal to it, so `"best/1/bin"` keeps working everywhere it
+# already appears, config files and CLI flags included, and a mapping keyed
+# by a member can still be looked up by the plain string.
+
+
+class Mutation(enum.StrEnum):
+    """Which difference vector the trial is built from."""
+
+    RAND_1 = "rand/1"
+    BEST_1 = "best/1"
+    RAND_2 = "rand/2"
+    BEST_2 = "best/2"
+    CURRENT_TO_BEST_1 = "current-to-best/1"
+    CURRENT_TO_PBEST_1 = "current-to-pbest/1"
+    CURRENT_TO_RAND_1 = "current-to-rand/1"
+
+
+class Crossover(enum.StrEnum):
+    """How the trial and the parent are mixed."""
+
+    BIN = "bin"
+    EXP = "exp"
+
+
+class Adaptation(enum.StrEnum):
+    """How `F`, `cr` and the strategy are controlled between generations.
+
+    What `policy=` selects. Orthogonal to `Variant` on purpose: the adaptive
+    methods in the literature do not add mutations, they choose among the
+    ones already here.
+    """
+
+    FIXED = "fixed"
+    ARCHIVE = "archive"
+    JADE = "jade"
+    SHADE = "shade"
+    LSHADE = "lshade"
+    CODE = "code"
+    SADE = "sade"
+    ENSEMBLE = "ensemble"
+
+
+class Variant(typing.NamedTuple):
+    """A mutation and a crossover, together -- DE's `variant` as a value.
+
+    ``Variant(Mutation.BEST_1, Crossover.BIN)`` and ``"best/1/bin"`` are the
+    same thing. `parse` accepts either and `str` gives the classic form back,
+    so a variant round-trips through a config file, a CLI flag or a sweep arm
+    label unchanged.
+
+    Example:
+        >>> Variant.parse("current-to-pbest/1/bin").mutation
+        <Mutation.CURRENT_TO_PBEST_1: 'current-to-pbest/1'>
+        >>> str(Variant(Mutation.RAND_2, Crossover.EXP))
+        'rand/2/exp'
+    """
+
+    mutation: Mutation
+    crossover: Crossover = Crossover.BIN
+
+    def __str__(self) -> str:
+        return f"{self.mutation}/{self.crossover}"
+
+    @classmethod
+    def parse(cls, spec: "Variant | str") -> "Variant":
+        """`spec` as a `Variant`, whichever form it arrived in.
+
+        Raises:
+            ValueError: If the string names a mutation or crossover that does
+                not exist. The message lists what does -- read off the enums,
+                so it cannot fall out of date.
+        """
+        if isinstance(spec, Variant):
+            return spec
+        mutation, _, crossover = str(spec).rpartition("/")
+        try:
+            return cls(Mutation(mutation), Crossover(crossover))
+        except ValueError:
+            raise ValueError(
+                f"invalid variant {spec!r}; expected '<mutation>/<crossover>' "
+                f"with mutation in {[str(m) for m in Mutation]} and crossover "
+                f"in {[str(c) for c in Crossover]}"
+            ) from None
+
+
+#: What DE has always done when asked for nothing: greedy `best/1` with
+#: binomial crossover. A module-level value rather than a call in the
+#: signature, so the default is one object with a name to refer to.
+DEFAULT_VARIANT = Variant(Mutation.BEST_1, Crossover.BIN)
 
 
 # ==============================================================================
@@ -935,7 +1039,8 @@ class EnsemblePolicy(Policy):
         mutation and the parameters, not the recombination.
     """
 
-    DEFAULT_STRATEGIES = ("rand/1", "best/2", "current-to-rand/1")
+    DEFAULT_STRATEGIES = (Mutation.RAND_1, Mutation.BEST_2,
+                          Mutation.CURRENT_TO_RAND_1)
     DEFAULT_F = (0.4, 0.5, 0.6, 0.7, 0.8, 0.9)
     DEFAULT_CR = (0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9)
 
@@ -1031,8 +1136,8 @@ class SadePolicy(Policy):
         `variant`'s mutation and `F`/`cr` are ignored; the crossover is not.
     """
 
-    DEFAULT_STRATEGIES = ("rand/1", "current-to-best/1", "rand/2",
-                          "current-to-rand/1")
+    DEFAULT_STRATEGIES = (Mutation.RAND_1, Mutation.CURRENT_TO_BEST_1,
+                          Mutation.RAND_2, Mutation.CURRENT_TO_RAND_1)
 
     def __init__(self, strategies=None, lp=50, eps=0.01):
         if lp < 1:
@@ -1117,6 +1222,33 @@ class SadePolicy(Policy):
 # ==============================================================================
 # 4. Optimizer Class
 # ==============================================================================
+class _PolicyContext(typing.NamedTuple):
+    """What a policy constructor may need from the optimizer building it.
+
+    One shape for every builder, so the table below can call them uniformly;
+    the ones that adapt their own parameters simply ignore `F` and `cr`.
+    """
+
+    F: float
+    cr: float
+    mutation_op: collections.abc.Callable
+    samples_needed: int
+
+
+class _PolicySpec(typing.NamedTuple):
+    """One row of the policy table: how to build it, and what to warn about.
+
+    `published_on` names the mutation the method is defined on in the
+    literature, if any. Pairing an adaptation with a different mutation is
+    allowed -- it runs, and it is occasionally what you want to measure --
+    but it is not the published algorithm and the caller is told so once.
+    """
+
+    build: collections.abc.Callable[[_PolicyContext], Policy]
+    published_on: Mutation | None = None
+    note: str | None = None
+
+
 class DifferentialEvolution(Optimizer):
     """
     Differential Evolution Optimizer.
@@ -1166,44 +1298,79 @@ class DifferentialEvolution(Optimizer):
     they choose among the ones already here.
     """
 
-    # Strategy Mapping: "Name" -> (Function, Required_Sample_Count)
-    _STRATEGIES: typing.ClassVar[dict] = {
-        "rand/1": (mutation_rand_1, 3),
-        "best/1": (mutation_best_1, 2),
-        "rand/2": (mutation_rand_2, 5),
-        "best/2": (mutation_best_2, 4),
-        "current-to-best/1": (mutation_current_to_best_1, 2),
-        "current-to-pbest/1": (mutation_current_to_pbest_1, 2),
-        "current-to-rand/1": (mutation_current_to_rand_1, 3),
+    #: Mutation -> (operator, distinct individuals it needs). Keyed by the
+    #: enum, which a plain string still indexes: `StrEnum` members hash as
+    #: their value, so `_STRATEGIES["rand/1"]` and `_STRATEGIES[Mutation.RAND_1]`
+    #: are one lookup and every existing caller keeps working.
+    _STRATEGIES: typing.ClassVar[dict[Mutation, tuple]] = {
+        Mutation.RAND_1: (mutation_rand_1, 3),
+        Mutation.BEST_1: (mutation_best_1, 2),
+        Mutation.RAND_2: (mutation_rand_2, 5),
+        Mutation.BEST_2: (mutation_best_2, 4),
+        Mutation.CURRENT_TO_BEST_1: (mutation_current_to_best_1, 2),
+        Mutation.CURRENT_TO_PBEST_1: (mutation_current_to_pbest_1, 2),
+        Mutation.CURRENT_TO_RAND_1: (mutation_current_to_rand_1, 3),
     }
 
     #: Strategies whose base vector is drawn per individual from the fittest
     #: `p` fraction rather than being the single global best.
-    _PBEST_STRATEGIES = frozenset({"current-to-pbest/1"})
+    _PBEST_STRATEGIES = frozenset({Mutation.CURRENT_TO_PBEST_1})
 
-    _CROSSOVERS: typing.ClassVar[dict] = {
-        "bin": crossover_bin, "exp": crossover_exp}
+    _CROSSOVERS: typing.ClassVar[dict[Crossover, typing.Any]] = {
+        Crossover.BIN: crossover_bin, Crossover.EXP: crossover_exp}
+
+    #: How each `Adaptation` is built, what mutation it was published on, and
+    #: anything else a caller has to be told.
+    #:
+    #: A table rather than an if/elif chain because four of the eight carried
+    #: the same "not the published algorithm" warning written out four times,
+    #: and the ninth policy would have written it a fifth. Here the mismatch
+    #: check exists once and a new adaptation is one row.
+    _POLICIES: typing.ClassVar[dict[Adaptation, "_PolicySpec"]] = {
+        Adaptation.FIXED: _PolicySpec(
+            lambda c: FixedPolicy(c.F, c.cr, c.mutation_op, c.samples_needed)),
+        Adaptation.ARCHIVE: _PolicySpec(
+            lambda c: ArchivePolicy(c.F, c.cr, c.mutation_op, c.samples_needed)),
+        Adaptation.JADE: _PolicySpec(
+            lambda c: JadePolicy(c.mutation_op, c.samples_needed),
+            published_on=Mutation.CURRENT_TO_PBEST_1),
+        Adaptation.SHADE: _PolicySpec(
+            lambda c: ShadePolicy(c.mutation_op, c.samples_needed),
+            published_on=Mutation.CURRENT_TO_PBEST_1),
+        Adaptation.LSHADE: _PolicySpec(
+            lambda c: LshadePolicy(c.mutation_op, c.samples_needed),
+            published_on=Mutation.CURRENT_TO_PBEST_1,
+            note="policy='lshade' shrinks the population as the budget is "
+                 "spent, down to {policy.n_min}. Use 'shade' if the batch "
+                 "size must stay constant."),
+        Adaptation.CODE: _PolicySpec(lambda c: CodePolicy()),
+        Adaptation.SADE: _PolicySpec(lambda c: SadePolicy()),
+        Adaptation.ENSEMBLE: _PolicySpec(lambda c: EnsemblePolicy()),
+    }
 
     @utils.inherit_docs(Optimizer)
     def __init__(
         self,
         objective: collections.abc.Callable,
         bounds: np.ndarray,
-        variant: str = "best/1/bin",
+        variant: Variant | str = DEFAULT_VARIANT,
         parent_selection: str = "rand",
         F: float = 0.5,
         cr: float = 0.7,
         p: float = 0.1,
-        policy: str | Policy = "fixed",
+        policy: Adaptation | Policy | str = Adaptation.FIXED,
         **kwargs,
     ):
         r"""
         Differential Evolution Optimizer.
 
         Args:
-            variant (str): Strategy format 'target/num_diffs/crossover'.
-                           Examples: 'rand/1/bin', 'best/2/exp', 'current-to-best/1/bin'.
-                           Defaults to 'best/1/bin'.
+            variant (Variant | str): Which mutation and which crossover.
+                Either a `Variant` -- ``Variant(Mutation.BEST_2,
+                Crossover.EXP)``, which an editor completes and a type
+                checker reads -- or the classic ``'target/num_diffs/cross'``
+                string it is equal to, such as ``'rand/1/bin'`` or
+                ``'current-to-best/1/bin'``. Defaults to ``'best/1/bin'``.
             parent_selection (str): Method to select the base vector ($r1$).
                                     Options: 'rand' (Standard), 'tournament'.
                                     Defaults to 'rand'.
@@ -1240,88 +1407,41 @@ class DifferentialEvolution(Optimizer):
         self.cr = cr
         self.p = p
         self.parent_selection = parent_selection
-        self.variant_name = variant
+        #: The selection as a value. `Variant.parse` accepts either form and
+        #: raises with the alternatives listed, so nothing here has to
+        #: re-check what it returns.
+        self.variant = Variant.parse(variant)
+        self.variant_name = str(self.variant)
 
-        # Parse Variant String
-        try:
-            # Expect format: "strategy_base/strategy_num/crossover"
-            # We join base and num to look up strategy (e.g. "rand/1")
-            parts = variant.split("/")
-            if len(parts) != 3:
-                raise ValueError("Variant format must be 'base/n/cross'")
-
-            strategy_key = f"{parts[0]}/{parts[1]}"
-            crossover_key = parts[2]
-
-            if strategy_key not in self._STRATEGIES:
-                raise KeyError(f"Unknown strategy: {strategy_key}")
-            if crossover_key not in self._CROSSOVERS:
-                raise KeyError(f"Unknown crossover: {crossover_key}")
-
-            self.mutation_op, self.samples_needed = self._STRATEGIES[strategy_key]
-            self.crossover_op = self._CROSSOVERS[crossover_key]
-            self.uses_pbest = strategy_key in self._PBEST_STRATEGIES
-
-        except (KeyError, IndexError, ValueError) as e:
-            valid_strats = list(self._STRATEGIES.keys())
-            valid_cross = list(self._CROSSOVERS.keys())
-            raise ValueError(
-                f"Invalid variant '{variant}'.\n"
-                f"Supported Strategies: {valid_strats}\n"
-                f"Supported Crossovers: {valid_cross}\n"
-                f"Error: {e}"
-            )
+        self.mutation_op, self.samples_needed = self._STRATEGIES[
+            self.variant.mutation]
+        self.crossover_op = self._CROSSOVERS[self.variant.crossover]
+        self.uses_pbest = self.variant.mutation in self._PBEST_STRATEGIES
 
         if isinstance(policy, Policy):
             self.policy = policy
-        elif policy == "fixed":
-            self.policy = FixedPolicy(F, cr, self.mutation_op,
-                                      self.samples_needed)
-        elif policy == "archive":
-            self.policy = ArchivePolicy(F, cr, self.mutation_op,
-                                        self.samples_needed)
-        elif policy == "jade":
-            self.policy = JadePolicy(self.mutation_op, self.samples_needed)
-            if strategy_key != "current-to-pbest/1":
-                logger.warning(
-                    "policy='jade' with variant '%s'. JADE is defined on "
-                    "current-to-pbest/1; the adaptation still runs, but this "
-                    "is not the published algorithm.", variant,
-                )
-        elif policy == "shade":
-            self.policy = ShadePolicy(self.mutation_op, self.samples_needed)
-            if strategy_key != "current-to-pbest/1":
-                logger.warning(
-                    "policy='shade' with variant '%s'. SHADE is defined on "
-                    "current-to-pbest/1; the adaptation still runs, but this "
-                    "is not the published algorithm.", variant,
-                )
-        elif policy == "code":
-            self.policy = CodePolicy()
-        elif policy == "sade":
-            self.policy = SadePolicy()
-        elif policy == "lshade":
-            self.policy = LshadePolicy(self.mutation_op, self.samples_needed)
-            if strategy_key != "current-to-pbest/1":
-                logger.warning(
-                    "policy='lshade' with variant '%s'. L-SHADE is defined on "
-                    "current-to-pbest/1; the adaptation still runs, but this "
-                    "is not the published algorithm.", variant,
-                )
-            logger.warning(
-                "policy='lshade' shrinks the population as the budget is "
-                "spent, down to %d. Use 'shade' if the batch size must stay "
-                "constant.", self.policy.n_min,
-            )
-        elif policy == "ensemble":
-            self.policy = EnsemblePolicy()
+            self.policy_name = type(policy).__name__
         else:
-            raise ValueError(
-                f"Unknown policy '{policy}'. Supported: 'fixed', 'archive', "
-                f"'jade', 'shade', 'lshade', 'code', 'sade', 'ensemble', "
-                f"or a Policy instance."
-            )
-        self.policy_name = policy if isinstance(policy, str) else type(policy).__name__
+            try:
+                adaptation = Adaptation(policy)
+            except ValueError:
+                raise ValueError(
+                    f"unknown policy {policy!r}; supported: "
+                    f"{[str(a) for a in Adaptation]}, or a Policy instance."
+                ) from None
+            spec = self._POLICIES[adaptation]
+            self.policy = spec.build(_PolicyContext(
+                F, cr, self.mutation_op, self.samples_needed))
+            self.policy_name = str(adaptation)
+            if (spec.published_on is not None
+                    and self.variant.mutation != spec.published_on):
+                logger.warning(
+                    "policy=%r with variant %r. %s is defined on %s; the "
+                    "adaptation still runs, but this is not the published "
+                    "algorithm.", str(adaptation), str(self.variant),
+                    str(adaptation).upper(), str(spec.published_on))
+            if spec.note is not None:
+                logger.warning(spec.note.format(policy=self.policy))
         #: Objective evaluations consumed, for a population schedule.
         self._nfe = 0
         #: Per-generation memo for `_base_vector`; see there.
@@ -1609,12 +1729,12 @@ class DifferentialEvolution(Optimizer):
 def differential_evolution(
     objective: collections.abc.Callable,
     bounds: np.ndarray,
-    variant: str = "best/1/bin",
+    variant: Variant | str = DEFAULT_VARIANT,
     parent_selection: str = "rand",
     F: float = 0.5,
     cr: float = 0.7,
     p: float = 0.1,
-    policy: str = "fixed",
+    policy: Adaptation | Policy | str = Adaptation.FIXED,
     **kwargs,
 ) -> tuple:
     """
@@ -1623,13 +1743,22 @@ def differential_evolution(
     Args:
         objective (Callable): The function to minimize.
         bounds (np.ndarray): Search bounds (min, max).
-        variant (str): Strategy string (e.g., 'rand/1/bin').
+        variant (Variant | str): Which mutation and crossover, as a
+            `Variant` or the equivalent ``'rand/1/bin'`` string.
         parent_selection (str): 'rand' or 'tournament'.
         F (float): Mutation factor.
         cr (float): Crossover probability.
+        policy (Adaptation | Policy | str): How `F`, `cr` and the strategy
+            are controlled between generations; see `DifferentialEvolution`.
 
     Returns:
         tuple: (best_pos, best_score).
+
+    Example:
+        >>> from pyBlindOpt.de import Adaptation, Crossover, Mutation, Variant
+        >>> variant = Variant(Mutation.CURRENT_TO_PBEST_1, Crossover.BIN)
+        >>> # differential_evolution(f, bounds, variant=variant,
+        >>> #                        policy=Adaptation.SHADE)
     """
     optimizer = DifferentialEvolution(
         objective=objective,

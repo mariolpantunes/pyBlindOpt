@@ -217,11 +217,10 @@ class TestDEPolicyContract(unittest.TestCase):
     """
 
     BOUNDS = np.array([[-5.12, 5.12]] * 4)
-    VARIANTS: typing.ClassVar = [f"{b}/{c}"
-                for b in ("rand/1", "best/1", "rand/2", "best/2",
-                          "current-to-best/1", "current-to-pbest/1",
-                          "current-to-rand/1")
-                for c in ("bin", "exp")]
+    #: Read off the enums rather than repeated: a mutation added to DE and
+    #: not to this list is exactly the case this test exists to cover.
+    VARIANTS: typing.ClassVar = [de.Variant(m, c)
+                                 for m in de.Mutation for c in de.Crossover]
 
     def run_de(self, **kw):
         kw.setdefault("n_pop", 15)
@@ -307,6 +306,96 @@ class TestDEPolicyContract(unittest.TestCase):
         de.FixedPolicy(0.5, 0.7, de.mutation_best_1, 2).begin(
             np.zeros((10, 3)), np.zeros(10), rng, 0)
         self.assertEqual(rng.bit_generator.state, before)
+
+
+class TestDESelection(unittest.TestCase):
+    """`variant` and `policy` name a choice; the names have to be usable.
+
+    The classic strings stay valid because `Mutation`, `Crossover` and
+    `Adaptation` are `StrEnum` -- a member *is* its string. These pin that,
+    because the moment it stops holding, every config file, CLI flag and
+    sweep arm label in the wild breaks silently.
+    """
+
+    BOUNDS = np.array([[-5.12, 5.12]] * 4)
+
+    def build(self, **kw):
+        return de.DifferentialEvolution(
+            functions.sphere, self.BOUNDS, verbose=False, **kw)
+
+    def test_a_member_is_its_classic_string(self):
+        self.assertEqual(de.Mutation.BEST_1, "best/1")
+        self.assertEqual(de.Crossover.EXP, "exp")
+        self.assertEqual(de.Adaptation.SHADE, "shade")
+        self.assertEqual(str(de.Variant(de.Mutation.RAND_2,
+                                        de.Crossover.EXP)), "rand/2/exp")
+
+    def test_the_two_forms_build_the_same_optimizer(self):
+        typed = self.build(variant=de.Variant(de.Mutation.CURRENT_TO_PBEST_1),
+                           policy=de.Adaptation.JADE)
+        spelled = self.build(variant="current-to-pbest/1/bin", policy="jade")
+        self.assertEqual(typed.variant, spelled.variant)
+        self.assertIs(typed.mutation_op, spelled.mutation_op)
+        self.assertIs(typed.crossover_op, spelled.crossover_op)
+        self.assertEqual(typed.policy_name, spelled.policy_name)
+        self.assertEqual(typed.uses_pbest, spelled.uses_pbest)
+
+    def test_a_variant_round_trips_through_its_string(self):
+        for mutation in de.Mutation:
+            for crossover in de.Crossover:
+                want = de.Variant(mutation, crossover)
+                with self.subTest(variant=str(want)):
+                    self.assertEqual(de.Variant.parse(str(want)), want)
+                    self.assertEqual(de.Variant.parse(want), want)
+
+    def test_the_default_is_the_classic_de(self):
+        self.assertEqual(de.DEFAULT_VARIANT,
+                         de.Variant(de.Mutation.BEST_1, de.Crossover.BIN))
+        self.assertEqual(self.build().variant, de.DEFAULT_VARIANT)
+
+    def test_an_unknown_mutation_names_the_alternatives(self):
+        with self.assertRaises(ValueError) as ctx:
+            self.build(variant="rand/9/bin")
+        self.assertIn("rand/1", str(ctx.exception))
+        self.assertIn("best/1", str(ctx.exception))
+
+    def test_an_unknown_crossover_is_refused(self):
+        with self.assertRaises(ValueError):
+            self.build(variant="rand/1/uniform")
+
+    def test_an_unknown_policy_names_the_alternatives(self):
+        with self.assertRaises(ValueError) as ctx:
+            self.build(policy="adaptive")
+        for name in ("fixed", "jade", "shade", "sade"):
+            self.assertIn(name, str(ctx.exception))
+
+    def test_a_policy_instance_still_bypasses_the_table(self):
+        policy = de.FixedPolicy(0.5, 0.7,
+                                de.DifferentialEvolution._STRATEGIES[
+                                    de.Mutation.BEST_1][0], 2)
+        opt = self.build(policy=policy)
+        self.assertIs(opt.policy, policy)
+        self.assertEqual(opt.policy_name, "FixedPolicy")
+
+    def test_a_mismatched_pairing_warns_once_and_still_runs(self):
+        """Every adaptation defined on a particular mutation reports the
+        mismatch the same way, because there is now one code path for it."""
+        for adaptation in (de.Adaptation.JADE, de.Adaptation.SHADE,
+                           de.Adaptation.LSHADE):
+            with self.subTest(policy=str(adaptation)):
+                with self.assertLogs("pyBlindOpt.de", level="WARNING") as logs:
+                    opt = self.build(variant=de.Variant(de.Mutation.BEST_1),
+                                     policy=adaptation)
+                mismatch = [m for m in logs.output
+                            if "not the published algorithm" in m]
+                self.assertEqual(len(mismatch), 1, logs.output)
+                self.assertIn("current-to-pbest/1", mismatch[0])
+                self.assertEqual(opt.policy_name, str(adaptation))
+
+    def test_the_published_pairing_is_silent(self):
+        with self.assertNoLogs("pyBlindOpt.de", level="WARNING"):
+            self.build(variant=de.Variant(de.Mutation.CURRENT_TO_PBEST_1),
+                       policy=de.Adaptation.JADE)
 
 
 class TestDEArchive(unittest.TestCase):
