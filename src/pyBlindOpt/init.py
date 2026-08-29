@@ -373,9 +373,16 @@ def _ess_engine(
             "att_search_mode": att_search_mode,
             "att_radius": att_radius,
         }
-    return ess.esa(samples, bounds, n=n, seed=seed, init_pool=k_cand,
-                   search_mode=search_mode, radius=radius,
-                   radius_target=radius_target, **kw)
+    # Through the dict rather than as named arguments, because these three
+    # cross a version boundary. ESS 0.7.2 narrowed `search_mode` from `str`
+    # to a Literal, and the floor here is 0.7.0: naming the argument makes
+    # this file type-check only against whichever ESS happens to be
+    # installed, which is how a commit passes locally and fails on a runner
+    # that resolves the dependency from PyPI. Raise the floor and these go
+    # back to being named.
+    kw.update(search_mode=search_mode, radius=radius,
+              radius_target=radius_target)
+    return ess.esa(samples, bounds, n=n, seed=seed, init_pool=k_cand, **kw)
 
 
 _ess_engine.accepts = frozenset(  # type: ignore[reportFunctionMemberAccess]

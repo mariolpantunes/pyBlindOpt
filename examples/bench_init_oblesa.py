@@ -74,7 +74,9 @@ import pyBlindOpt.de as de
 import pyBlindOpt.egwo as egwo
 import pyBlindOpt.functions as functions
 import pyBlindOpt.ga as ga
+import pyBlindOpt.hc as hc
 import pyBlindOpt.init as init
+import pyBlindOpt.sa as sa
 import pyBlindOpt.utils as utils
 
 # Eight functions in two halves, because the halves test different things.
@@ -573,6 +575,21 @@ OPTIMIZERS = {
     "ga": (ga.genetic_algorithm, {}),
     "cs": (cs.cuckoo_search, {}),
     "egwo": (egwo.enhanced_grey_wolf_optimization, {}),
+    # The bottom of the recovery ladder, added because the ladder was
+    # missing its low end. `sa` and `hc` never recombine: a point moves by a
+    # local perturbation and is kept or rejected, so nothing in either search
+    # can synthesise a region the initial population did not already reach.
+    # The five above all recombine, and recombination is exactly the
+    # mechanism that lets a search repair a bad start -- which makes them the
+    # wrong instruments for measuring how much a start is worth.
+    #
+    # If initialization matters more the dumber the search, these two must
+    # show the largest margins in the sweep, and `jade` the smallest. That
+    # ordering is a prediction the ladder now spans widely enough to test;
+    # both run as their parallel variants at `n_pop`, so they consume the
+    # same budget per iteration as everything else.
+    "sa": (sa.simulated_annealing, {}),
+    "hc": (hc.hill_climbing, {}),
 }
 
 #: Knobs held fixed so the budget goes to what is genuinely unknown.
@@ -1102,6 +1119,48 @@ for _rl, _r in F13_ROUNDS.items():
             "force_weight": _w}
 
 F13_ARMS = [a for a in OBLESA_KNOBS if a.startswith("f13_")]
+
+#: **What force weight, at what dimension, for which search?**
+#:
+#: `f13` sampled the weight at 0, 1 and 2 and found the whole rounds effect
+#: living in it: with the attraction off, extra rounds are worth nothing at
+#: any dimension; with it at 2, `cs` improves monotonically to `rounds=5`
+#: while `ga` and `jade` get monotonically *worse* above d=100. Three levels
+#: cannot say whether that is a peak, a plateau or a curve still climbing,
+#: and the shipped default sits at 0.50 -- below every level tested.
+#:
+#: So the grid is refined where the answer has to be read off it. 0.25
+#: brackets the default from below, 0.75 and 1.50 fill the interior, and 3.00
+#: extends past the best level `f13` had so a maximum inside the range can be
+#: distinguished from an edge. `rounds` keeps only 1 and 3: its shape is
+#: already measured at four levels, and the budget is better spent on the
+#: axis that is not.
+#:
+#: Everything else matches `f13` exactly -- same selection, same opposition,
+#: same `n_ess` -- so the two grids are one dataset and the f13 cells are not
+#: recomputed, they are extended.
+F14_ROUNDS = {"r1": 1, "r3": 3}
+F14_WEIGHT = {"w000": 0.00, "w025": 0.25, "w050": 0.50, "w075": 0.75,
+              "w100": 1.00, "w150": 1.50, "w200": 2.00, "w300": 3.00}
+
+for _rl, _r in F14_ROUNDS.items():
+    for _wl, _w in F14_WEIGHT.items():
+        OBLESA_KNOBS[f"f14_{_rl}_{_wl}"] = {
+            "selection": "best", "rounds": _r, "diversity_weight": 0.0,
+            "opp": "standard", "opp_ess": False, "_n_ess_mult": 1.0,
+            "force_weight": _w}
+
+F14_ARMS = [a for a in OBLESA_KNOBS if a.startswith("f14_")]
+
+#: The controls `f14` needs, and only those. Its arms spend 3N (`rounds=1`)
+#: or 5N (`rounds=3`), so two pool-matched pairs cover every cell; the full
+#: `V8_COST_CONTROLS` ladder would spend budget matching 6N, 7N and 8N pools
+#: that nothing in this grid draws. The five alternatives ride along because
+#: adding two optimizers means every comparison they appear in has to be
+#: re-measured under them -- an `lhs` row scored on five optimizers says
+#: nothing about `sa`.
+F14_CONTROLS = ["random3x", "obl15x", "random5x", "obl25x",
+                "random", "lhs", "sobol", "obl", "qobl"]
 
 V8_BASELINES = ["random", "lhs", "sobol", "obl", "qobl", "obl2x", "random4x"]
 
