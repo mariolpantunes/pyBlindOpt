@@ -1207,9 +1207,9 @@ F13_ARMS = [a for a in OBLESA_KNOBS if a.startswith("f13_")]
 #: and the shipped default sits at 0.50 -- below every level tested.
 #:
 #: So the grid is refined where the answer has to be read off it. 0.25
-#: brackets the default from below, 0.75 and 1.50 fill the interior, and 3.00
-#: extends past the best level `f13` had so a maximum inside the range can be
-#: distinguished from an edge. `rounds` keeps only 1 and 3: its shape is
+#: brackets the default from below, 0.75 and 1.50 fill the interior, and 2.40
+#: extends past the best level `f13` had -- as far as it can be extended, see
+#: below -- so a maximum inside the range can be distinguished from an edge. `rounds` keeps only 1 and 3: its shape is
 #: already measured at four levels, and the budget is better spent on the
 #: axis that is not.
 #:
@@ -1217,8 +1217,22 @@ F13_ARMS = [a for a in OBLESA_KNOBS if a.startswith("f13_")]
 #: same `n_ess` -- so the two grids are one dataset and the f13 cells are not
 #: recomputed, they are extended.
 F14_ROUNDS = {"r1": 1, "r3": 3}
+#: 2.40 rather than 3.00 at the top, and the reason is a hard limit rather
+#: than a preference. ESS refuses a weight where the attraction would
+#: out-pull the repulsion at contact -- every active point would collapse
+#: onto its most attractive neighbour and the plateau detector would call it
+#: convergence. With OBLESA's pinned laws that ceiling is exactly
+#: `F_rep(0) / F_att(0) = 5 / 2 = 2.5`: gaussian repulsion at alpha=5 against
+#: cauchy attraction at alpha=2. A `w300` arm therefore does not run slowly
+#: or badly, it raises, which is how the first submission of this grid found
+#: the number.
+#:
+#: That is worth stating where the grid is defined, because it bounds the
+#: answer the grid can give: if the weight curve is still climbing at 2.40,
+#: the next question is not "what weight" but "what attraction law", since no
+#: weight above 2.5 exists to test with these two.
 F14_WEIGHT = {"w000": 0.00, "w025": 0.25, "w050": 0.50, "w075": 0.75,
-              "w100": 1.00, "w150": 1.50, "w200": 2.00, "w300": 3.00}
+              "w100": 1.00, "w150": 1.50, "w200": 2.00, "w240": 2.40}
 
 for _rl, _r in F14_ROUNDS.items():
     for _wl, _w in F14_WEIGHT.items():
