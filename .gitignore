@@ -140,10 +140,14 @@ examples/out/
 .agy/
 
 # Working notes: plans, handoffs, measurement logs. Project documents stay.
+# TODO.md is deliberately among the ignored: it is the live handoff for the
+# sweep -- what has been measured, on which optimizer set, and what the next
+# grid is waiting on -- and it changes with every cluster run. That belongs on
+# disk next to `bin/` and `slurm/`, which are ignored for the same reason, not
+# in a diff. It was tracked until the v8 staging made it a running log.
 *.md
 !README.md
 !CHANGELOG.md
-!TODO.md
 
 # Measurement scaffolding. This is a library; the index carries the library,
 # its tests, and nothing whose job is to produce a number once. Cluster
