@@ -340,6 +340,25 @@ class TestDESelection(unittest.TestCase):
         self.assertEqual(typed.policy_name, spelled.policy_name)
         self.assertEqual(typed.uses_pbest, spelled.uses_pbest)
 
+    def test_every_sensible_spelling_is_accepted(self):
+        """A bare mutation and a pair are both things a caller writes, and
+        neither is ambiguous, so both parse rather than raising."""
+        want = de.Variant(de.Mutation.RAND_2, de.Crossover.EXP)
+        for spec in (want, "rand/2/exp", (de.Mutation.RAND_2, de.Crossover.EXP),
+                     ("rand/2", "exp")):
+            with self.subTest(spec=spec):
+                self.assertEqual(de.Variant.parse(spec), want)
+
+    def test_a_bare_mutation_takes_the_default_crossover(self):
+        self.assertEqual(de.Variant.parse(de.Mutation.RAND_2),
+                         de.Variant(de.Mutation.RAND_2, de.Crossover.BIN))
+        self.assertEqual(self.build(variant=de.Mutation.RAND_2).variant_name,
+                         "rand/2/bin")
+
+    def test_a_bad_pair_is_refused_like_a_bad_string(self):
+        with self.assertRaises(ValueError):
+            de.Variant.parse((de.Mutation.RAND_1, "uniform"))
+
     def test_a_variant_round_trips_through_its_string(self):
         for mutation in de.Mutation:
             for crossover in de.Crossover:

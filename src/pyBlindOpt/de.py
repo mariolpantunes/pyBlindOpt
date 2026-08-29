@@ -109,17 +109,34 @@ class Variant(typing.NamedTuple):
         return f"{self.mutation}/{self.crossover}"
 
     @classmethod
-    def parse(cls, spec: "Variant | str") -> "Variant":
+    def parse(cls, spec: "VariantLike") -> "Variant":
         """`spec` as a `Variant`, whichever form it arrived in.
 
+        Four spellings, because all four are things a caller reasonably
+        writes and none of them is ambiguous:
+
+        * a `Variant`, returned as it is;
+        * a bare `Mutation`, which takes the default `Crossover.BIN` --
+          binomial is what "DE" means unless someone says otherwise;
+        * a ``(mutation, crossover)`` pair, in either enums or strings;
+        * the classic ``'<mutation>/<crossover>'`` string.
+
         Raises:
-            ValueError: If the string names a mutation or crossover that does
-                not exist. The message lists what does -- read off the enums,
-                so it cannot fall out of date.
+            ValueError: If the mutation or crossover does not exist. The
+                message lists what does -- read off the enums, so it cannot
+                fall out of date.
         """
         if isinstance(spec, Variant):
             return spec
-        mutation, _, crossover = str(spec).rpartition("/")
+        # Before the string branch: `Mutation` *is* a str, and splitting one
+        # on its last slash would take "best/1" apart into a mutation that
+        # does not exist and a crossover that is a digit.
+        if isinstance(spec, Mutation):
+            return cls(spec)
+        if isinstance(spec, tuple):
+            mutation, crossover = spec if len(spec) == 2 else (spec, None)
+        else:
+            mutation, _, crossover = str(spec).rpartition("/")
         try:
             return cls(Mutation(mutation), Crossover(crossover))
         except ValueError:
@@ -129,6 +146,16 @@ class Variant(typing.NamedTuple):
                 f"in {[str(c) for c in Crossover]}"
             ) from None
 
+
+#: Everything `Variant.parse` accepts, which is what every `variant=`
+#: argument in this module takes. It exists so the four spellings are
+#: written once rather than at each signature.
+type VariantLike = Variant | Mutation | tuple[Mutation | str,
+                                              Crossover | str] | str
+
+#: Everything `policy=` accepts: an `Adaptation`, the string it equals, or a
+#: `Policy` instance for a rule this module does not have.
+type PolicyLike = Adaptation | Policy | str
 
 #: What DE has always done when asked for nothing: greedy `best/1` with
 #: binomial crossover. A module-level value rather than a call in the
@@ -1353,12 +1380,12 @@ class DifferentialEvolution(Optimizer):
         self,
         objective: collections.abc.Callable,
         bounds: np.ndarray,
-        variant: Variant | str = DEFAULT_VARIANT,
+        variant: VariantLike = DEFAULT_VARIANT,
         parent_selection: str = "rand",
         F: float = 0.5,
         cr: float = 0.7,
         p: float = 0.1,
-        policy: Adaptation | Policy | str = Adaptation.FIXED,
+        policy: PolicyLike = Adaptation.FIXED,
         **kwargs,
     ):
         r"""
@@ -1729,12 +1756,12 @@ class DifferentialEvolution(Optimizer):
 def differential_evolution(
     objective: collections.abc.Callable,
     bounds: np.ndarray,
-    variant: Variant | str = DEFAULT_VARIANT,
+    variant: VariantLike = DEFAULT_VARIANT,
     parent_selection: str = "rand",
     F: float = 0.5,
     cr: float = 0.7,
     p: float = 0.1,
-    policy: Adaptation | Policy | str = Adaptation.FIXED,
+    policy: PolicyLike = Adaptation.FIXED,
     **kwargs,
 ) -> tuple:
     """
